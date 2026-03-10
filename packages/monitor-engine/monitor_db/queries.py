@@ -184,6 +184,85 @@ def user_touch(conn: sqlite3.Connection, chat_id: int, username: str | None = No
         conn.commit()
 
 
+def user_upsert(
+    conn: sqlite3.Connection,
+    chat_id: int,
+    username: str | None = None,
+    wallet: str | None = None,
+    env: str | None = None,
+    active: int | None = None,
+    periodo: str | None = None,
+    pending: str | None = None,
+) -> None:
+    '''Cria usuário se não existir, ou atualiza campos fornecidos.'''
+    with _lock:
+        cur = get_cursor(conn)
+        now_str = datetime.utcnow().isoformat()
+        cur.execute(
+            'INSERT OR IGNORE INTO users (chat_id, created_at, last_seen_ts) VALUES (?,?,?)',
+            (chat_id, now_str, time.time())
+        )
+        updates = ['last_seen_ts=?']
+        params: list[Any] = [time.time()]
+        if username is not None:
+            updates.append('username=?'); params.append(username)
+        if wallet is not None:
+            updates.append('wallet=?'); params.append(wallet.lower().strip())
+        if env is not None:
+            updates.append('env=?'); params.append(env)
+        if active is not None:
+            updates.append('active=?'); params.append(active)
+        if periodo is not None:
+            updates.append('periodo=?'); params.append(periodo)
+        if pending is not None:
+            updates.append('pending=?'); params.append(pending)
+        params.append(chat_id)
+        cur.execute(f'UPDATE users SET {", ".join(updates)} WHERE chat_id=?', params)
+        conn.commit()
+
+
+def users_by_wallet(conn: sqlite3.Connection, wallet: str) -> list[dict]:
+    '''Retorna todos os usuários com a wallet especificada e active=1.'''
+    with _lock:
+        rows = get_cursor(conn).execute(
+            'SELECT chat_id, wallet, env, active, periodo, username FROM users WHERE LOWER(wallet)=? AND active=1',
+            (wallet.lower().strip(),)
+        ).fetchall()
+    return [{'chat_id': r[0], 'wallet': r[1], 'env': r[2], 'active': bool(r[3]),
+             'periodo': r[4] or '24h', 'username': r[5]} for r in rows]
+
+
+def users_all_active(conn: sqlite3.Connection) -> list[dict]:
+    '''Retorna todos os usuários com active=1.'''
+    with _lock:
+        rows = get_cursor(conn).execute(
+            'SELECT chat_id, wallet, env, active, periodo, username FROM users WHERE active=1'
+        ).fetchall()
+    return [{'chat_id': r[0], 'wallet': r[1], 'env': r[2], 'active': bool(r[3]),
+             'periodo': r[4] or '24h', 'username': r[5]} for r in rows]
+
+
+def users_stats(conn: sqlite3.Connection) -> dict:
+    '''Estatísticas de usuários para o ADM.'''
+    with _lock:
+        cur = get_cursor(conn)
+        total   = cur.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+        active  = cur.execute('SELECT COUNT(*) FROM users WHERE active=1').fetchone()[0]
+        w24h    = int(time.time()) - 86400
+        online  = cur.execute('SELECT COUNT(*) FROM users WHERE last_seen_ts>=?', (w24h,)).fetchone()[0]
+        with_w  = cur.execute("SELECT COUNT(*) FROM users WHERE wallet IS NOT NULL AND wallet!=''").fetchone()[0]
+    return {'total': total, 'active': active, 'online_24h': online, 'with_wallet': with_w}
+
+
+def user_get_pending(conn: sqlite3.Connection, chat_id: int) -> str | None:
+    '''Retorna o estado pendente do usuário (ex: ASK_WALLET).'''
+    with _lock:
+        row = get_cursor(conn).execute(
+            'SELECT pending FROM users WHERE chat_id=?', (chat_id,)
+        ).fetchone()
+    return row[0] if row else None
+
+
 def block_ts_get(conn: sqlite3.Connection, block: int) -> int | None:
     with _lock:
         row = get_cursor(conn).execute(
