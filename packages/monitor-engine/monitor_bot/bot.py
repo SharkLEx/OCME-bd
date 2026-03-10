@@ -46,6 +46,11 @@ _TG_SAFE_LIMIT = 3500
 class _ExceptionHandler(telebot.ExceptionHandler):
     def handle(self, exc: Exception) -> bool:
         err = str(exc)
+        if '409' in err or 'Conflict' in err:
+            # Outro bot com mesmo token detectado — espera e tenta assumir
+            logger.warning('409 Conflict: outro bot com mesmo token ativo. Aguardando 15s para assumir...')
+            time.sleep(15)
+            return True
         if '502' in err or 'Bad Gateway' in err:
             time.sleep(10)
             return True
@@ -87,6 +92,10 @@ class MonitorBot:
         if sentinela:
             sentinela.on_alert(self._on_sentinel_alert)
 
+        # Subscreve operações on-chain do vigia → notifica admins em tempo real
+        if vigia:
+            vigia.on('operation', self._on_vigia_operation)
+
     # ── Handlers ─────────────────────────────────────────────────────────────
 
     def _register_handlers(self) -> None:
@@ -94,6 +103,7 @@ class MonitorBot:
 
         @bot.message_handler(commands=['start'])
         def cmd_start(m: telebot.types.Message) -> None:
+            logger.info('/start de @%s (chat_id=%d)', m.from_user.username or '?', m.chat.id)
             user_touch(self._conn, m.chat.id, m.from_user.username)
             markup = self._main_keyboard(m.chat.id)
             self._send(m.chat.id,
@@ -202,6 +212,67 @@ class MonitorBot:
             resp = answer(m.text, conn=self._conn, wallet=wallet, chat_id=m.chat.id)
             self._send(m.chat.id, f'🤖 {resp}')
 
+    # ── Operações on-chain em tempo real (agrupadas a cada 30s) ──────────────
+
+    def __init_op_buffer(self) -> None:
+        self._op_buffer: list[dict] = []
+        self._op_last_flush: float  = time.time()
+        self._op_flush_interval: float = 30.0  # segundos entre resumos
+        self._op_lock = threading.Lock()
+
+    def _on_vigia_operation(self, op: dict) -> None:
+        '''Acumula operações e envia resumo agrupado a cada 30s para admins.'''
+        if not hasattr(self, '_op_buffer'):
+            self.__init_op_buffer()
+        try:
+            with self._op_lock:
+                self._op_buffer.append(op)
+                now = time.time()
+                elapsed = now - self._op_last_flush
+                if elapsed < self._op_flush_interval:
+                    return
+                ops_to_send = list(self._op_buffer)
+                self._op_buffer.clear()
+                self._op_last_flush = now
+
+            if not ops_to_send:
+                return
+
+            # Monta resumo agrupado
+            total      = len(ops_to_send)
+            profit_sum = sum(o.get('profit_usd', 0) for o in ops_to_send)
+            gas_sum    = sum(o.get('gas_usd', 0)    for o in ops_to_send)
+            wins       = sum(1 for o in ops_to_send if o.get('profit_usd', 0) >= 0)
+            losses     = total - wins
+            last_block = max((o.get('block_number', 0) for o in ops_to_send), default=0)
+            profit_icon = '🟢' if profit_sum >= 0 else '🔴'
+
+            lines = [f'{profit_icon} <b>Resumo On-Chain — últimos {self._op_flush_interval:.0f}s</b>']
+            lines.append('<code>─────────────────────</code>')
+            lines.append(f'📊 Ops: {total} | 🟢 {wins} ganhos | 🔴 {losses} perdas')
+            lines.append(f'💰 Lucro líquido: <b>${profit_sum:,.4f}</b>')
+            lines.append(f'⛽ Gas total: ${gas_sum:,.6f}')
+            lines.append(f'🔗 Último bloco: {last_block:,}')
+
+            # Destaque: top 3 ops por lucro
+            top3 = sorted(ops_to_send, key=lambda o: abs(o.get('profit_usd', 0)), reverse=True)[:3]
+            if top3:
+                lines.append('')
+                lines.append('<b>Top ops:</b>')
+                for o in top3:
+                    icon  = '🟢' if o.get('profit_usd', 0) >= 0 else '🔴'
+                    lines.append(f'{icon} {o.get("sub_conta","?")} ({o.get("env","?")}) ${o.get("profit_usd",0):+,.4f}')
+
+            msg = '\n'.join(lines)
+            logger.info('Resumo on-chain: %d ops | lucro=%.4f', total, profit_sum)
+            for admin_id in cfg.ADMIN_USER_IDS:
+                try:
+                    NOTIF_QUEUE.put_nowait((admin_id, msg))
+                except Exception:
+                    pass  # queue cheia — descarta
+        except Exception as exc:
+            logger.warning('_on_vigia_operation error: %s', exc)
+
     # ── Alertas proativos ─────────────────────────────────────────────────────
 
     def _on_sentinel_alert(self, tipo: str, dados: dict) -> None:
@@ -292,7 +363,11 @@ class MonitorBot:
         logger.info('Bot Telegram iniciado. Aguardando mensagens...')
         while True:
             try:
-                self._bot.infinity_polling(timeout=30, long_polling_timeout=20)
+                self._bot.infinity_polling(
+                    timeout=30,
+                    long_polling_timeout=20,
+                    skip_pending=True,   # ignora mensagens acumuladas
+                )
             except Exception as exc:
                 logger.error('infinity_polling error: %s', exc)
                 time.sleep(10)

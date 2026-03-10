@@ -64,7 +64,7 @@ def _call_api(system: str, user_text: str, timeout: int = 45) -> str:
             {'role': 'system', 'content': system},
             {'role': 'user',   'content': user_text},
         ],
-        'max_tokens': 800,
+        'max_completion_tokens': 800,
     }
 
     try:
