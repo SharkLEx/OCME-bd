@@ -17,6 +17,7 @@ from webdex_db import (
     get_user, period_to_hours, _period_since, _period_label,
     reload_limites, LIMITE_GWEI, LIMITE_GAS_BAIXO_POL, LIMITE_INATIV_MIN,
     _set_limit, normalize_txhash,
+    get_known_wallets_unregistered,
 )
 from webdex_bot_core import (
     bot, send_html, send_support, _send, _send_long, _clear_pending,
@@ -60,6 +61,7 @@ def adm_kb():
     kb.row("📈 Lucro Real (Total/Ambiente)")
     kb.row("🧾 Fornecimento e Liquidez")
     kb.row("📸 Progressão do Capital")
+    kb.row("📨 Gerar Convites")
     kb.row("🔙 Menu")
     return kb
 
@@ -395,3 +397,85 @@ def inatividade_pro(m):
         return send_support(m.chat.id, "⛔ Acesso restrito.", reply_markup=_get_main_kb()())
     bot.send_chat_action(m.chat.id, "typing")
     send_support(m.chat.id, "⏳ <b>Inatividade PRO</b>\n\nVerifique o painel de inatividade na tela principal.", reply_markup=adm_kb())
+
+
+# ==============================================================================
+# 📨 GERAR CONVITES — links personalizados para as 304 wallets on-chain
+# ==============================================================================
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "📨 Gerar Convites")
+def adm_gerar_convites(m):
+    if not _is_admin(m.chat.id):
+        return send_support(m.chat.id, "⛔ Acesso restrito.", reply_markup=_get_main_kb()())
+    bot.send_chat_action(m.chat.id, "typing")
+    try:
+        # Pega nome do bot para montar o link
+        bot_info = bot.get_me()
+        bot_username = bot_info.username or ""
+
+        wallets = get_known_wallets_unregistered(limit=30)
+        if not wallets:
+            return send_support(
+                m.chat.id,
+                "✅ Todas as wallets conhecidas já estão registradas no bot!",
+                reply_markup=adm_kb()
+            )
+
+        total = len(wallets)
+        lines = [
+            f"📨 <b>CONVITES — Top {total} wallets sem registro</b>\n",
+            f"Cada link conecta automaticamente ao abrir o bot:\n",
+        ]
+        for i, w in enumerate(wallets[:20], 1):
+            wallet = w["wallet"]
+            short = wallet[:8] + "..." + wallet[-6:]
+            link = f"https://t.me/{bot_username}?start={wallet}" if bot_username else f"[{short}]"
+            sinal = "+" if (w["lucro"] or 0) >= 0 else ""
+            lines.append(
+                f"\n{i}. <code>{short}</code>  [{w['env']}]\n"
+                f"   Trades: {w['trade_count']}  (W:{w['wins']}/L:{w['losses']})  "
+                f"Lucro: {sinal}{(w['lucro'] or 0):.3f}\n"
+                f"   <a href='{link}'>🔗 Link de Convite</a>"
+            )
+
+        if total > 20:
+            lines.append(f"\n\n<i>...e mais {total - 20} wallets. Acesso completo via /convites_csv</i>")
+
+        send_support(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
+
+    except Exception as e:
+        logger.exception(e)
+        send_support(m.chat.id, f"⚠️ Erro ao gerar convites: {e}", reply_markup=adm_kb())
+
+
+@bot.message_handler(commands=["convites_csv"])
+def adm_convites_csv(m):
+    """Exporta todas as wallets sem registro em CSV via Telegram."""
+    if not _is_admin(m.chat.id):
+        return
+    bot.send_chat_action(m.chat.id, "upload_document")
+    try:
+        wallets = get_known_wallets_unregistered(limit=500)
+        bot_info = bot.get_me()
+        bot_username = bot_info.username or "SEU_BOT"
+
+        lines = ["wallet,env,trades,wins,losses,lucro,ultimo_trade,link_convite"]
+        for w in wallets:
+            wallet = w["wallet"]
+            link = f"https://t.me/{bot_username}?start={wallet}"
+            lines.append(
+                f"{wallet},{w['env']},{w['trade_count']},{w['wins']},"
+                f"{w['losses']},{w['lucro']:.4f},{w['last_trade'] or ''},"
+                f"{link}"
+            )
+
+        import io
+        csv_bytes = "\n".join(lines).encode("utf-8")
+        bot.send_document(
+            m.chat.id,
+            document=io.BytesIO(csv_bytes),
+            visible_file_name="convites_wallets.csv",
+            caption=f"📨 {len(wallets)} wallets sem registro — links de convite prontos."
+        )
+    except Exception as e:
+        logger.exception(e)
+        send_support(m.chat.id, f"⚠️ Erro ao exportar CSV: {e}", reply_markup=adm_kb())

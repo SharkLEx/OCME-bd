@@ -31,6 +31,7 @@ from webdex_db import (
     _dt_since, get_user_filter_clause, from_s,
     get_user, upsert_user, get_connected_users,
     LIMITE_INATIV_MIN,
+    get_known_wallet, mark_known_wallet_registered,
     normalize_txhash,
 )
 from webdex_chain import (
@@ -196,6 +197,13 @@ def start(m):
     if not get_user(m.chat.id):
         upsert_user(m.chat.id)
 
+    # ── Fase B: deep link  /start 0xABC123...
+    parts = m.text.split(" ", 1)
+    wallet_arg = parts[1].strip() if len(parts) > 1 else None
+    if wallet_arg and wallet_arg.startswith("0x") and len(wallet_arg) == 42:
+        _auto_connect_wallet(m, wallet_arg)
+        return
+
     u = get_user(m.chat.id)
     if u and u.get("wallet"):
         sf = (u.get("sub_filter") or "").strip() or "Todas"
@@ -205,7 +213,40 @@ def start(m):
             reply_markup=main_kb()
         )
     else:
-        send_support(m.chat.id, "👋 Bem-vindo! Clique em 🔌 Conectar para configurar (wallet → rpc → ambiente).", reply_markup=main_kb())
+        send_support(m.chat.id, "👋 Bem-vindo! Clique em 🔌 Conectar para configurar.", reply_markup=main_kb())
+
+
+def _auto_connect_wallet(m, wallet: str) -> None:
+    """Conecta automaticamente via deep link ou detecção no setup."""
+    chat_id = m.chat.id
+    kw = get_known_wallet(wallet)
+    if kw and kw["trade_count"] > 0:
+        env = kw["env"] or "bd_v5"
+        upsert_user(chat_id, wallet=wallet.lower(), env=env, active=1, pending="")
+        mark_known_wallet_registered(wallet)
+        lucro = kw["lucro_total"]
+        sinal = "+" if lucro >= 0 else ""
+        send_support(
+            chat_id,
+            f"🎉 <b>Wallet reconhecida!</b>\n\n"
+            f"Encontramos seu histórico on-chain:\n"
+            f"• Ambiente: <b>{esc(env)}</b>\n"
+            f"• Trades: <b>{kw['trade_count']}</b>  "
+            f"(✅{kw['wins']} / ❌{kw['losses']})\n"
+            f"• Lucro total: <b>{sinal}{lucro:.4f} USDT</b>\n\n"
+            f"✅ Configuração automática concluída!\n"
+            f"Monitoramento <b>ativado</b>.",
+            reply_markup=main_kb()
+        )
+    else:
+        # Wallet não conhecida — pede RPC e env manualmente
+        upsert_user(chat_id, wallet=wallet.lower(), pending="ASK_RPC")
+        send_support(
+            chat_id,
+            f"🔌 Wallet salva: <code>{wallet[:10]}...{wallet[-6:]}</code>\n\n"
+            f"Passo 2: Envie sua RPC (http...).",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
 
 
 # ==============================================================================
@@ -1593,8 +1634,13 @@ def step_handler(m):
     if u["pending"] == "ASK_WALLET":
         if not (txt.startswith("0x") and len(txt) == 42):
             return send_support(m.chat.id, "⚠️ Wallet inválida. Envie no formato 0x...", reply_markup=types.ReplyKeyboardRemove())
-        upsert_user(m.chat.id, wallet=txt.lower(), pending="ASK_RPC")
-        send_support(m.chat.id, "✅ Salvo!\nPasso 2: Envie sua RPC (http...).", reply_markup=types.ReplyKeyboardRemove())
+        # ── Fase C: verifica se wallet é conhecida on-chain
+        kw = get_known_wallet(txt)
+        if kw and kw["trade_count"] > 0:
+            _auto_connect_wallet(m, txt)
+        else:
+            upsert_user(m.chat.id, wallet=txt.lower(), pending="ASK_RPC")
+            send_support(m.chat.id, "✅ Salvo!\nPasso 2: Envie sua RPC (http...).", reply_markup=types.ReplyKeyboardRemove())
         return
 
     if u["pending"] == "ASK_RPC":

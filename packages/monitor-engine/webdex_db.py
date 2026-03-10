@@ -819,3 +819,120 @@ def from_s(seconds: float) -> str:
     if days > 0:
         return f"{days}d {h:02d}:{m:02d}:{sec:02d}"
     return f"{h:02d}:{m:02d}:{sec:02d}"
+
+
+# ==============================================================================
+# 🗂️ KNOWN WALLETS — Fase C: registro passivo das 304 wallets on-chain
+# ==============================================================================
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS known_wallets (
+    wallet       TEXT PRIMARY KEY COLLATE NOCASE,
+    env          TEXT NOT NULL DEFAULT '',
+    trade_count  INTEGER DEFAULT 0,
+    wins         INTEGER DEFAULT 0,
+    losses       INTEGER DEFAULT 0,
+    lucro_total  REAL DEFAULT 0,
+    last_trade   TEXT,
+    invited_by   INTEGER,          -- chat_id do ADM que gerou o convite
+    invite_sent  INTEGER DEFAULT 0,-- 1 = link já enviado
+    registered   INTEGER DEFAULT 0,-- 1 = usuário abriu o bot e se conectou
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+)
+""")
+try:
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_kw_env ON known_wallets(env)")
+    conn.commit()
+except Exception:
+    pass
+conn.commit()
+
+
+def populate_known_wallets() -> int:
+    """Importa todas as wallets com trades de op_owner para known_wallets.
+    Seguro para rodar múltiplas vezes (INSERT OR IGNORE).
+    Retorna número de wallets novas inseridas."""
+    with DB_LOCK:
+        rows = cursor.execute("""
+            SELECT oo.wallet,
+                   o.ambiente,
+                   COUNT(*) as n,
+                   SUM(CASE WHEN o.valor > 0 THEN 1 ELSE 0 END) as wins,
+                   SUM(CASE WHEN o.valor < 0 THEN 1 ELSE 0 END) as losses,
+                   ROUND(SUM(o.valor), 6) as lucro,
+                   MAX(o.data_hora) as ultimo
+            FROM op_owner oo
+            JOIN operacoes o ON oo.hash = o.hash AND oo.log_index = o.log_index
+            WHERE o.ambiente != 'UNKNOWN'
+            GROUP BY oo.wallet, o.ambiente
+            ORDER BY n DESC
+        """).fetchall()
+
+        inserted = 0
+        for wallet, env, n, wins, losses, lucro, ultimo in rows:
+            try:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO known_wallets
+                        (wallet, env, trade_count, wins, losses, lucro_total, last_trade)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (wallet.lower(), env or "", n, wins or 0, losses or 0, lucro or 0, ultimo))
+                if cursor.rowcount:
+                    inserted += 1
+            except Exception:
+                pass
+        conn.commit()
+        return inserted
+
+
+def get_known_wallet(wallet: str) -> dict | None:
+    """Retorna dados da wallet conhecida ou None."""
+    if not wallet:
+        return None
+    with DB_LOCK:
+        row = cursor.execute(
+            "SELECT wallet, env, trade_count, wins, losses, lucro_total, last_trade "
+            "FROM known_wallets WHERE LOWER(wallet)=LOWER(?)",
+            (wallet.strip(),)
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "wallet": row[0], "env": row[1], "trade_count": row[2],
+        "wins": row[3], "losses": row[4], "lucro_total": row[5],
+        "last_trade": row[6],
+    }
+
+
+def mark_known_wallet_registered(wallet: str) -> None:
+    """Marca wallet como registrada (usuário abriu o bot)."""
+    with DB_LOCK:
+        cursor.execute(
+            "UPDATE known_wallets SET registered=1 WHERE LOWER(wallet)=LOWER(?)",
+            (wallet.strip(),)
+        )
+        conn.commit()
+
+
+def get_known_wallets_unregistered(limit: int = 50) -> list[dict]:
+    """Retorna wallets conhecidas que ainda não abriram o bot."""
+    with DB_LOCK:
+        rows = cursor.execute("""
+            SELECT wallet, env, trade_count, wins, losses, lucro_total, last_trade
+            FROM known_wallets
+            WHERE registered = 0
+            ORDER BY trade_count DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    return [
+        {"wallet": r[0], "env": r[1], "trade_count": r[2],
+         "wins": r[3], "losses": r[4], "lucro": r[5], "last_trade": r[6]}
+        for r in rows
+    ]
+
+
+# Popula known_wallets no boot (seguro — INSERT OR IGNORE)
+try:
+    _kw_inserted = populate_known_wallets()
+    if _kw_inserted:
+        logger.info(f"[known_wallets] {_kw_inserted} wallets importadas do historico on-chain.")
+except Exception as _e:
+    logger.warning(f"[known_wallets] Erro ao popular: {_e}")
