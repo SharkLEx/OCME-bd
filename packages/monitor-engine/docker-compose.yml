@@ -1,0 +1,77 @@
+version: '3.9'
+
+# ==============================================================================
+# docker-compose.yml — OCME bd Monitor Engine
+# Story 7.7 — @devops
+# ==============================================================================
+
+services:
+  monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: ocme-monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - monitor_data:/app/data
+    environment:
+      - DB_PATH=/app/data/webdex_v5_final.db
+      - DATA_DIR=/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/app/data/webdex_v5_final.db').execute('SELECT 1')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '3'
+
+  # CLI companion (run on-demand: docker compose run --rm cli status)
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: ocme-cli
+    env_file:
+      - .env
+    volumes:
+      - monitor_data:/app/data
+    environment:
+      - DB_PATH=/app/data/webdex_v5_final.db
+    entrypoint: ["python", "-m", "monitor_cli"]
+    profiles:
+      - cli
+
+  # Backup diário do SQLite (cron-based)
+  backup:
+    image: alpine:3.19
+    container_name: ocme-backup
+    restart: unless-stopped
+    volumes:
+      - monitor_data:/data:ro
+      - monitor_backups:/backups
+    command: >
+      sh -c "
+        while true; do
+          DATE=$$(date +%Y%m%d_%H%M);
+          cp /data/webdex_v5_final.db /backups/webdex_$$DATE.db;
+          echo \"Backup criado: webdex_$$DATE.db\";
+          find /backups -name '*.db' -mtime +7 -delete;
+          sleep 86400;
+        done
+      "
+    profiles:
+      - backup
+
+volumes:
+  monitor_data:
+    driver: local
+  monitor_backups:
+    driver: local
