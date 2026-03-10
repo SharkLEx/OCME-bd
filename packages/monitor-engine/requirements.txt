@@ -1,4 +1,4 @@
-# OCME bd Monitor Engine — Dependências Python
+# WEbdEX Monitor Engine — Dependências Python
 # Instale com: pip install -r requirements.txt
 
 # Blockchain
@@ -13,12 +13,8 @@ requests>=2.31.0,<3.0.0
 # Configuração
 python-dotenv>=1.0.0,<2.0.0
 
-# Gráficos (dashboard)
+# Gráficos
 matplotlib>=3.7.0,<4.0.0
 
-# Utilidades (já no stdlib, mas explícito para clareza)
-# sqlite3 — builtin
-# threading — builtin
-# argparse — builtin
-# json — builtin
-# logging — builtin
+# Timezone Windows (necessário para zoneinfo no Windows)
+tzdata
