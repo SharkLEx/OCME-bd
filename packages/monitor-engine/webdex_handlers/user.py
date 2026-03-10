@@ -40,9 +40,9 @@ from webdex_chain import (
 from webdex_bot_core import (
     bot, send_html, send_support, _send_long,
     esc, code, barra_progresso, gerar_grafico,
-    _is_admin, is_admin, DASH_GRAPH_CACHE,
+    _is_admin, is_admin,
 )
-from webdex_db import ai_can_use, ai_global_enabled, ai_mode
+from webdex_db import ai_can_use, ai_global_enabled, ai_mode, DASH_GRAPH_CACHE
 from webdex_config import ai_answer_ptbr
 from webdex_monitor import HEALTH, fetch_range
 

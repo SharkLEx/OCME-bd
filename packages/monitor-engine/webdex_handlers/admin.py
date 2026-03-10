@@ -11,9 +11,7 @@ from typing import Any, Dict, List
 
 from webdex_config import (
     logger, Web3, CONTRACTS, ABI_SUBACCOUNTS, ABI_MANAGER,
-    DEFAULT_RPC if False else None,
 )
-from webdex_config import logger, Web3, CONTRACTS, ABI_SUBACCOUNTS
 from webdex_db import (
     DB_LOCK, conn, cursor, get_config, set_config, now_br,
     get_user, period_to_hours, _period_since, _period_label,

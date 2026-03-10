@@ -596,3 +596,226 @@ def _period_label(p: str) -> str:
     if p == "ciclo":
         return _ciclo_21h_label()
     return p.upper()
+
+
+# ==============================================================================
+# 👥 USER MANAGER
+# ==============================================================================
+def get_user(chat_id: int):
+    with DB_LOCK:
+        try:
+            row = cursor.execute(
+                "SELECT chat_id,wallet,rpc,env,active,periodo,pending,sub_filter FROM users WHERE chat_id=?",
+                (int(chat_id),)
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "chat_id": row[0],
+                "wallet": (row[1] or "").lower(),
+                "rpc": row[2] or "",
+                "env": row[3] or "AG_C_bd",
+                "active": int(row[4] or 0),
+                "periodo": row[5] or "24h",
+                "pending": row[6] or "",
+                "sub_filter": (row[7] or "").strip(),
+            }
+        except Exception:
+            return None
+
+def upsert_user(chat_id: int, **fields):
+    with DB_LOCK:
+        u = cursor.execute("SELECT * FROM users WHERE chat_id=?", (int(chat_id),)).fetchone()
+        base = {
+            "wallet": "",
+            "rpc": "",
+            "env": "AG_C_bd",
+            "active": 0,
+            "periodo": "24h",
+            "pending": "",
+            "sub_filter": "",
+            "created_at": now_br().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        if u:
+            base.update({
+                "wallet": u[1] or "",
+                "rpc": u[2] or "",
+                "env": u[3] or "AG_C_bd",
+                "active": int(u[4] or 0),
+                "periodo": u[5] or "24h",
+                "pending": u[6] or "",
+                "created_at": u[7] or base["created_at"],
+            })
+            try:
+                base["sub_filter"] = u[9] if len(u) > 9 and u[9] is not None else ""
+            except Exception:
+                base["sub_filter"] = ""
+
+        for k, v in fields.items():
+            if k in base:
+                base[k] = v
+
+        now_s = now_br().strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute(
+            "INSERT OR REPLACE INTO users (chat_id,wallet,rpc,env,active,periodo,pending,sub_filter,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (int(chat_id), (base["wallet"] or "").lower(), base["rpc"], base["env"], int(base["active"]),
+             base["periodo"], base["pending"], base["sub_filter"], base["created_at"], now_s)
+        )
+        conn.commit()
+
+def get_connected_users():
+    with DB_LOCK:
+        rows = cursor.execute("SELECT chat_id FROM users WHERE wallet<>''").fetchall()
+    return [int(r[0]) for r in rows]
+
+
+# ==============================================================================
+# 🧠 FUNÇÕES DE FILTRO, CICLO E RANKINGS
+# ==============================================================================
+import math
+from statistics import median as _median_stats
+
+def _percentile(sorted_vals: List[float], p: float) -> float:
+    if not sorted_vals:
+        return 0.0
+    if p <= 0:
+        return float(sorted_vals[0])
+    if p >= 100:
+        return float(sorted_vals[-1])
+    k = (len(sorted_vals) - 1) * (p / 100.0)
+    f = int(math.floor(k))
+    c = int(math.ceil(k))
+    if f == c:
+        return float(sorted_vals[f])
+    d0 = sorted_vals[f] * (c - k)
+    d1 = sorted_vals[c] * (k - f)
+    return float(d0 + d1)
+
+def _std(vals: List[float]) -> float:
+    if len(vals) < 2:
+        return 0.0
+    m = sum(vals) / len(vals)
+    v = sum((x - m) ** 2 for x in vals) / (len(vals) - 1)
+    return float(math.sqrt(v))
+
+def _dt_since(hours: int) -> str:
+    return (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+
+def get_user_filter_clause(u: Dict[str, Any]) -> Tuple[str, Tuple[Any, ...]]:
+    sf = (u.get("sub_filter") or "").strip()
+    if not sf or sf.lower() in ("all", "todas", "todas as subcontas", "todas"):
+        return "", tuple()
+    return " AND o.sub_conta=? ", (sf,)
+
+
+# ==============================================================================
+# ⏳ INATIVIDADE (Filtro/Relatório)
+# ==============================================================================
+def get_last_trade_by_sub(wallet: str, hours: int = 24, only_sub: str = "") -> dict:
+    """
+    Retorna último trade por subconta no período (para relatório de inatividade).
+    """
+    dt = _dt_since(hours)
+    params = [dt, wallet.lower()]
+    extra = ""
+    if only_sub:
+        extra = " AND o.sub_conta=? "
+        params.append(only_sub)
+
+    with DB_LOCK:
+        rows = cursor.execute(f"""
+            SELECT o.sub_conta, MAX(o.data_hora) as last_dh, COUNT(*) as n
+            FROM operacoes o
+            JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+            WHERE o.tipo='Trade' AND o.data_hora>=? AND ow.wallet=? {extra}
+              AND o.sub_conta IS NOT NULL AND o.sub_conta<>'' AND o.sub_conta<>'WALLET'
+            GROUP BY o.sub_conta
+        """, tuple(params)).fetchall()
+
+    out = {}
+    for sub, last_dh, n in rows:
+        out[str(sub)] = {"last_dh": str(last_dh), "n": int(n or 0)}
+    return out
+
+def _minutes_since(dh: str) -> float:
+    try:
+        t = datetime.strptime(str(dh), "%Y-%m-%d %H:%M:%S")
+        return (datetime.now() - t).total_seconds() / 60.0
+    except Exception:
+        return 0.0
+
+def get_subs_in_period(wallet: str, hours: int) -> List[str]:
+    dt = _dt_since(hours)
+    with DB_LOCK:
+        rows = cursor.execute("""
+            SELECT DISTINCT o.sub_conta
+            FROM operacoes o
+            JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+            WHERE o.tipo='Trade' AND o.data_hora>=? AND ow.wallet=?
+              AND o.sub_conta IS NOT NULL AND o.sub_conta<>'' AND o.sub_conta<>'WALLET'
+            ORDER BY o.sub_conta ASC
+        """, (dt, wallet.lower())).fetchall()
+    return [str(r[0]) for r in rows]
+
+def load_trade_times_by_sub(wallet: str, hours: int, only_sub: str = "") -> Dict[str, List[datetime]]:
+    dt = _dt_since(hours)
+    params = [dt, wallet.lower()]
+    extra = ""
+    if only_sub:
+        extra = " AND o.sub_conta=? "
+        params.append(only_sub)
+
+    with DB_LOCK:
+        rows = cursor.execute(f"""
+            SELECT o.sub_conta, o.data_hora
+            FROM operacoes o
+            JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+            WHERE o.tipo='Trade' AND o.data_hora>=? AND ow.wallet=? {extra}
+            ORDER BY o.sub_conta ASC, o.data_hora ASC
+        """, tuple(params)).fetchall()
+
+    out: Dict[str, List[datetime]] = {}
+    for sub, dh in rows:
+        try:
+            t = datetime.strptime(str(dh), "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            continue
+        out.setdefault(str(sub), []).append(t)
+    return out
+
+def ciclo_stats(times: List[datetime]) -> Dict[str, Any]:
+    if len(times) < 2:
+        last = times[-1] if times else None
+        return {"n_trades": len(times), "n_gaps": 0, "gaps": [], "med": 0.0, "p95": 0.0, "sd": 0.0, "last_trade": last}
+    gaps = []
+    for a, b in zip(times[:-1], times[1:]):
+        gaps.append((b - a).total_seconds() / 60.0)
+    gaps_sorted = sorted(gaps)
+    medv = float(_median_stats(gaps_sorted))
+    p95v = float(_percentile(gaps_sorted, 95))
+    sdv = _std(gaps_sorted)
+    return {"n_trades": len(times), "n_gaps": len(gaps_sorted), "gaps": gaps_sorted, "med": medv, "p95": p95v, "sd": sdv, "last_trade": times[-1]}
+
+def consist_score(med_gap: float, p95_gap: float) -> float:
+    if med_gap <= 0:
+        return 0.0
+    ratio = p95_gap / med_gap
+    score = 100.0 * max(0.0, 2.0 - ratio)  # ratio=1 =>100; ratio=2 =>0
+    return float(min(100.0, max(0.0, score)))
+
+
+# ==============================================================================
+# 🔧 Helpers (compat + formatos)
+# ==============================================================================
+def from_s(seconds: float) -> str:
+    """Formata segundos em 'Xd HH:MM:SS' (ou 'HH:MM:SS')."""
+    try:
+        s = int(max(0, round(float(seconds))))
+    except Exception:
+        return "0s"
+    days, rem = divmod(s, 86400)
+    h, rem = divmod(rem, 3600)
+    m, sec = divmod(rem, 60)
+    if days > 0:
+        return f"{days}d {h:02d}:{m:02d}:{sec:02d}"
+    return f"{h:02d}:{m:02d}:{sec:02d}"
