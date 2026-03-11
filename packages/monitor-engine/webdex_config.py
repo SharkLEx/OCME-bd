@@ -146,9 +146,10 @@ _RPC_PUBLICOS = [
     "https://polygon-bor-rpc.publicnode.com",
     "https://1rpc.io/matic",
 ]
-RPC_URL     = (os.getenv("RPC_URL") or "").strip()     or _RPC_PUBLICOS[0]
-RPC_CAPITAL = (os.getenv("RPC_CAPITAL") or "").strip() or _RPC_PUBLICOS[1]
-DEFAULT_RPC = RPC_URL
+RPC_URL      = (os.getenv("RPC_URL") or "").strip()      or _RPC_PUBLICOS[0]
+RPC_CAPITAL  = (os.getenv("RPC_CAPITAL") or "").strip()  or _RPC_PUBLICOS[1]
+RPC_FALLBACK = (os.getenv("RPC_FALLBACK") or "").strip() or _RPC_PUBLICOS[2]
+DEFAULT_RPC  = RPC_URL
 
 def _env_int(name: str, default: int) -> int:
     try:

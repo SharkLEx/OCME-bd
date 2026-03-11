@@ -247,6 +247,68 @@ def send_support(chat_id: int, text: str, **kwargs):
     msg = f"{SUPPORT_HEADER}\n\n{text}\n\n{SUPPORT_HEADER}"
     return send_html(chat_id, msg, **kwargs)
 
+# ==============================================================================
+# 🖼️ LOGO WEbdEX — envia com file_id cacheado (upload único)
+# ==============================================================================
+import pathlib as _pathlib
+
+_LOGO_PATH = str(_pathlib.Path(__file__).parent / "webdex_logo.jpeg")
+_LOGO_FILE_ID_KEY = "webdex_logo_file_id"
+_TG_CAPTION_LIMIT  = 1024
+
+def send_logo_photo(chat_id: int, caption: str = "", reply_markup=None) -> bool:
+    """
+    Envia a logo WEbdEX como foto.
+    - Primeira vez: faz upload do arquivo local e salva o file_id no DB.
+    - Demais vezes: reutiliza o file_id (zero re-upload).
+    - Se caption > 1024 chars: envia foto sem caption + texto separado.
+    - Retorna True se enviou com sucesso, False caso contrário.
+    """
+    try:
+        cached_fid = get_config(_LOGO_FILE_ID_KEY, "")
+
+        # Caption do Telegram: máx 1024 chars
+        cap_safe  = (caption or "")[:_TG_CAPTION_LIMIT]
+        cap_long  = len(caption or "") > _TG_CAPTION_LIMIT
+        mk        = reply_markup
+
+        def _do_send(photo_src):
+            return bot.send_photo(
+                chat_id, photo_src,
+                caption=cap_safe if not cap_long else "",
+                parse_mode="HTML",
+                reply_markup=mk if not cap_long else None,
+            )
+
+        if cached_fid:
+            try:
+                msg = _do_send(cached_fid)
+            except Exception:
+                # file_id inválido ou expirado — re-faz upload
+                set_config(_LOGO_FILE_ID_KEY, "")
+                cached_fid = ""
+
+        if not cached_fid:
+            if not _pathlib.Path(_LOGO_PATH).exists():
+                return False
+            with open(_LOGO_PATH, "rb") as f:
+                msg = _do_send(f)
+            # Salva o file_id para reutilização
+            try:
+                fid = msg.photo[-1].file_id
+                set_config(_LOGO_FILE_ID_KEY, fid)
+            except Exception:
+                pass
+
+        # Se caption era longa, manda o texto completo em seguida
+        if cap_long and caption:
+            send_html(chat_id, caption, reply_markup=mk)
+
+        return True
+    except Exception as _e:
+        logger.warning("[send_logo_photo] %s", _e)
+        return False
+
 def _clear_pending_steps(chat_id: int):
     try:
         bot.clear_step_handler_by_chat_id(chat_id)

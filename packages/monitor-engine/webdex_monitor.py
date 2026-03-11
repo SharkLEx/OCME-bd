@@ -20,7 +20,7 @@ from webdex_db import (
     now_br, get_block_ts, op_set_block_ts, normalize_txhash,
 )
 from webdex_chain import (
-    web3, CONTRACTS_A, CONTRACTS_B, TOPIC_OPENPOSITION, TOPIC_TRANSFER,
+    web3, rpc_pool, CONTRACTS_A, CONTRACTS_B, TOPIC_OPENPOSITION, TOPIC_TRANSFER,
     erc20_contract, get_active_wallet_map, notify_cids_for_wallet,
     obter_preco_pol, _is_429_error,
 )
@@ -61,7 +61,7 @@ def _health_touch(k: str):
 # ==============================================================================
 def _safe_get_logs(params, depth=0):
     try:
-        return web3.eth.get_logs(params)
+        return rpc_pool.get_logs(params)
     except Exception as e:
         if _is_429_error(e):
             HEALTH["last_error"] = f"get_logs 429: {e}"
@@ -105,6 +105,223 @@ def _fmt_time_ago_from_block(bloco: int) -> str:
     days = hrs // 24
     return f"{days}d atrás"
 
+def _profit_emoji(val: float) -> str:
+    if val >= 10:  return "💰"
+    if val >= 0:   return "🟢"
+    if val >= -2:  return "🔴"
+    return "🚨"
+
+def _today_stats(chat_id: int) -> tuple[int, float]:
+    """Retorna (trades_hoje, pnl_hoje) para o chat_id. Silencioso em erro."""
+    try:
+        with DB_LOCK:
+            row = cursor.execute("""
+                SELECT COUNT(*), COALESCE(SUM(CAST(o.valor AS REAL)) - SUM(CAST(o.gas_usd AS REAL)), 0)
+                FROM operacoes o
+                JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                JOIN users u ON LOWER(u.wallet)=LOWER(ow.wallet)
+                WHERE o.tipo='Trade'
+                  AND DATE(o.data_hora)=DATE('now','localtime')
+                  AND u.chat_id=?
+            """, (chat_id,)).fetchone()
+        if row:
+            return int(row[0] or 0), float(row[1] or 0)
+    except Exception:
+        pass
+    return 0, 0.0
+
+def _today_wins(chat_id: int) -> int:
+    """Retorna número de trades vencedores (valor > 0) hoje para o chat_id."""
+    try:
+        with DB_LOCK:
+            row = cursor.execute("""
+                SELECT COUNT(*)
+                FROM operacoes o
+                JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                JOIN users u ON LOWER(u.wallet)=LOWER(ow.wallet)
+                WHERE o.tipo='Trade'
+                  AND CAST(o.valor AS REAL) > 0
+                  AND DATE(o.data_hora)=DATE('now','localtime')
+                  AND u.chat_id=?
+            """, (chat_id,)).fetchone()
+        return int(row[0] or 0) if row else 0
+    except Exception:
+        return 0
+
+def _today_streak(chat_id: int) -> int:
+    """Conta wins consecutivos mais recentes hoje (do mais novo para o mais antigo)."""
+    try:
+        with DB_LOCK:
+            rows = cursor.execute("""
+                SELECT CAST(o.valor AS REAL)
+                FROM operacoes o
+                JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                JOIN users u ON LOWER(u.wallet)=LOWER(ow.wallet)
+                WHERE o.tipo='Trade'
+                  AND DATE(o.data_hora)=DATE('now','localtime')
+                  AND u.chat_id=?
+                ORDER BY o.data_hora DESC
+            """, (chat_id,)).fetchall()
+        streak = 0
+        for (v,) in rows:
+            if float(v or 0) > 0:
+                streak += 1
+            else:
+                break
+        return streak
+    except Exception:
+        return 0
+
+def _sub_cycle(sub: str) -> str:
+    """Tempo entre as 2 últimas operações desta subconta. Retorna string formatada ou ''."""
+    try:
+        with DB_LOCK:
+            rows = cursor.execute("""
+                SELECT data_hora FROM operacoes
+                WHERE sub_conta=? AND tipo='Trade'
+                ORDER BY data_hora DESC
+                LIMIT 2
+            """, (sub,)).fetchall()
+        if not rows or len(rows) < 2:
+            return ""
+        t1 = datetime.strptime(rows[0][0][:19], "%Y-%m-%d %H:%M:%S")
+        t2 = datetime.strptime(rows[1][0][:19], "%Y-%m-%d %H:%M:%S")
+        delta = int((t1 - t2).total_seconds())
+        if delta <= 0:
+            return ""
+        if delta < 60:
+            return f"{delta}s"
+        if delta < 3600:
+            m, s = divmod(delta, 60)
+            return f"{m}min {s}s"
+        h, rem = divmod(delta, 3600)
+        return f"{h}h {rem // 60}min"
+    except Exception:
+        return ""
+
+def _sub_efficiency(sub: str, env_tag: str) -> str:
+    """Compara ops da subconta hoje vs média do ambiente. Retorna string ou ''."""
+    try:
+        with DB_LOCK:
+            sub_row = cursor.execute("""
+                SELECT COUNT(*) FROM operacoes
+                WHERE sub_conta=? AND tipo='Trade'
+                  AND DATE(data_hora)=DATE('now','localtime')
+            """, (sub,)).fetchone()
+            env_row = cursor.execute("""
+                SELECT COUNT(DISTINCT sub_conta), COUNT(*)
+                FROM operacoes
+                WHERE ambiente=? AND tipo='Trade'
+                  AND DATE(data_hora)=DATE('now','localtime')
+            """, (env_tag,)).fetchone()
+        sub_ops = int(sub_row[0] or 0) if sub_row else 0
+        if not env_row or not env_row[0] or env_row[0] == 0:
+            return ""
+        n_subs = int(env_row[0])
+        total  = int(env_row[1] or 0)
+        avg    = total / n_subs if n_subs > 0 else 0
+        if avg <= 0:
+            return ""
+        diff_pct = ((sub_ops - avg) / avg) * 100
+        sign = "+" if diff_pct >= 0 else ""
+        arrow = "▲" if diff_pct >= 0 else "▼"
+        return f"{sub_ops} ops  ·  média env: {avg:.0f}  ({arrow}{sign}{diff_pct:.0f}%)"
+    except Exception:
+        return ""
+
+def _sub_drawdown(sub: str) -> str:
+    """Pior ponto e pico do dia para esta subconta. Retorna string ou ''."""
+    try:
+        with DB_LOCK:
+            rows = cursor.execute("""
+                SELECT CAST(valor AS REAL) FROM operacoes
+                WHERE sub_conta=? AND tipo='Trade'
+                  AND DATE(data_hora)=DATE('now','localtime')
+                ORDER BY data_hora ASC
+            """, (sub,)).fetchall()
+        if not rows:
+            return ""
+        acc, peak, trough = 0.0, 0.0, 0.0
+        for (v,) in rows:
+            acc += float(v or 0)
+            if acc > peak:
+                peak = acc
+            if acc < trough:
+                trough = acc
+        if peak == 0.0 and trough == 0.0:
+            return ""
+        peak_s   = f"+${peak:.2f}"   if peak   >= 0 else f"-${abs(peak):.2f}"
+        trough_s = f"-${abs(trough):.2f}" if trough < 0 else f"+${trough:.2f}"
+        return f"{trough_s}  →  pico {peak_s}"
+    except Exception:
+        return ""
+
+def _sub_gas_today(sub: str) -> str:
+    """Gás total acumulado hoje por esta subconta."""
+    try:
+        with DB_LOCK:
+            row = cursor.execute("""
+                SELECT SUM(CAST(gas_usd AS REAL)) FROM operacoes
+                WHERE sub_conta=? AND tipo='Trade'
+                  AND DATE(data_hora)=DATE('now','localtime')
+            """, (sub,)).fetchone()
+        total = float(row[0] or 0) if row else 0.0
+        if total <= 0:
+            return ""
+        return f"${total:.4f} hoje"
+    except Exception:
+        return ""
+
+def _sub_rank(sub: str, env_tag: str) -> str:
+    """Rank desta subconta no ambiente pelo P&L de hoje. Retorna string ou ''."""
+    try:
+        with DB_LOCK:
+            rows = cursor.execute("""
+                SELECT sub_conta, SUM(CAST(valor AS REAL)) as pnl
+                FROM operacoes
+                WHERE ambiente=? AND tipo='Trade'
+                  AND DATE(data_hora)=DATE('now','localtime')
+                GROUP BY sub_conta
+                ORDER BY pnl DESC
+            """, (env_tag,)).fetchall()
+        if not rows:
+            return ""
+        total = len(rows)
+        for i, (s, _) in enumerate(rows, 1):
+            if s == sub:
+                medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, "")
+                return f"{medal} #{i} de {total} subcontas ativas"
+        return ""
+    except Exception:
+        return ""
+
+_STABLE_TOKENS = {"USDT0", "USDT", "USDC", "DAI", "BUSD"}
+
+def _net_usd(val: float, token: str, gas_usd: float) -> str:
+    """Net pós-gás em USD para stablecoins. Retorna string formatada ou ''."""
+    if token.upper() in _STABLE_TOKENS and abs(val) > 0:
+        net = val - gas_usd
+        sign = "+" if net >= 0 else ""
+        return f"{sign}${net:.4f}"
+    return ""
+
+def _capital_pct(chat_id: int, val: float) -> str:
+    """Retorna string '(+X.XX% capital)' ou '' se sem dados."""
+    try:
+        with DB_LOCK:
+            row = cursor.execute(
+                "SELECT total_usd FROM capital_cache WHERE chat_id=? ORDER BY updated_ts DESC LIMIT 1",
+                (chat_id,)
+            ).fetchone()
+        if row and float(row[0] or 0) > 0:
+            pct = val / float(row[0]) * 100
+            sign = "+" if pct >= 0 else ""
+            return f"  <i>({sign}{pct:.2f}% capital)</i>"
+    except Exception:
+        pass
+    return ""
+
+
 def notificar(
     chat_id: int,
     titulo: str,
@@ -128,60 +345,124 @@ def notificar(
         is_exec = bool(env_tag or strategy_name or pass_fee_bd or ("EXECU" in titulo_u) or ("OPENPOSITION" in titulo_u))
 
         if not is_exec:
-            pct = ""
-            if val and abs(val) > 0:
-                pct = f" ({(gas_usd / abs(val)) * 100:.1f}%)"
+            # Transferência simples — formato compacto
+            gas_pct = f" ({(gas_usd / abs(val)) * 100:.1f}%)" if val and abs(val) > 0 else ""
             msg = (
                 f"{titulo}\n"
                 f"👤 {code(sub)}\n"
-                f"────────────────────\n"
-                f"⛽ Gás: {code(f'${gas_usd:.4f}')}" + esc(pct) + "\n"
-                f'🔗 <a href="https://polygonscan.com/tx/{esc(tx)}">Scan</a>'
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⛽ Gás: {code(f'${gas_usd:.4f}')}{esc(gas_pct)}\n"
+                f'🔗 <a href="https://polygonscan.com/tx/{esc(tx)}">PolygonScan</a>'
             )
             send_html(chat_id, msg, disable_web_page_preview=True)
             return
 
-        tag = env_tag or "AG"
-        strat = (strategy_name or "-").strip() or "-"
-        prof_ball = "🟢" if val >= 0 else "🔴"
-        profit_line = f"{prof_ball} Profit: {val:+.4f} {esc(token)}"
-        gas_pct = ""
-        if val and abs(val) > 0:
-            gas_pct = f" ({(gas_usd / abs(val)) * 100:.1f}%)"
+        # ── EXECUÇÃO — formato rico WEbdEX (Fase 1) ────────────────────────
+        tag   = env_tag or "AG"
+        strat = (strategy_name or "Standard").strip() or "Standard"
+
+        # ── RESULTADO ──────────────────────────────────────────────────────
+        p_emoji  = _profit_emoji(val)
+        cap_pct  = _capital_pct(chat_id, val)
+        gas_pct  = f"  <i>({(gas_usd / abs(val)) * 100:.1f}%)</i>" if val and abs(val) > 0 else ""
+        net_str  = _net_usd(val, token, gas_usd)
+        net_line = f"💵  Net pós-gás: <b>{esc(net_str)}</b>{cap_pct}\n" if net_str else ""
+
         if gas_pol and gas_pol > 0:
-            gas_extra = f" • ${gas_usd:.4f}" + gas_pct if gas_usd else gas_pct
-            gas_line = f"⛽ Gas fee: {gas_pol:.4f} POL" + esc(gas_extra)
+            gas_line = f"⛽  Gás: <code>{gas_pol:.4f} POL</code>  ·  <code>${gas_usd:.4f}</code>{esc(gas_pct)}"
         else:
-            gas_line = f"⛽ Gas fee: ${gas_usd:.4f}" + esc(gas_pct)
-        pass_line = "🎟️ Pass fee: -"
-        if pass_fee_bd and pass_fee_bd > 0:
-            pass_line = f"🎟️ Pass fee: {pass_fee_bd:.4f} BD"
-        ago = "-"
+            gas_line = f"⛽  Gás: <code>${gas_usd:.4f}</code>{esc(gas_pct)}"
+
+        pass_line = f"🎟️  Fee Protocolo: <code>{pass_fee_bd:.4f} BD</code>" if (pass_fee_bd and pass_fee_bd > 0) else ""
+
+        # ── BLOCKCHAIN ─────────────────────────────────────────────────────
+        ago = "Confirmado agora"
+        bloco_line = ""
         if bloco and bloco > 0:
+            bloco_line = f"🔷  Polygon  ·  Bloco <code>{bloco:,}</code>\n"
             ts = get_block_ts(bloco)
             if ts:
                 delta = max(0, int(now_br().timestamp() - ts))
-                mins = delta // 60
+                mins  = delta // 60
                 if mins < 1:
-                    ago = "agora"
+                    ago = "Confirmado agora"
                 elif mins < 60:
-                    ago = f"{mins} min atrás"
+                    ago = f"Confirmado há {mins} min"
                 elif mins < 60 * 24:
-                    ago = f"{mins // 60} h atrás"
+                    ago = f"Confirmado há {mins // 60}h"
                 else:
-                    ago = f"{mins // (60 * 24)} d atrás"
+                    ago = f"Confirmado há {mins // (60 * 24)}d"
+        else:
+            bloco_line = "🔷  Polygon\n"
+
+        cycle = _sub_cycle(sub)
+        cycle_line = f"⏱️  Ciclo SubConta: <b>{esc(cycle)}</b>\n" if cycle else ""
+
+        # ── HOJE ───────────────────────────────────────────────────────────
+        trades_hj, pnl_hj = _today_stats(chat_id)
+        wins_hj   = _today_wins(chat_id)
+        losses_hj = max(0, trades_hj - wins_hj)
+        wr_hj     = (wins_hj / trades_hj * 100) if trades_hj > 0 else 0.0
+        wr_emoji  = "🟢" if wr_hj >= 60 else ("🟡" if wr_hj >= 40 else "🔴")
+        pnl_sign  = "+" if pnl_hj >= 0 else ""
+        filled    = round(wr_hj / 10)
+        wr_bar    = "█" * filled + "░" * (10 - filled)
+
+        streak      = _today_streak(chat_id)
+        streak_line = f"🔥  Sequência: <b>{streak} wins seguidos</b>\n" if streak >= 3 else ""
+
+        # ── SUBCONTA (Fase 2) ───────────────────────────────────────────────
+        efficiency  = _sub_efficiency(sub, tag)
+        drawdown    = _sub_drawdown(sub)
+        gas_acc     = _sub_gas_today(sub)
+        rank        = _sub_rank(sub, tag)
+
+        sub_lines = ""
+        if efficiency:
+            sub_lines += f"📈  Eficiência: <b>{esc(efficiency)}</b>\n"
+        if drawdown:
+            sub_lines += f"📉  Drawdown hoje: <b>{esc(drawdown)}</b>\n"
+        if gas_acc:
+            sub_lines += f"⛽  Gás acumulado: <b>{esc(gas_acc)}</b>\n"
+        if rank:
+            sub_lines += f"🏅  Rank no ambiente: <b>{esc(rank)}</b>\n"
+
+        sub_section = (
+            f"┈┈┈┈┈┈ SUBCONTA ┈┈┈┈┈┈\n\n{sub_lines}\n"
+        ) if sub_lines else ""
+
         msg = (
-            f"🔵 <b>EXECUÇÃO — WEbdEX [{esc(tag)}]</b>\n\n"
-            f"Account: {esc(sub)}\n"
-            f"Strategy: {esc(strat)}\n"
-            f"────────────────────\n"
-            f"{profit_line}\n"
+            f"⚡ <b>WEbdEX ENGINE</b>  ·  <code>{esc(tag)}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"\n"
+            f"🔵  <b>EXECUÇÃO CONFIRMADA</b>  ·  #{trades_hj}\n"
+            f"👤  {code(sub)}\n"
+            f"🔄  Estratégia: <b>{esc(strat)}</b>  ·  🪙 <b>{esc(token)}</b>\n"
+            f"\n"
+            f"┈┈┈┈┈┈ RESULTADO ┈┈┈┈┈┈\n"
+            f"\n"
+            f"{p_emoji}  <b>{val:+.4f} {esc(token)}</b>\n"
+            f"{net_line}"
             f"{gas_line}\n"
-            f"{pass_line}\n"
-            f"────────────────────\n"
-            f"🧱 Network: {esc(network)}\n"
-            f"🕒 {esc(ago)}\n"
-            f'🔗 <a href="https://polygonscan.com/tx/{esc(tx)}">Scan</a>'
+            f"{pass_line + chr(10) if pass_line else ''}"
+            f"\n"
+            f"┈┈┈┈┈┈ BLOCKCHAIN ┈┈┈┈┈┈\n"
+            f"\n"
+            f"{bloco_line}"
+            f"🕒  <i>{esc(ago)}</i>\n"
+            f"{cycle_line}"
+            f'🔗  <a href="https://polygonscan.com/tx/{esc(tx)}">Ver transação ↗</a>\n'
+            f"\n"
+            f"{sub_section}"
+            f"┈┈┈┈┈┈ HOJE ┈┈┈┈┈┈\n"
+            f"\n"
+            f"📊  <b>{trades_hj} trades</b>  ·  WinRate <b>{wr_hj:.0f}%</b>  {wr_emoji}\n"
+            f"<code>    {wr_bar}</code>\n"
+            f"💰  P&L: <b>{pnl_sign}${pnl_hj:.2f}</b>  ·  {wins_hj}W / {losses_hj}L\n"
+            f"{streak_line}"
+            f"\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<i>⚡ WEbdEX · New Digital Economy</i>"
         )
         send_html(chat_id, msg, disable_web_page_preview=True)
     except Exception as e:

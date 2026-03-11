@@ -19,7 +19,7 @@ from webdex_chain import (
     web3, CONTRACTS_A, CONTRACTS_B, get_active_wallet_map,
     obter_preco_pol, _chain_cache_worker,
 )
-from webdex_bot_core import send_html, _notif_worker
+from webdex_bot_core import send_html, _notif_worker, send_logo_photo
 
 # ==============================================================================
 # 🛡️ SENTINELA
@@ -79,9 +79,36 @@ def agendador_21h():
                         """, (dt_lim, u["wallet"]))
                         r = cursor.fetchone()
                     if r and r[0] is not None:
-                        liq = float(r[0]) - float(r[1] or 0.0)
-                        msg = f"🌙 <b>RELATÓRIO 21H</b>\n💰 Líquido: <b>${liq:+.2f}</b>"
+                        liq   = float(r[0]) - float(r[1] or 0.0)
+                        gas_t = float(r[1] or 0.0)
+                        # Busca contagem e WinRate
+                        with DB_LOCK:
+                            wr_row = cursor.execute("""
+                                SELECT COUNT(*), SUM(CASE WHEN o.valor>0 THEN 1 ELSE 0 END)
+                                FROM operacoes o
+                                JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                                WHERE o.tipo='Trade' AND o.data_hora>=? AND ow.wallet=?
+                            """, (dt_lim, u["wallet"])).fetchone()
+                        total_t = int(wr_row[0] or 0) if wr_row else 0
+                        wins    = int(wr_row[1] or 0) if wr_row else 0
+                        wr_pct  = (wins / total_t * 100) if total_t > 0 else 0
+                        # Barra de WinRate (10 blocos)
+                        filled  = round(wr_pct / 10)
+                        wr_bar  = "█" * filled + "░" * (10 - filled)
+                        emoji   = "🟢" if liq >= 0 else "🔴"
+                        msg = (
+                            f"🌙 <b>RELATÓRIO 21H — WEbdEX</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"{emoji}  Líquido: <b>${liq:+.2f}</b>\n"
+                            f"⛽  Gás Total: <b>${gas_t:.2f}</b>\n"
+                            f"📊  Trades: <b>{total_t}</b>  |  Wins: <b>{wins}</b>\n\n"
+                            f"🎯  WinRate: <b>{wr_pct:.0f}%</b>\n"
+                            f"<code>{wr_bar}</code>\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━\n"
+                            f"🗓️  {hoje}"
+                        )
                         send_html(cid, msg)
+                        send_logo_photo(cid, "🌙 <b>WEbdEX</b> — bom descanso, até amanhã! 🚀")
                     set_config(f"last_rep_{cid}", hoje)
                 time.sleep(70)
         except Exception:
@@ -148,8 +175,11 @@ def _capital_snapshot_worker():
                                 (int(chat_id), env or "AG_C_bd", total_usd, _json.dumps(breakdown), ts_now)
                             )
                             conn.commit()
-                except Exception:
-                    pass
+                        logger.info("✅ capital_cache: chat_id=%s env=%s total_usd=%.2f", chat_id, env or "AG_C_bd", total_usd)
+                    else:
+                        logger.warning("⚠️ capital_cache baixo/zero: chat_id=%s env=%s total_usd=%.4f", chat_id, env or "AG_C_bd", total_usd)
+                except Exception as _usr_e:
+                    logger.warning("❌ capital_cache falhou: chat_id=%s erro=%s", chat_id, _usr_e)
         except Exception as _we:
             logger.warning(f"capital_snapshot_worker erro: {_we}")
         time.sleep(_CAPITAL_SNAP_INTERVAL)
@@ -302,18 +332,40 @@ def _inactivity_auto_loop():
             if (now_ts - last_alert_ts) < (cooldown_min * 60):
                 time.sleep(check_min * 60)
                 continue
-            # Detecta inatividade no protocolo (últimos 100 blocos)
+            # Detecta inatividade no protocolo (últimos ~check_min*2 blocos = ~2.4s/bloco)
             try:
-                curr = int(web3.eth.block_number)
-                start = max(1, curr - 100)
                 from webdex_config import CONTRACTS, Web3 as _W3
-                from webdex_chain import TOPIC_OPENPOSITION
-                from webdex_monitor import _safe_get_logs as _safe_get_logs_stub
-                p_from = _W3.to_hex(start)
-                p_to = _W3.to_hex(curr)
+                from webdex_chain import TOPIC_OPENPOSITION, rpc_pool
+                curr  = int(web3.eth.block_number)
+                span  = max(50, int(check_min * 60 / 2.4))
+                start = max(1, curr - span)
+                logs  = []
+                for env_key, c_data in CONTRACTS.items():
+                    try:
+                        logs += rpc_pool.get_logs({
+                            "fromBlock": hex(start),
+                            "toBlock":   hex(curr),
+                            "address":   _W3.to_checksum_address(c_data["PAYMENTS"]),
+                            "topics":    [TOPIC_OPENPOSITION],
+                        })
+                    except Exception:
+                        pass
+                if not logs:
+                    # Sem trades no período — alerta admins
+                    set_config("inactivity_last_alert_ts", str(time.time()))
+                    msg = (
+                        f"⚠️ <b>INATIVIDADE DETECTADA</b>\n"
+                        f"Sem trades nos últimos <b>{check_min} min</b>\n"
+                        f"Bloco <code>{start}</code> → <code>{curr}</code>"
+                    )
+                    for aid in ADMIN_USER_IDS:
+                        try:
+                            from webdex_bot_core import send_html as _sh
+                            _sh(int(aid), msg)
+                        except Exception:
+                            pass
             except Exception:
-                time.sleep(check_min * 60)
-                continue
+                pass
             time.sleep(check_min * 60)
         except Exception:
             pass

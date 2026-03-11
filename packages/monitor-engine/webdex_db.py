@@ -377,11 +377,12 @@ CREATE TABLE IF NOT EXISTS adm_capital_stats (
 
 conn.commit()
 
-cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_data_hora  ON operacoes(data_hora)")
-cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_sub_conta  ON operacoes(sub_conta)")
-cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_ambiente   ON operacoes(ambiente)")
-cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_owner_wall ON op_owner(wallet)")
-cursor.execute("CREATE INDEX IF NOT EXISTS idx_fl_snap_env_ts ON fl_snapshots(env, ts)")
+cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_data_hora    ON operacoes(data_hora)")
+cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_sub_conta    ON operacoes(sub_conta)")
+cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_ambiente     ON operacoes(ambiente)")
+cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_owner_wall   ON op_owner(wallet)")
+cursor.execute("CREATE INDEX IF NOT EXISTS idx_fl_snap_env_ts  ON fl_snapshots(env, ts)")
+cursor.execute("CREATE INDEX IF NOT EXISTS idx_op_tipo_data    ON operacoes(tipo, data_hora)")
 conn.commit()
 
 try:
