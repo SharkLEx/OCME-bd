@@ -1,6 +1,6 @@
 # ==============================================================================
-# Dockerfile — OCME bd Monitor Engine
-# Multi-stage: build otimizado + runtime slim
+# Dockerfile — OCME bd Monitor Engine (WEbdEX)
+# Multi-stage: build otimizado + runtime Python 3.12 slim
 # Story 7.7 — @devops
 # ==============================================================================
 
@@ -9,14 +9,14 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# Instala dependências de sistema para web3/matplotlib
+# Dependências de sistema para web3 / matplotlib
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libffi-dev \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia e instala dependências
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
@@ -25,40 +25,48 @@ FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
-# Copia dependências instaladas
+# Dependências instaladas no stage build
 COPY --from=builder /install /usr/local
 
-# Matplotlib headless (sem display)
+# Matplotlib headless + UTF-8
 ENV MPLBACKEND=Agg
+ENV PYTHONIOENCODING=utf-8
+ENV PYTHONUTF8=1
 
-# Diretório de dados persistentes
-RUN mkdir -p /app/data && chmod 777 /app/data
+# Diretório de dados persistentes (DB + logs)
+RUN mkdir -p /app/data /app/logs && chmod 777 /app/data /app/logs
 
-# Copia código fonte
-COPY config.py .
-COPY monitor_cli/ ./monitor_cli/
-COPY monitor_core/ ./monitor_core/
-COPY monitor_chain/ ./monitor_chain/
-COPY monitor_db/ ./monitor_db/
-COPY monitor_ai/ ./monitor_ai/
-COPY monitor_report/ ./monitor_report/
-COPY monitor_bot/ ./monitor_bot/
+# ── Monolito WEbdEX (produção atual) ────────────────────────────────────────
+COPY webdex_config.py \
+     webdex_db.py \
+     webdex_chain.py \
+     webdex_monitor.py \
+     webdex_workers.py \
+     webdex_bot_core.py \
+     webdex_main.py \
+     webdex_ai.py \
+     ./
 
-# Cria __init__.py para todos os pacotes
-RUN for pkg in monitor_cli monitor_core monitor_chain monitor_db monitor_ai monitor_report monitor_bot; do \
-    touch /app/$pkg/__init__.py; \
-    done
+# Handlers do bot
+COPY webdex_handlers/ ./webdex_handlers/
 
-# Variáveis de ambiente padrão (override via .env ou docker-compose)
+# ── Pacotes modulares (Epic 7) ──────────────────────────────────────────────
+COPY ../monitor-cli/   ./monitor_cli/
+COPY ../monitor-db/    ./monitor_db/
+COPY ../monitor-core/  ./monitor_core/
+COPY ../monitor-chain/ ./monitor_chain/
+COPY ../monitor-ai/    ./monitor_ai/
+COPY ../monitor-report/ ./monitor_report/
+COPY ../monitor-bot/   ./monitor_bot/
+
+# ── Variáveis de ambiente padrão ──────────────────────────────────────────────
 ENV DATA_DIR=/app/data
 ENV DB_PATH=/app/data/webdex_v5_final.db
-ENV MPLBACKEND=Agg
+ENV OCME_DB_PATH=/app/data/webdex_v5_final.db
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD python -c "import sqlite3; conn = sqlite3.connect('${DB_PATH}'); conn.execute('SELECT 1'); print('OK')" || exit 1
+# Health check: verifica DB SQLite
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD python -c "import sqlite3; sqlite3.connect('/app/data/webdex_v5_final.db').execute('SELECT 1'); print('OK')" || exit 1
 
-# Entry points
-# Bot: python -m monitor_bot.bot
-# CLI: python -m monitor_cli
-CMD ["python", "-m", "monitor_bot.bot"]
+# Entry point: monolito WEbdEX (bot + vigia)
+CMD ["python", "webdex_main.py"]
