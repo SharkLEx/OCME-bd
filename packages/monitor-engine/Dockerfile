@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY monitor-engine/requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── Stage 2: Runtime ────────────────────────────────────────────────────────────
@@ -37,28 +37,28 @@ ENV PYTHONUTF8=1
 RUN mkdir -p /app/data /app/logs && chmod 777 /app/data /app/logs
 
 # ── Monolito WEbdEX (produção atual) ────────────────────────────────────────
-COPY webdex_config.py \
-     webdex_db.py \
-     webdex_chain.py \
-     webdex_monitor.py \
-     webdex_workers.py \
-     webdex_bot_core.py \
-     webdex_main.py \
-     webdex_ai.py \
-     webdex_observability.py \
+COPY monitor-engine/webdex_config.py \
+     monitor-engine/webdex_db.py \
+     monitor-engine/webdex_chain.py \
+     monitor-engine/webdex_monitor.py \
+     monitor-engine/webdex_workers.py \
+     monitor-engine/webdex_bot_core.py \
+     monitor-engine/webdex_main.py \
+     monitor-engine/webdex_ai.py \
+     monitor-engine/webdex_observability.py \
      ./
 
 # Handlers do bot
-COPY webdex_handlers/ ./webdex_handlers/
+COPY monitor-engine/webdex_handlers/ ./webdex_handlers/
 
 # ── Pacotes modulares (Epic 7) ──────────────────────────────────────────────
-COPY ../monitor-cli/   ./monitor_cli/
-COPY ../monitor-db/    ./monitor_db/
-COPY ../monitor-core/  ./monitor_core/
-COPY ../monitor-chain/ ./monitor_chain/
-COPY ../monitor-ai/    ./monitor_ai/
-COPY ../monitor-report/ ./monitor_report/
-COPY ../monitor-bot/   ./monitor_bot/
+COPY monitor-cli/   ./monitor_cli/
+COPY monitor-db/    ./monitor_db/
+COPY monitor-core/  ./monitor_core/
+COPY monitor-chain/ ./monitor_chain/
+COPY monitor-ai/    ./monitor_ai/
+COPY monitor-report/ ./monitor_report/
+COPY monitor-bot/   ./monitor_bot/
 
 # ── Variáveis de ambiente padrão ──────────────────────────────────────────────
 ENV DATA_DIR=/app/data

@@ -1,7 +1,7 @@
 #!/bin/bash
 # ==============================================================================
 # deploy_now.sh — Deploy OCME Monitor Engine para VPS
-# Roda na sua máquina local. Pede senha 1x e faz tudo automaticamente.
+# Roda na sua máquina local. Usa chave SSH (~/.ssh/ocme_vps_key) — sem senha.
 # ==============================================================================
 
 set -euo pipefail
@@ -14,7 +14,8 @@ APP_DIR="/opt/ocme-monitor"
 DATA_DIR="/opt/ocme-data"
 REPO_URL="https://github.com/SharkLEx/OCME-bd.git"
 REPO_BRANCH="feat/epic-7-monitor-engine"
-SSH_CTRL="/tmp/ocme_ssh_ctrl"
+SSH_KEY="${HOME}/.ssh/ocme_vps_key"
+SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=no -o ConnectTimeout=15"
 
 # Cores
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; RED='\033[0;31m'
@@ -31,9 +32,9 @@ ENV_LOCAL="$REPO_ROOT/packages/monitor-engine/.env"
 DB_LOCAL="$REPO_ROOT/packages/monitor-engine/webdex_v5_final.db"
 SETUP_SCRIPT="$SCRIPT_DIR/setup_vps.sh"
 
-# Função SSH/SCP usando ControlMaster (senha pedida apenas 1x)
-_ssh() { ssh -o ControlPath="$SSH_CTRL" "$VPS_TARGET" "$@"; }
-_scp() { scp -o ControlPath="$SSH_CTRL" "$@"; }
+# Funções SSH/SCP com chave (sem senha, sem ControlMaster)
+_ssh() { ssh $SSH_OPTS "$VPS_TARGET" "$@"; }
+_scp() { scp $SSH_OPTS "$@"; }
 
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
@@ -47,28 +48,25 @@ step "1/6 — Verificando arquivos locais"
 [[ -f "$ENV_LOCAL" ]]    && success ".env encontrado ($ENV_LOCAL)" || { echo -e "${RED}ERRO: .env não encontrado em $ENV_LOCAL${NC}"; exit 1; }
 [[ -f "$SETUP_SCRIPT" ]] && success "setup_vps.sh encontrado"      || { echo -e "${RED}ERRO: setup_vps.sh não encontrado${NC}"; exit 1; }
 [[ -f "$DB_LOCAL" ]]     && success "DB encontrado ($(du -sh "$DB_LOCAL" | cut -f1))" || warn "DB não encontrado — será criado no VPS"
+[[ -f "$SSH_KEY" ]]      && success "Chave SSH encontrada ($SSH_KEY)" || { echo -e "${RED}ERRO: chave SSH não encontrada em $SSH_KEY${NC}"; exit 1; }
 
 # ── 2. Conectar ao VPS (pede senha 1x aqui) ────────────────────────────────────
-step "2/6 — Conectando ao VPS (digite a senha quando solicitado)"
-# Limpar controle anterior se existir
-rm -f "$SSH_CTRL"
-ssh -M -o ControlPath="$SSH_CTRL" -o ControlPersist=600s \
-    -o StrictHostKeyChecking=no \
-    -o ConnectTimeout=15 \
-    "$VPS_TARGET" "echo '✅ Conexão SSH estabelecida — não precisa digitar a senha novamente!'"
-success "SSH conectado (sessão válida por 10 min)"
+step "2/6 — Testando conexão com o VPS"
+_ssh "echo '✅ Conexão SSH OK — sem senha!'"
+success "SSH conectado via chave"
 
 # ── 3. Upload dos arquivos ─────────────────────────────────────────────────────
 step "3/6 — Enviando arquivos para o VPS"
-_scp -o StrictHostKeyChecking=no "$SETUP_SCRIPT" "${VPS_TARGET}:/root/setup_vps.sh"
+_scp "$SETUP_SCRIPT" "${VPS_TARGET}:/root/setup_vps.sh"
+_ssh "sed -i 's/\r//' /root/setup_vps.sh"
 success "setup_vps.sh enviado"
 
-_scp -o StrictHostKeyChecking=no "$ENV_LOCAL" "${VPS_TARGET}:/tmp/.env_ocme"
+_scp "$ENV_LOCAL" "${VPS_TARGET}:/tmp/.env_ocme"
 success ".env enviado (credenciais protegidas em /tmp)"
 
 if [[ -f "$DB_LOCAL" ]]; then
     info "Enviando DB ($(du -sh "$DB_LOCAL" | cut -f1)) — pode demorar..."
-    _scp -o StrictHostKeyChecking=no "$DB_LOCAL" "${VPS_TARGET}:/tmp/webdex_v5_final.db"
+    _scp "$DB_LOCAL" "${VPS_TARGET}:/tmp/webdex_v5_final.db"
     success "DB enviado"
 fi
 
@@ -133,9 +131,6 @@ fi
 
 # Containers status
 _ssh "cd /opt/ocme-monitor/packages/monitor-engine && docker compose ps"
-
-# Fechar ControlMaster
-ssh -O stop -o ControlPath="$SSH_CTRL" "$VPS_TARGET" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
