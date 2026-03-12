@@ -45,6 +45,7 @@ COPY webdex_config.py \
      webdex_bot_core.py \
      webdex_main.py \
      webdex_ai.py \
+     webdex_observability.py \
      ./
 
 # Handlers do bot

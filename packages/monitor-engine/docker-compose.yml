@@ -15,17 +15,21 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    ports:
+      - "${METRICS_PORT:-9090}:9090"
     volumes:
       - monitor_data:/app/data
+      - monitor_logs:/app/logs
     environment:
       - DB_PATH=/app/data/webdex_v5_final.db
       - DATA_DIR=/app/data
+      - METRICS_PORT=9090
     healthcheck:
-      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/app/data/webdex_v5_final.db').execute('SELECT 1')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30s
     logging:
       driver: json-file
       options:
@@ -49,7 +53,7 @@ services:
     profiles:
       - cli
 
-  # Backup diário do SQLite (cron-based)
+  # Backup diário do SQLite (roda automaticamente em produção)
   backup:
     image: alpine:3.19
     container_name: ocme-backup
@@ -59,19 +63,19 @@ services:
       - monitor_backups:/backups
     command: >
       sh -c "
+        echo 'Backup service iniciado';
         while true; do
           DATE=$$(date +%Y%m%d_%H%M);
-          cp /data/webdex_v5_final.db /backups/webdex_$$DATE.db;
-          echo \"Backup criado: webdex_$$DATE.db\";
-          find /backups -name '*.db' -mtime +7 -delete;
+          cp /data/webdex_v5_final.db /backups/webdex_$$DATE.db 2>/dev/null && echo \"Backup OK: webdex_$$DATE.db\" || echo 'Backup: DB ainda não existe, aguardando...';
+          find /backups -name '*.db' -mtime +7 -delete 2>/dev/null;
           sleep 86400;
         done
       "
-    profiles:
-      - backup
 
 volumes:
   monitor_data:
+    driver: local
+  monitor_logs:
     driver: local
   monitor_backups:
     driver: local
