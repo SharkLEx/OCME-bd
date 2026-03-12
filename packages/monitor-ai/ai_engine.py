@@ -36,7 +36,7 @@ from context_builder import ContextBuilder
 logger = logging.getLogger("monitor-ai.ai_engine")
 
 # Modelo padrão: claude-3.5-haiku — melhor custo-benefício para pt-BR financeiro
-_DEFAULT_MODEL = "anthropic/claude-3-5-haiku-20241022"
+_DEFAULT_MODEL = "anthropic/claude-haiku-4-5"
 _MEMORY_MAX = 12          # mensagens na memória deslizante
 _MEMORY_TTL_HOURS = 24    # memória persiste 24h no SQLite
 

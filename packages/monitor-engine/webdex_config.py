@@ -176,7 +176,7 @@ if not OPENAI_API_KEY:
     OPENAI_API_KEY = _read_multiline_env_value("OPENAI_API_KEY")
 
 _AI_API_KEY = OPENROUTER_API_KEY or OPENAI_API_KEY
-OPENAI_MODEL = (os.getenv("OPENAI_MODEL") or "openai/gpt-4.1-nano").strip()
+OPENAI_MODEL = (os.getenv("OPENAI_MODEL") or "anthropic/claude-haiku-4-5").strip()
 _AI_BASE_URL = (
     "https://openrouter.ai/api/v1"
     if OPENROUTER_API_KEY
