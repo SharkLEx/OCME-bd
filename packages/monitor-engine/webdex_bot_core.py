@@ -175,12 +175,14 @@ def _notif_worker():
             kind = item[0]
             if kind == "html":
                 chat_id, text_msg, disable_preview = item[1], item[2], item[3]
+                reply_markup = item[4] if len(item) > 4 else None
                 _tg_send_with_retry(
                     bot.send_message,
                     chat_id,
                     text_msg,
                     parse_mode="HTML",
                     disable_web_page_preview=disable_preview,
+                    reply_markup=reply_markup,
                 )
             elif kind == "photo":
                 chat_id, photo_bytes, caption = item[1], item[2], item[3]
@@ -233,13 +235,15 @@ SUPPORT_HEADER = "Você fala com a <b>IA da WEbdEX</b>. Caso precise, vamos atua
 
 def send_html(chat_id: int, text: str, **kwargs):
     disable_preview = kwargs.get("disable_web_page_preview", True)
+    reply_markup = kwargs.get("reply_markup", None)
     try:
         chunks = _tg_split_text(str(text), _TG_SAFE_LIMIT)
-        for ch in chunks:
-            NOTIF_QUEUE.put_nowait(("html", int(chat_id), str(ch), bool(disable_preview)))
+        for i, ch in enumerate(chunks):
+            mk = reply_markup if i == len(chunks) - 1 else None
+            NOTIF_QUEUE.put_nowait(("html", int(chat_id), str(ch), bool(disable_preview), mk))
     except Exception:
         try:
-            bot.send_message(int(chat_id), str(text)[:_TG_SAFE_LIMIT], parse_mode="HTML", disable_web_page_preview=bool(disable_preview))
+            bot.send_message(int(chat_id), str(text)[:_TG_SAFE_LIMIT], parse_mode="HTML", disable_web_page_preview=bool(disable_preview), reply_markup=reply_markup)
         except Exception:
             pass
 

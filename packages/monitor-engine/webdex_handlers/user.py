@@ -119,6 +119,7 @@ def ia_kb():
 def _tg_ai_pretty(text: str) -> str:
     """Converte markdown simples (**, ###, -) em texto limpo para Telegram (HTML mode)."""
     import re
+    import html as _html
     if not text:
         return ""
     s = str(text)
@@ -129,7 +130,7 @@ def _tg_ai_pretty(text: str) -> str:
     # remove markdown bold/italics markers
     s = s.replace("**", "").replace("__", "")
 
-    # headings like ### Título
+    # headings like ### Título — strip marker before escaping
     s = re.sub(r"(?m)^\s*#{1,6}\s*", "🔹 ", s)
 
     # bullets: -, * at start
@@ -137,6 +138,9 @@ def _tg_ai_pretty(text: str) -> str:
 
     # normalize excessive blank lines
     s = re.sub(r"\n{3,}", "\n\n", s).strip()
+
+    # escape HTML special chars (<, >, &) so parse_mode=HTML doesn't corrupt the text
+    s = _html.escape(s)
     return s
 
 
