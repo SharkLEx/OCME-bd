@@ -57,13 +57,15 @@ class _MetricsRegistry:
         self._last_health_ts: float = 0.0  # timestamp da última atualização do vigia
 
     def update(self, health: Dict[str, Any]):
-        """Atualiza métricas a partir do dict HEALTH do monitor."""
+        """Atualiza métricas a partir do dict HEALTH do monitor (webdex_monitor.py)."""
         with self._lock:
+            # Suporta chaves do HEALTH dict do webdex_monitor.py
             self._counters["vigia_blocks_processed_total"] = int(
                 health.get("blocks_processed", 0)
             )
             self._counters["vigia_ops_total"] = int(
-                health.get("ops_total", 0)
+                health.get("ops_total", 0) or
+                health.get("logs_trade", 0) + health.get("logs_transfer", 0)
             )
             self._gauges["vigia_lag_blocks"] = float(
                 health.get("lag_blocks", 0)
@@ -72,13 +74,17 @@ class _MetricsRegistry:
                 health.get("vigia_loops", 0)
             )
             self._gauges["vigia_rpc_errors_total"] = float(
-                health.get("rpc_errors", 0)
+                health.get("rpc_errors", 0) or health.get("rpc_errors_total", 0)
             )
             self._gauges["vigia_capture_rate"] = float(
                 health.get("capture_rate", 100.0)
             )
-            # Registra timestamp da última atualização para o health check
-            self._last_health_ts = float(health.get("updated_at", time.time()))
+            # Timestamp: usa last_fetch_ok_ts (webdex) ou updated_at (modular)
+            self._last_health_ts = float(
+                health.get("updated_at", 0) or
+                health.get("last_fetch_ok_ts", 0) or
+                time.time()
+            )
 
     def increment_alert(self):
         with self._lock:
@@ -140,6 +146,16 @@ class _ObsHandler(BaseHTTPRequestHandler):
     _db_path: str = ""
     _health_ref: Optional[Dict] = None
 
+    def _live_health(self) -> Optional[Dict]:
+        """Retorna o HEALTH dict vivo: health_ref ou sys.modules['webdex_monitor'].HEALTH."""
+        if self._health_ref is not None:
+            return self._health_ref
+        import sys
+        wm = sys.modules.get("webdex_monitor")
+        if wm and hasattr(wm, "HEALTH"):
+            return wm.HEALTH  # type: ignore
+        return None
+
     def do_GET(self):  # noqa: N802
         if self.path == "/metrics":
             self._handle_metrics()
@@ -150,6 +166,13 @@ class _ObsHandler(BaseHTTPRequestHandler):
                        json.dumps({"error": "Not Found", "path": self.path}))
 
     def _handle_metrics(self):
+        # Sincroniza métricas do HEALTH vivo (via health_ref ou sys.modules)
+        h = self._live_health()
+        if h:
+            try:
+                _registry.update(h)
+            except Exception:
+                pass
         body = _registry.to_prometheus()
         self._send(200, "text/plain; version=0.0.4; charset=utf-8", body)
 
@@ -159,14 +182,17 @@ class _ObsHandler(BaseHTTPRequestHandler):
         self._send(code, "application/json", json.dumps(status))
 
     def _build_health_payload(self) -> Dict:
-        # Vigia — usa registry (atualizado via update_from_health) ou health_ref
+        # Vigia — lê HEALTH dict via live_health() (health_ref ou sys.modules)
         vigia_ok = False
         try:
-            # Prioridade: registry (atualizado via update_from_health)
-            last_updated = _registry._last_health_ts
-            if last_updated == 0 and self._health_ref:
-                last_updated = float(self._health_ref.get("updated_at", 0))
-            vigia_ok = last_updated > 0 and (time.time() - last_updated) < 120
+            h = self._live_health() or {}
+            last_updated = float(
+                _registry._last_health_ts or
+                h.get("last_vigia_ts", 0) or
+                h.get("last_fetch_ok_ts", 0) or
+                h.get("updated_at", 0)
+            )
+            vigia_ok = last_updated > 0 and (time.time() - last_updated) < 300  # 5 min
         except Exception:
             pass
 

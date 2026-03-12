@@ -757,6 +757,7 @@ def vigia():
     while True:
         try:
             _health_touch("last_vigia_ts")
+            _health_touch("last_fetch_ok_ts")   # Story 7.7: sync para /health endpoint
             HEALTH["vigia_loops"] += 1
             if time.time() < float(HEALTH.get("cooldown_until") or 0):
                 time.sleep(max(1.0, MONITOR_IDLE_SLEEP))
