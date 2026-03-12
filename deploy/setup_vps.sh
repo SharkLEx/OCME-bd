@@ -142,7 +142,8 @@ else
     echo -e "${YELLOW}║  • OWNER_CHAT_ID=seu_chat_id                            ║${NC}"
     echo -e "${YELLOW}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    read -rp "Pressione ENTER após configurar o .env (ou CTRL+C para configurar agora)..."
+    # Modo não-interativo: deploy_now.sh envia o .env depois
+    warn "Modo automático: .env será posicionado pelo deploy_now.sh"
 fi
 
 # Ajusta DB_PATH para volume Docker
