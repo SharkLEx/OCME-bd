@@ -22,6 +22,12 @@ from webdex_db import (
 )
 from webdex_bot_core import is_admin
 
+# ── Epic 7 integration (soft import — monolito continua sem os módulos) ──────
+try:
+    from ocme_integration import build_ai_context as _ocme_build_ai_context
+except ImportError:
+    _ocme_build_ai_context = None  # type: ignore[assignment]
+
 # ==============================================================================
 # ⚙️ CONFIG
 # ==============================================================================
@@ -540,6 +546,17 @@ def _brain_db_snapshot(chat_id, user_text: str, intent: str = "general") -> str:
         pass
 
     lines.append(f"Intent: {intent}")
+
+    # ── ContextBuilder Epic 7 (contexto enriquecido via módulo modular) ───────
+    if user_wallet and _ocme_build_ai_context is not None:
+        try:
+            _cb_ctx = _ocme_build_ai_context(user_wallet, periodo_h)
+            if _cb_ctx:
+                lines.append("---")
+                lines.append(_cb_ctx)
+        except Exception:
+            pass  # Nunca quebra o bot
+
     lines.append("=== FIM DOS DADOS ===")
 
     return "\n".join(lines)

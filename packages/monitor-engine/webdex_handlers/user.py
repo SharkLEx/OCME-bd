@@ -224,36 +224,56 @@ def start(m):
             send_support(m.chat.id, welcome_caption, reply_markup=main_kb())
 
 
+def _rpc_skip_kb():
+    """Teclado com opção de pular o RPC."""
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row("⏭️ Pular RPC")
+    kb.row("cancelar")
+    return kb
+
+
 def _auto_connect_wallet(m, wallet: str) -> None:
-    """Conecta automaticamente via deep link ou detecção no setup."""
+    """Salva a wallet e pede RPC (sempre — para permitir sync histórico).
+
+    Fluxo:
+      wallet reconhecida → mostra histórico + pede RPC (pode pular)
+      wallet desconhecida → pede RPC (pode pular) → pede env
+    """
     chat_id = m.chat.id
     kw = get_known_wallet(wallet)
     if kw and kw["trade_count"] > 0:
         env = kw["env"] or "bd_v5"
-        upsert_user(chat_id, wallet=wallet.lower(), env=env, active=1, pending="")
-        mark_known_wallet_registered(wallet)
         lucro = kw["lucro_total"]
         sinal = "+" if lucro >= 0 else ""
+        # Salva wallet + env já detectado; pede RPC antes de finalizar
+        upsert_user(chat_id, wallet=wallet.lower(), env=env, pending="ASK_RPC")
         send_support(
             chat_id,
             f"🎉 <b>Wallet reconhecida!</b>\n\n"
-            f"Encontramos seu histórico on-chain:\n"
+            f"Histórico on-chain encontrado:\n"
             f"• Ambiente: <b>{esc(env)}</b>\n"
             f"• Trades: <b>{kw['trade_count']}</b>  "
             f"(✅{kw['wins']} / ❌{kw['losses']})\n"
             f"• Lucro total: <b>{sinal}{lucro:.4f} USDT</b>\n\n"
-            f"✅ Configuração automática concluída!\n"
-            f"Monitoramento <b>ativado</b>.",
-            reply_markup=main_kb()
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📡 <b>Passo 2: Envie seu RPC Polygon</b>\n"
+            f"(ex: <code>https://polygon-mainnet.g.alchemy.com/v2/SUA_CHAVE</code>)\n\n"
+            f"O RPC permite sincronizar operações <b>anteriores</b> à sua conexão.\n"
+            f"Não tem RPC? Use <b>⏭️ Pular RPC</b> para continuar assim mesmo.",
+            reply_markup=_rpc_skip_kb()
         )
     else:
         # Wallet não conhecida — pede RPC e env manualmente
         upsert_user(chat_id, wallet=wallet.lower(), pending="ASK_RPC")
         send_support(
             chat_id,
-            f"🔌 Wallet salva: <code>{wallet[:10]}...{wallet[-6:]}</code>\n\n"
-            f"Passo 2: Envie sua RPC (http...).",
-            reply_markup=types.ReplyKeyboardRemove()
+            f"✅ Wallet salva: <code>{wallet[:10]}...{wallet[-6:]}</code>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📡 <b>Passo 2: Envie seu RPC Polygon</b>\n"
+            f"(ex: <code>https://polygon-mainnet.g.alchemy.com/v2/SUA_CHAVE</code>)\n\n"
+            f"O RPC permite ver operações passadas da sua wallet.\n"
+            f"Não tem RPC? Use <b>⏭️ Pular RPC</b>.",
+            reply_markup=_rpc_skip_kb()
         )
 
 
@@ -2034,6 +2054,7 @@ _KNOWN_BUTTONS = {
     "🧠 IA Global (ON/OFF)","🔒 IA ADM-only (ON/OFF)","🧠 IA Modo (DEV/COMUNIDADE)",
     "ciclo","7d","30d","24h",
     "Todas","cancelar",
+    "⏭️ Pular RPC",
 }
 
 
@@ -2051,7 +2072,9 @@ def step_handler(m):
     txt = (m.text or "").strip()
 
     # Botao do menu durante pending -> limpa pending e retorna ao menu
-    if txt in _KNOWN_BUTTONS and txt not in ("cancelar",):
+    # Exceções: cancelar e botões de navegação do wizard são tratados adiante
+    _WIZARD_BUTTONS = {"cancelar", "⏭️ Pular RPC", "⬅️ Voltar"}
+    if txt in _KNOWN_BUTTONS and txt not in _WIZARD_BUTTONS:
         upsert_user(m.chat.id, pending="")
         bot.send_message(m.chat.id, "↩️ Ação cancelada.", reply_markup=main_kb())
         return
@@ -2080,12 +2103,36 @@ def step_handler(m):
         return
 
     if u["pending"] == "ASK_RPC":
-        if not txt.startswith("http"):
-            return send_support(m.chat.id, "⚠️ RPC inválida. Deve começar com http(s).", reply_markup=types.ReplyKeyboardRemove())
-        upsert_user(m.chat.id, rpc=txt, pending="ASK_ENV")
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.row("AG_C_bd", "bd_v5")
-        send_support(m.chat.id, "✅ Salvo!\nPasso 3: Escolha o ambiente:", reply_markup=kb)
+        pulou = (txt == "⏭️ Pular RPC")
+        if not pulou and not txt.startswith("http"):
+            return send_support(
+                m.chat.id,
+                "⚠️ RPC inválida. Deve começar com <code>http</code>.\n\nOu use <b>⏭️ Pular RPC</b> para continuar sem RPC.",
+                reply_markup=_rpc_skip_kb()
+            )
+        rpc_val = "" if pulou else txt
+        # Se wallet já tem env detectado (wallet conhecida), finaliza aqui
+        if u.get("env") and u["env"] not in ("", "AG_C_bd"):
+            upsert_user(m.chat.id, rpc=rpc_val, active=1, pending="")
+            kw = get_known_wallet(u.get("wallet", ""))
+            if kw:
+                mark_known_wallet_registered(u.get("wallet", ""))
+            rpc_msg = "RPC salvo." if not pulou else "RPC pulado."
+            send_support(
+                m.chat.id,
+                f"✅ <b>Conexão concluída!</b>\n\n"
+                f"• Wallet: <code>{str(u.get('wallet',''))[:10]}...{str(u.get('wallet',''))[-6:]}</code>\n"
+                f"• Ambiente: <b>{esc(u['env'])}</b>\n"
+                f"• {rpc_msg}\n\n"
+                f"▶️ Monitoramento <b>ativado</b>.",
+                reply_markup=main_kb()
+            )
+        else:
+            # Wallet desconhecida — ainda precisa escolher env
+            upsert_user(m.chat.id, rpc=rpc_val, pending="ASK_ENV")
+            kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            kb.row("AG_C_bd", "bd_v5")
+            send_support(m.chat.id, "✅ Salvo!\nPasso 3: Escolha o ambiente:", reply_markup=kb)
         return
 
     if u["pending"] == "ASK_ENV":

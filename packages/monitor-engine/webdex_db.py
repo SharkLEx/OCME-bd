@@ -626,7 +626,11 @@ def get_user(chat_id: int):
 
 def upsert_user(chat_id: int, **fields):
     with DB_LOCK:
-        u = cursor.execute("SELECT * FROM users WHERE chat_id=?", (int(chat_id),)).fetchone()
+        # Usa SELECT com colunas explícitas para não depender da ordem do schema
+        row = cursor.execute(
+            "SELECT wallet, rpc, env, active, periodo, pending, sub_filter, created_at "
+            "FROM users WHERE chat_id=?", (int(chat_id),)
+        ).fetchone()
         base = {
             "wallet": "",
             "rpc": "",
@@ -637,20 +641,17 @@ def upsert_user(chat_id: int, **fields):
             "sub_filter": "",
             "created_at": now_br().strftime("%Y-%m-%d %H:%M:%S"),
         }
-        if u:
+        if row:
             base.update({
-                "wallet": u[1] or "",
-                "rpc": u[2] or "",
-                "env": u[3] or "AG_C_bd",
-                "active": int(u[4] or 0),
-                "periodo": u[5] or "24h",
-                "pending": u[6] or "",
-                "created_at": u[7] or base["created_at"],
+                "wallet":     row[0] or "",
+                "rpc":        row[1] or "",
+                "env":        row[2] or "AG_C_bd",
+                "active":     int(row[3] or 0),
+                "periodo":    row[4] or "24h",
+                "pending":    row[5] or "",
+                "sub_filter": row[6] or "",
+                "created_at": row[7] or base["created_at"],
             })
-            try:
-                base["sub_filter"] = u[9] if len(u) > 9 and u[9] is not None else ""
-            except Exception:
-                base["sub_filter"] = ""
 
         for k, v in fields.items():
             if k in base:

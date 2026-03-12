@@ -253,6 +253,35 @@ class Notifier:
         tx_count = int(dados.get("tx_count", 0))
         last_block = int(dados.get("last_block", 0))
         sev = "🔴" if mins >= 60 else ("🟡" if mins >= 30 else "🟠")
+
+        # Sigma histórico: compara com média histórica de períodos inativos
+        sigma_line = ""
+        gas_line = ""
+        try:
+            hist = self._get_inactivity_history()
+            if hist["count"] >= 3:
+                avg = hist["avg_mins"]
+                std = hist["std_mins"]
+                desvio = (mins - avg) / std if std > 0 else 0.0
+                if desvio > 2:
+                    sigma_line = f"📈  <b>{desvio:.1f}σ acima da média</b> ({avg:.0f}min ± {std:.0f})\n"
+                elif desvio > 1:
+                    sigma_line = f"📊  {desvio:.1f}σ acima da média histórica ({avg:.0f}min)\n"
+                else:
+                    sigma_line = f"📊  Dentro da média histórica ({avg:.0f}min)\n"
+        except Exception:
+            pass
+
+        # Diagnóstico de gas: busca gas médio recente do DB
+        try:
+            gas_info = self._get_recent_gas_stats()
+            if gas_info["avg_gwei"] > 0:
+                gwei = gas_info["avg_gwei"]
+                gas_status = "alto ⚠️" if gwei > 50 else ("normal ✅" if gwei < 20 else "moderado 🟡")
+                gas_line = f"⛽  Gas médio recente: {_code(f'{gwei:.1f} Gwei')} — {gas_status}\n"
+        except Exception:
+            pass
+
         msg = (
             f"{sev} <b>ALERTA DE INATIVIDADE</b>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -260,6 +289,8 @@ class Notifier:
             f"😴  Sem operações há <b>{mins:.1f} minutos</b>\n"
             f"🔷  Último bloco: {_code(f'{last_block:,}')}\n"
             f"📊  TXs na última hora: {tx_count}\n"
+            f"{sigma_line}"
+            f"{gas_line}"
             f"\n"
             f"<i>⚡ WEbdEX · OCME Engine</i>"
         )
@@ -327,6 +358,41 @@ class Notifier:
         except Exception:
             pass
         return {"trades": 0, "pnl": 0.0, "wins": 0, "winrate": 0.0}
+
+    def _get_inactivity_history(self) -> Dict:
+        """Retorna estatísticas históricas de inatividade do DB."""
+        try:
+            import math
+            c = sqlite3.connect(self._db_path)
+            rows = c.execute(
+                "SELECT minutes FROM inactivity_stats ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+            c.close()
+            if not rows:
+                return {"count": 0, "avg_mins": 0.0, "std_mins": 0.0}
+            vals = [float(r[0]) for r in rows]
+            avg = sum(vals) / len(vals)
+            variance = sum((v - avg) ** 2 for v in vals) / len(vals)
+            return {"count": len(vals), "avg_mins": avg, "std_mins": math.sqrt(variance)}
+        except Exception:
+            return {"count": 0, "avg_mins": 0.0, "std_mins": 0.0}
+
+    def _get_recent_gas_stats(self) -> Dict:
+        """Retorna gas médio das últimas 2h do DB."""
+        try:
+            c = sqlite3.connect(self._db_path)
+            row = c.execute("""
+                SELECT AVG(CAST(gas_usd AS REAL))
+                FROM operacoes
+                WHERE tipo='Trade'
+                  AND data_hora >= datetime('now', '-2 hours')
+            """).fetchone()
+            c.close()
+            # gas_usd proxy — sem Gwei real; usa 0 se nada
+            avg_gwei = float(row[0] or 0) * 500  # heurística: $0.002 ≈ 1 Gwei
+            return {"avg_gwei": avg_gwei}
+        except Exception:
+            return {"avg_gwei": 0.0}
 
     def _get_active_users(self) -> List[int]:
         try:
@@ -409,3 +475,123 @@ class Notifier:
     def send_html(self, chat_id: int, text: str):
         """API pública para envio direto (handlers, etc.)."""
         self._enqueue(chat_id, text)
+
+    # ── Weekly Summary (segunda-feira 08:00 BRT) ──────────────────────────
+    def send_weekly_summary(self, ai_engine=None):
+        """Resumo semanal automático com insights do monitor-ai.
+
+        Deve ser chamado pelo agendador toda segunda-feira 08:00 BRT.
+        Usa DashboardCache (7d) + monitor-ai para gerar insights.
+        """
+        try:
+            kpis_7d = self._get_weekly_kpis()
+        except Exception as exc:
+            logger.warning("[weekly_summary] falha ao buscar KPIs: %s", exc)
+            return
+
+        pnl   = kpis_7d.get("pnl_7d", 0.0)
+        trades = kpis_7d.get("trades_7d", 0)
+        wr    = kpis_7d.get("winrate_7d", 0.0)
+        best  = kpis_7d.get("best_env", "?")
+        worst = kpis_7d.get("worst_env", "?")
+
+        pnl_emoji = _profit_emoji(pnl)
+        wr_emoji  = "🟢" if wr >= 60 else ("🟡" if wr >= 40 else "🔴")
+        filled    = round(wr / 10)
+        wr_bar    = "█" * filled + "░" * (10 - filled)
+        sign      = "+" if pnl >= 0 else ""
+
+        # Insight da IA (opcional — modo genérico se sem wallet/engine)
+        insight_section = ""
+        if ai_engine:
+            try:
+                prompt = (
+                    f"Resumo da semana do protocolo WEbdEX: "
+                    f"P&L={pnl:+.2f} USD, {trades} trades, WinRate={wr:.0f}%, "
+                    f"melhor ambiente={best}, pior={worst}. "
+                    f"Gere um insight analítico de 2-3 linhas em português."
+                )
+                insight = ai_engine.answer(prompt, wallet=None)
+                if insight:
+                    insight_section = (
+                        f"\n🤖 <b>Análise IA</b>\n"
+                        f"<i>{_esc(insight[:300])}</i>\n"
+                    )
+            except Exception as exc:
+                logger.debug("[weekly_summary] AI insight falhou: %s", exc)
+
+        msg = (
+            f"📅 <b>RESUMO SEMANAL — WEbdEX ENGINE</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"\n"
+            f"📆  Período: últimos 7 dias\n"
+            f"\n"
+            f"┈┈┈┈┈┈ P&L ┈┈┈┈┈┈\n"
+            f"\n"
+            f"{pnl_emoji}  P&L Líquido: <b>{sign}${pnl:.2f}</b>\n"
+            f"📊  {trades} trades  ·  WinRate {wr:.0f}%  {wr_emoji}\n"
+            f"<code>    {wr_bar}</code>\n"
+            f"\n"
+            f"┈┈┈┈┈┈ AMBIENTES ┈┈┈┈┈┈\n"
+            f"\n"
+            f"🏆  Melhor: {_code(best)}\n"
+            f"📉  Pior: {_code(worst)}\n"
+            f"{insight_section}"
+            f"\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<i>⚡ WEbdEX · Relatório automático</i>"
+        )
+
+        active_users = self._get_active_users()
+        for chat_id in active_users:
+            self._enqueue(chat_id, msg)
+        logger.info("[weekly_summary] enviado para %d usuários", len(active_users))
+
+    def _get_weekly_kpis(self) -> Dict:
+        """Busca KPIs dos últimos 7 dias do cache ou DB."""
+        if self._cache:
+            try:
+                kpis = self._cache.get()
+                by_env = kpis.get("by_env", [])
+                best_env  = max(by_env, key=lambda e: e.get("liquido", 0))["env"] if by_env else "?"
+                worst_env = min(by_env, key=lambda e: e.get("liquido", 0))["env"] if by_env else "?"
+                return {
+                    "pnl_7d":    kpis.get("pnl_7d", 0.0),
+                    "trades_7d": 0,  # cache só tem trades_24h; DB para 7d
+                    "winrate_7d": 0.0,
+                    "best_env":  best_env,
+                    "worst_env": worst_env,
+                }
+            except Exception:
+                pass
+        # Fallback: DB query direta
+        c = sqlite3.connect(self._db_path)
+        try:
+            since = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+            row = c.execute("""
+                SELECT COUNT(*),
+                       COALESCE(SUM(CAST(valor AS REAL)) - SUM(CAST(gas_usd AS REAL)), 0),
+                       COUNT(CASE WHEN CAST(valor AS REAL) > 0 THEN 1 END)
+                FROM operacoes
+                WHERE tipo='Trade' AND data_hora>=?
+            """, (since,)).fetchone()
+            t = int(row[0] or 0)
+            w = int(row[2] or 0)
+            # Melhor/pior ambiente por liquido
+            env_rows = c.execute("""
+                SELECT COALESCE(ambiente,'?'), ROUND(SUM(valor)-SUM(gas_usd),2)
+                FROM operacoes
+                WHERE tipo='Trade' AND data_hora>=?
+                GROUP BY 1 ORDER BY 2 DESC
+            """, (since,)).fetchall()
+            best_env  = env_rows[0][0] if env_rows else "?"
+            worst_env = env_rows[-1][0] if env_rows else "?"
+            return {
+                "pnl_7d":    float(row[1] or 0),
+                "trades_7d": t,
+                "winrate_7d": round(w / t * 100, 1) if t > 0 else 0.0,
+                "best_env":  best_env,
+                "worst_env": worst_env,
+            }
+        finally:
+            c.close()

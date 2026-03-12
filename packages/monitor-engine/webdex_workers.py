@@ -9,7 +9,7 @@ import time, threading
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
-from webdex_config import logger, Web3, CONTRACTS
+from webdex_config import logger, Web3, CONTRACTS, ADDR_USDT0, ADDR_LPLPUSD, ADDR_LPUSDT0
 from webdex_db import (
     DB_LOCK, conn, cursor, get_config, set_config, now_br, get_user,
     LIMITE_GWEI, LIMITE_GAS_BAIXO_POL, LIMITE_INATIV_MIN,
@@ -44,11 +44,11 @@ def sentinela():
                         gas = float(web3.from_wei(raw, "ether"))
                         if gas < LIMITE_GAS_BAIXO_POL:
                             send_html(cid, f"⛽ <b>GÁS BAIXO:</b> <code>{gas:.4f} POL</code>")
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"[sentinela] gasBalance falhou cid={cid}: {e}")
                 last = time.time()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[sentinela] Erro no loop de verificação: {e}")
         time.sleep(30)
 
 # ==============================================================================
@@ -120,10 +120,117 @@ def agendador_21h():
 # ==============================================================================
 _CAPITAL_SNAP_INTERVAL = 30 * 60  # 30 minutos
 
+# Tokens contados no capital (todos USD-denominados no protocolo WEbdEX)
+_CAPITAL_TOKENS = {
+    ADDR_USDT0.lower():   {"dec": 6,  "sym": "USDT",   "factor": 1.0},
+    ADDR_LPLPUSD.lower(): {"dec": 9,  "sym": "LP-USD",  "factor": 1.0},
+    ADDR_LPUSDT0.lower(): {"dec": 6,  "sym": "LP-V5",   "factor": 1.0},
+}
+
+# ABI mínima: totalSupply + balanceOf
+_ABI_ERC20_BASIC = '[{"inputs":[],"name":"totalSupply","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"}]'
+_USDT0_LOWER = ADDR_USDT0.lower()
+
+_lp_price_cache: dict = {}  # lp_addr_lower → price_per_unit (usdt per 1 lp_unit)
+
+def _fetch_lp_price_per_unit(w3, lp_addr: str, lp_dec: int) -> float:
+    """Busca preço por unidade LP token via DexScreener (sem API key).
+    Cacheado por sessão para evitar chamadas repetidas.
+    """
+    key = lp_addr.lower()
+    if key in _lp_price_cache:
+        return _lp_price_cache[key]
+    try:
+        import requests as _req
+        url = f"https://api.dexscreener.com/latest/dex/tokens/{lp_addr}"
+        resp = _req.get(url, timeout=10)
+        data = resp.json()
+        pairs = data.get("pairs") or []
+        # Pega o par com maior liquidez em USD
+        best = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd") or 0), default=None) if pairs else None
+        if best:
+            price = float(best.get("priceUsd") or 0)
+            if price > 0:
+                _lp_price_cache[key] = price
+                logger.info("💱 LP price (DexScreener): %s = $%.6f/unit", lp_addr[:10], price)
+                return price
+    except Exception as _e:
+        logger.warning("⚠️ LP price DexScreener falhou %s: %s", lp_addr[:10], _e)
+    _lp_price_cache[key] = 0.0
+    return 0.0
+
+
+def _val_balance(w3, st_addr: str, addr_raw: str, bal_raw: int) -> tuple[float, str]:
+    """Converte balance on-chain em (valor_usd, symbol).
+    - USDT: direto (dec=6)
+    - LP tokens: preço Uniswap V2 cacheado × quantidade
+    """
+    if bal_raw <= 0:
+        return 0.0, ""
+    if addr_raw == _USDT0_LOWER:
+        return bal_raw / 1e6, "USDT"
+    tok = _CAPITAL_TOKENS.get(addr_raw)
+    if not tok:
+        return 0.0, ""
+    lp_units = bal_raw / (10 ** tok["dec"])
+    price = _fetch_lp_price_per_unit(w3, addr_raw, tok["dec"])
+    if price > 0:
+        return lp_units * price, tok["sym"]
+    # Fallback se getReserves falhar
+    return lp_units * tok["factor"], tok["sym"]
+
+
+def _query_user_capital(w3, wallet: str) -> tuple[float, dict]:
+    """Agrega capital de um usuário nos DOIS envs (AG_C_bd e bd_v5).
+    Retorna (total_usd, breakdown).
+    """
+    from webdex_chain import get_contracts
+    from webdex_config import CONTRACTS as _CONTRACTS
+    total_usd = 0.0
+    breakdown: dict = {}
+    usr_addr = Web3.to_checksum_address(wallet)
+    for env_name in _CONTRACTS:
+        try:
+            c = get_contracts(env_name, w3)
+            mgr_addr = Web3.to_checksum_address(c["addr"]["MANAGER"])
+            subs = c["sub"].functions.getSubAccounts(mgr_addr, usr_addr).call()
+            for s in subs:
+                sid = s[0]
+                try:
+                    strats = c["sub"].functions.getStrategies(mgr_addr, usr_addr, sid).call()[:25]
+                except Exception:
+                    continue
+                # getBalances returns the SAME total balance per coin regardless of which
+                # strategy address is passed. Deduplicate by coin to avoid N×inflation.
+                seen_coins: set = set()
+                for st in strats:
+                    try:
+                        bals = c["sub"].functions.getBalances(mgr_addr, usr_addr, sid, st).call()
+                    except Exception:
+                        continue
+                    for b in bals:
+                        try:
+                            addr_raw = str(b[1]).lower()
+                            if addr_raw in seen_coins:
+                                continue
+                            bal_raw = int(b[0])
+                            val, sym = _val_balance(w3, st, addr_raw, bal_raw)
+                            if val > 0 and sym:
+                                seen_coins.add(addr_raw)
+                                total_usd += val
+                                breakdown[sym] = breakdown.get(sym, 0.0) + val
+                        except Exception:
+                            continue
+        except Exception:
+            continue
+    return total_usd, breakdown
+
+
 def _capital_snapshot_worker():
     """Worker de background: tira snapshot de capital de todos usuários a cada 30min."""
     logger.info("💰 Capital snapshot worker: Ativo...")
     while True:
+        _lp_price_cache.clear()  # limpa cache de preços a cada ciclo
         try:
             with DB_LOCK:
                 users = cursor.execute(
@@ -134,38 +241,7 @@ def _capital_snapshot_worker():
                     from webdex_chain import web3_for_rpc
                     from webdex_config import RPC_CAPITAL
                     w3 = web3_for_rpc(rpc or RPC_CAPITAL, timeout=6)
-                    from webdex_chain import get_contracts
-                    c = get_contracts(env or "AG_C_bd", w3)
-                    mgr_addr = Web3.to_checksum_address(c["addr"]["MANAGER"])
-                    usr_addr = Web3.to_checksum_address(wallet)
-                    subs = c["sub"].functions.getSubAccounts(mgr_addr, usr_addr).call()[:40]
-                    total_usd = 0.0
-                    breakdown: dict = {}
-                    from webdex_config import ADDR_USDT0
-                    for s in subs:
-                        sid = s[0]
-                        try:
-                            strats = c["sub"].functions.getStrategies(mgr_addr, usr_addr, sid).call()[:25]
-                        except Exception:
-                            continue
-                        for st in strats:
-                            try:
-                                bals = c["sub"].functions.getBalances(mgr_addr, usr_addr, sid, st).call()
-                            except Exception:
-                                continue
-                            for b in bals:
-                                try:
-                                    addr_raw = str(b[1]).lower()
-                                    bal_raw  = int(b[0])
-                                    dec_raw  = int(b[2])
-                                    if bal_raw <= 0:
-                                        continue
-                                    if addr_raw == ADDR_USDT0.lower():
-                                        val = bal_raw / (10 ** dec_raw)
-                                        total_usd += val
-                                        breakdown["USDT0"] = breakdown.get("USDT0", 0.0) + val
-                                except Exception:
-                                    continue
+                    total_usd, breakdown = _query_user_capital(w3, wallet)
                     if total_usd > 1.0:
                         import json as _json
                         ts_now = time.time()
@@ -175,7 +251,7 @@ def _capital_snapshot_worker():
                                 (int(chat_id), env or "AG_C_bd", total_usd, _json.dumps(breakdown), ts_now)
                             )
                             conn.commit()
-                        logger.info("✅ capital_cache: chat_id=%s env=%s total_usd=%.2f", chat_id, env or "AG_C_bd", total_usd)
+                        logger.info("✅ capital_cache: chat_id=%s env=%s total_usd=%.2f breakdown=%s", chat_id, env or "AG_C_bd", total_usd, breakdown)
                     else:
                         logger.warning("⚠️ capital_cache baixo/zero: chat_id=%s env=%s total_usd=%.4f", chat_id, env or "AG_C_bd", total_usd)
                 except Exception as _usr_e:
@@ -211,38 +287,7 @@ def _user_capital_refresh_worker():
                     from webdex_chain import web3_for_rpc
                     from webdex_config import RPC_CAPITAL
                     w3 = web3_for_rpc(rpc or RPC_CAPITAL, timeout=6)
-                    from webdex_chain import get_contracts
-                    c = get_contracts(env or "AG_C_bd", w3)
-                    mgr_addr = Web3.to_checksum_address(c["addr"]["MANAGER"])
-                    usr_addr = Web3.to_checksum_address(wallet)
-                    subs = c["sub"].functions.getSubAccounts(mgr_addr, usr_addr).call()[:40]
-                    total_usd = 0.0
-                    breakdown: dict = {}
-                    from webdex_config import ADDR_USDT0
-                    for s in subs:
-                        sid = s[0]
-                        try:
-                            strats = c["sub"].functions.getStrategies(mgr_addr, usr_addr, sid).call()[:25]
-                        except Exception:
-                            continue
-                        for st in strats:
-                            try:
-                                bals = c["sub"].functions.getBalances(mgr_addr, usr_addr, sid, st).call()
-                            except Exception:
-                                continue
-                            for b in bals:
-                                try:
-                                    addr_raw = str(b[1]).lower()
-                                    bal_raw  = int(b[0])
-                                    dec_raw  = int(b[2])
-                                    if bal_raw <= 0:
-                                        continue
-                                    if addr_raw == ADDR_USDT0.lower():
-                                        val = bal_raw / (10 ** dec_raw)
-                                        total_usd += val
-                                        breakdown["USDT0"] = breakdown.get("USDT0", 0.0) + val
-                                except Exception:
-                                    continue
+                    total_usd, breakdown = _query_user_capital(w3, wallet)
                     if total_usd > 1.0:
                         import json as _json
                         ts_now = time.time()

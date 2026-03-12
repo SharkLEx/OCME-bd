@@ -28,6 +28,16 @@ from webdex_bot_core import (
     send_html, esc, code, get_token_meta, formatar_moeda,
 )
 
+# ── Epic 7 integration (soft import — monolito continua sem os módulos) ──────
+try:
+    from ocme_integration import notify_new_operation as _ocme_notify_op
+    from ocme_integration import notify_vigia_progress as _ocme_notify_progress
+    from ocme_integration import get_dashboard_cache as _ocme_get_cache
+except ImportError:
+    _ocme_notify_op = None       # type: ignore[assignment]
+    _ocme_notify_progress = None  # type: ignore[assignment]
+    _ocme_get_cache = None        # type: ignore[assignment]
+
 # ==============================================================================
 # 🧠 HEALTH
 # ==============================================================================
@@ -472,6 +482,16 @@ def notificar(
 # 🔁 MONITOR (CORE)
 # ==============================================================================
 _TX_CACHE_TS: Dict[str, float] = {}
+_TX_CACHE_TTL = 120.0  # segundos — evita dedup infinito e memory leak
+
+def _clean_tx_cache():
+    """Remove entradas expiradas do cache de TX. Chama a cada N loops do vigia."""
+    cutoff = time.time() - _TX_CACHE_TTL
+    expired = [k for k, v in _TX_CACHE_TS.items() if v < cutoff]
+    for k in expired:
+        del _TX_CACHE_TS[k]
+    if expired:
+        logger.debug(f"[tx_cache] Limpeza: {len(expired)} entradas removidas, {len(_TX_CACHE_TS)} restantes")
 
 def _get_tx_and_receipt_safely(tx: str):
     now = time.time()
@@ -482,7 +502,8 @@ def _get_tx_and_receipt_safely(tx: str):
         t = web3.eth.get_transaction(tx)
         r = web3.eth.get_transaction_receipt(tx)
         return t, r
-    except Exception:
+    except Exception as e:
+        logger.debug(f"[tx_receipt] Falha ao buscar TX {tx[:12]}...: {e}")
         return None, None
 
 def registrar_operacao(tx_hash, log_index, tipo, valor, gas_usd, token, sub_id, bloco, owner_wallet,
@@ -505,7 +526,8 @@ def registrar_operacao(tx_hash, log_index, tipo, valor, gas_usd, token, sub_id, 
                      str(strategy_addr or ''), str(bot_id or ''),
                      float(gas_protocol or 0.0), float(old_balance_usd or 0.0))
                 )
-            except Exception:
+            except Exception as e_full:
+                logger.debug(f"[registrar_op] INSERT full falhou ({e_full}), tentando fallback...")
                 cursor.execute(
                     "INSERT OR IGNORE INTO operacoes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (tx_hash, int(log_index), dt, tipo, float(valor), float(gas_usd),
@@ -516,12 +538,13 @@ def registrar_operacao(tx_hash, log_index, tipo, valor, gas_usd, token, sub_id, 
                 (tx_hash, int(log_index), str(owner_wallet).lower())
             )
             conn.commit()
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[registrar_op] Falha ao persistir tx={tx_hash[:12]}... tipo={tipo}: {e}")
             return False
     try:
         op_set_block_ts(tx_hash, int(log_index), int(bloco), str(ambiente))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[registrar_op] op_set_block_ts falhou tx={tx_hash[:12]}...: {e}")
     return True
 
 def _update_user_funnel(chat_id: int, wallet: str):
@@ -546,8 +569,8 @@ def _update_user_funnel(chat_id: int, wallet: str):
                 (str(chat_id), 'ativo', now_s, now_s, 1, 0, now_s)
             )
         conn.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[funnel] Falha ao atualizar funil chat_id={chat_id} wallet={wallet[:8]}...: {e}")
 
 def process_log(log, tipo_evento):
     tx = normalize_txhash(log.get("transactionHash"))
@@ -616,6 +639,20 @@ def process_log(log, tipo_evento):
                 except Exception:
                     pass
                 HEALTH["logs_trade"] += 1
+                # Epic 7: notifica DashboardCache da nova operação
+                if _ocme_notify_op is not None:
+                    try:
+                        _ocme_notify_op({
+                            "tipo": "Trade",
+                            "valor": float(val),
+                            "gas_usd": float(gas_usd),
+                            "wallet": uw,
+                            "sub_conta": str(args["accountId"]),
+                            "ambiente": ambiente,
+                            "bloco": int(log.get("blockNumber") or 0),
+                        })
+                    except Exception:
+                        pass
                 try:
                     for _fcid in wallet_map.get(uw, []):
                         _update_user_funnel(int(_fcid), str(uw))
@@ -754,6 +791,21 @@ def vigia():
                 except Exception:
                     pass
                 HEALTH["last_fetch_ok_ts"] = time.time()
+                # Limpeza periódica do TX cache (a cada 100 loops, ~30-120s dependendo do busy)
+                if HEALTH["vigia_loops"] % 100 == 0:
+                    _clean_tx_cache()
+                # Epic 7: notifica DashboardCache do progresso do loop
+                if _ocme_notify_progress is not None:
+                    try:
+                        _ocme_notify_progress({
+                            "last_block": last,
+                            "loops": HEALTH["vigia_loops"],
+                            "latency_ms": _lat_ms,
+                            "logs_trade": HEALTH["logs_trade"],
+                            "logs_transfer": HEALTH["logs_transfer"],
+                        })
+                    except Exception:
+                        pass
                 if last < curr:
                     time.sleep(max(0.05, MONITOR_BUSY_SLEEP))
                     continue

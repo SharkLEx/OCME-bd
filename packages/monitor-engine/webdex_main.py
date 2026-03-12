@@ -103,18 +103,39 @@ def sanity_check():
 
 
 def auto_resume_notify():
-    """Notifica TODOS os usuários ativos sobre reinício do bot (com rate limit seguro)."""
+    """Notifica TODOS os usuários (ativos e inativos) sobre reinício do bot.
+
+    - Com wallet: confirmação de monitoramento ativo
+    - Sem wallet: prompt para conectar a carteira e receber contexto personalizado
+    """
+    _MSG_COM_WALLET = (
+        "🔄 <b>WEbdEX Monitor reiniciado.</b>\n"
+        "Monitoramento ativo — carteira <code>{w}</code> conectada.\n"
+        "Use /start para abrir o menu."
+    )
+    _MSG_SEM_WALLET = (
+        "🔄 <b>WEbdEX Monitor reiniciado.</b>\n\n"
+        "⚠️ Sua carteira ainda não está conectada.\n"
+        "Para receber análises personalizadas da IA com seus dados reais, "
+        "use /start → <b>Conectar Wallet</b>."
+    )
     try:
         from webdex_db import DB_LOCK, cursor
         from webdex_bot_core import send_html
         with DB_LOCK:
             rows = cursor.execute(
-                "SELECT chat_id FROM users WHERE active=1"
+                "SELECT chat_id, wallet FROM users WHERE chat_id IS NOT NULL"
             ).fetchall()
         logger.info("[main] Notificando %d usuários sobre reinício...", len(rows))
-        for (cid,) in rows:
+        for (cid, wallet) in rows:
             try:
-                send_html(int(cid), "🔄 <b>WEbdEX Monitor reiniciado.</b>\nMonitoramento ativo.")
+                has_wallet = bool(wallet and str(wallet).startswith("0x"))
+                if has_wallet:
+                    w_short = wallet[:6] + "..." + wallet[-4:]
+                    msg = _MSG_COM_WALLET.format(w=w_short)
+                else:
+                    msg = _MSG_SEM_WALLET
+                send_html(int(cid), msg)
                 time.sleep(0.05)  # 20 msg/s — dentro do rate limit do Telegram
             except Exception:
                 pass
@@ -125,7 +146,30 @@ def auto_resume_notify():
 if __name__ == "__main__":
     logger.info("✅ WEbdEX Monitor Engine iniciando...")
     sanity_check()
+
+    # Epic 7: pre-aquece singletons modulares (DashboardCache + ContextBuilder)
+    try:
+        from ocme_integration import get_dashboard_cache, get_context_builder
+        get_dashboard_cache()   # inicializa lazy — logs indicam sucesso/falha
+        get_context_builder()   # inicializa lazy
+    except Exception:
+        pass  # monolito continua normalmente se módulos não estiverem disponíveis
+
     _start_threads()
+
+    # Story 7.7: Observability server (/metrics + /health)
+    try:
+        import os
+        from webdex_observability import ObservabilityServer
+        from webdex_monitor import HEALTH as _HEALTH
+        _obs = ObservabilityServer(
+            port=int(os.environ.get("METRICS_PORT", 9090)),
+            db_path=os.environ.get("DB_PATH", "webdex_v5_final.db"),
+            health_ref=_HEALTH,
+        )
+        _obs.start(daemon=True)
+    except Exception as _obs_err:
+        logger.warning("[main] Observability server não iniciado: %s", _obs_err)
 
     # Watchdog em thread separada (monitora e reinicia as demais)
     threading.Thread(target=_watchdog, name="watchdog", daemon=True).start()

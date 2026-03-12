@@ -21,6 +21,7 @@ Uso:
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 import sqlite3
@@ -70,6 +71,7 @@ class DashboardCache:
         self,
         db_path: str,
         ttl_seconds: Optional[int] = None,
+        charts_dir: Optional[str] = None,
     ):
         self._db_path = db_path
         self._ttl = ttl_seconds or _env_int("DASHBOARD_CACHE_TTL", 15)
@@ -77,12 +79,19 @@ class DashboardCache:
         self._data: Dict[str, Any] = {}
         self._updated_at: float = 0.0
         self._dirty: bool = True          # True = precisa recalcular
+        # Gráficos em background (Matplotlib headless)
+        self._charts_dir = charts_dir or os.environ.get("CHARTS_DIR", "")
+        self._chart_bytes: Dict[str, bytes] = {}  # nome → PNG bytes
+        self._charts_lock = threading.Lock()
+        self._chart_thread: Optional[threading.Thread] = None
 
     # ── Event listeners (liga ao Vigia) ───────────────────────────────────
     def on_new_op(self, op: Dict):
         """Chamado quando Vigia emite evento 'operation'."""
         with self._lock:
             self._dirty = True
+        # Agenda regeneração de gráficos em background (não bloqueia)
+        self.request_chart_update()
 
     def on_progress(self, progress: Dict):
         """Chamado quando Vigia emite evento 'progress'."""
@@ -120,6 +129,125 @@ class DashboardCache:
         """Força recalculo na próxima chamada get()."""
         with self._lock:
             self._dirty = True
+
+    # ── Gráficos em background ─────────────────────────────────────────────
+    def get_chart(self, name: str) -> Optional[bytes]:
+        """Retorna PNG bytes do gráfico, ou None se ainda não gerado."""
+        with self._charts_lock:
+            return self._chart_bytes.get(name)
+
+    def request_chart_update(self):
+        """Agenda geração de gráficos em thread background (não bloqueia)."""
+        with self._charts_lock:
+            if self._chart_thread and self._chart_thread.is_alive():
+                return  # já está gerando
+            self._chart_thread = threading.Thread(
+                target=self._generate_charts,
+                name="chart-generator",
+                daemon=True,
+            )
+            self._chart_thread.start()
+
+    def _generate_charts(self):
+        """Gera gráficos Matplotlib headless. Chamado em thread separada."""
+        try:
+            import matplotlib
+            matplotlib.use("Agg")  # headless — sem display
+            import matplotlib.pyplot as plt
+            import matplotlib.ticker as mticker
+        except ImportError:
+            logger.debug("[dashboard_cache] matplotlib não disponível — gráficos desabilitados")
+            return
+
+        try:
+            self._chart_pnl_24h(plt, mticker)
+        except Exception as exc:
+            logger.warning("[dashboard_cache] chart_pnl_24h error: %s", exc)
+
+        try:
+            self._chart_winrate(plt)
+        except Exception as exc:
+            logger.warning("[dashboard_cache] chart_winrate error: %s", exc)
+
+    def _chart_pnl_24h(self, plt, mticker):
+        """Gráfico de P&L acumulado nas últimas 24h (linha temporal)."""
+        try:
+            c = sqlite3.connect(self._db_path)
+            from datetime import datetime as _dt, timedelta as _td
+            since = (_dt.now() - _td(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+            rows = c.execute("""
+                SELECT data_hora, CAST(valor AS REAL) - CAST(gas_usd AS REAL)
+                FROM operacoes
+                WHERE tipo='Trade' AND data_hora>=?
+                ORDER BY data_hora ASC
+            """, (since,)).fetchall()
+            c.close()
+        except Exception as exc:
+            logger.debug("[chart_pnl_24h] DB error: %s", exc)
+            return
+
+        if not rows:
+            return
+
+        times = [r[0][:16] for r in rows]
+        liquidos = [float(r[1] or 0) for r in rows]
+        cumulative = []
+        acc = 0.0
+        for v in liquidos:
+            acc += v
+            cumulative.append(acc)
+
+        fig, ax = plt.subplots(figsize=(8, 3))
+        color = "#2ecc71" if cumulative[-1] >= 0 else "#e74c3c"
+        ax.plot(range(len(cumulative)), cumulative, color=color, linewidth=2)
+        ax.fill_between(range(len(cumulative)), cumulative, alpha=0.15, color=color)
+        ax.axhline(0, color="#888", linewidth=0.8, linestyle="--")
+        ax.set_title("P&L Acumulado — 24h", fontsize=11, pad=8)
+        ax.set_ylabel("USD", fontsize=9)
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
+        ax.set_xticks([])
+        ax.grid(axis="y", alpha=0.3)
+        fig.tight_layout()
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+
+        with self._charts_lock:
+            self._chart_bytes["pnl_24h"] = buf.read()
+
+        logger.debug("[dashboard_cache] chart pnl_24h gerado (%d trades)", len(rows))
+
+    def _chart_winrate(self, plt):
+        """Gráfico de barras WinRate por ambiente."""
+        data = self.get()
+        by_env = data.get("by_env", [])
+        if not by_env:
+            return
+
+        envs = [e["env"] for e in by_env]
+        winrates = [e.get("winrate", 0.0) for e in by_env]
+        colors = ["#2ecc71" if w >= 50 else "#e74c3c" for w in winrates]
+
+        fig, ax = plt.subplots(figsize=(6, 3))
+        bars = ax.bar(envs, winrates, color=colors, width=0.5)
+        ax.axhline(50, color="#888", linewidth=0.8, linestyle="--", label="50%")
+        ax.set_title("WinRate por Ambiente — 24h", fontsize=11, pad=8)
+        ax.set_ylabel("%", fontsize=9)
+        ax.set_ylim(0, 100)
+        for bar, val in zip(bars, winrates):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 1,
+                    f"{val:.0f}%", ha="center", va="bottom", fontsize=9)
+        fig.tight_layout()
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+        plt.close(fig)
+        buf.seek(0)
+
+        with self._charts_lock:
+            self._chart_bytes["winrate"] = buf.read()
 
     # ── Cálculo ────────────────────────────────────────────────────────────
     def _recalculate(self):

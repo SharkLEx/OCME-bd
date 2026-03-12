@@ -248,30 +248,35 @@ def _openai_extract_text(rj: dict) -> str:
     return ""
 
 def ai_answer_ptbr(user_text: str, *, chat_id: int | None = None) -> str:
-    if not OPENAI_API_KEY:
+    """Entry point da IA — delega para webdex_ai.py (engine completo com contexto DB).
+
+    Usa OPENROUTER_API_KEY ou OPENAI_API_KEY (qualquer um serve).
+    Fallback para chamada simples se webdex_ai não estiver disponível.
+    """
+    api_key = _AI_API_KEY  # OPENROUTER_API_KEY ou OPENAI_API_KEY (já resolvido acima)
+    if not api_key:
         return (
             "IA ainda não configurada.\n\n"
-            "Para OpenRouter (recomendado), no .env:\n"
-            "OPENROUTER_API_KEY=sk-or-SUA_CHAVE\n"
+            "Configure no .env:\n"
+            "OPENROUTER_API_KEY=sk-or-SUA_CHAVE  (recomendado)\n"
+            "  ou\n"
+            "OPENAI_API_KEY=sk-SUA_CHAVE\n\n"
             "OPENAI_MODEL=openai/gpt-4.1-nano\n\n"
-            "Para OpenAI direto:\n"
-            "OPENAI_API_KEY=sk-SUA_CHAVE\n"
-            "OPENAI_MODEL=gpt-4.1-nano\n\n"
             "Reinicie o bot após configurar."
         )
 
-    system = (
-        "Você é a IA oficial da WEbdEX e responde 100% em PT-BR. "
-        "Seja direto, claro e técnico quando necessário. "
-        "Se o usuário pedir algo fora do escopo do bot, explique como fazer dentro do bot. "
-        "Nunca peça dados sensíveis (seed phrase, private key)."
-    )
-
+    # Tenta usar o engine completo (webdex_ai.py) — contexto DB, memória, intent
     try:
-        import requests as _rq
+        from webdex_ai import handle_ai_message_extended
+        return handle_ai_message_extended(chat_id, user_text)
+    except Exception:
+        pass
+
+    # Fallback simples (sem contexto DB) — não deve ser atingido em produção
+    try:
         url = f"{_AI_BASE_URL}/chat/completions"
         headers = {
-            "Authorization": f"Bearer {_AI_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
         if OPENROUTER_API_KEY:
@@ -280,26 +285,24 @@ def ai_answer_ptbr(user_text: str, *, chat_id: int | None = None) -> str:
         payload = {
             "model": OPENAI_MODEL,
             "messages": [
-                {"role": "system", "content": system},
-                {"role": "user",   "content": user_text},
+                {"role": "system", "content": (
+                    "Você é a IA oficial da WEbdEX e responde 100% em PT-BR. "
+                    "Seja direto, claro e técnico quando necessário."
+                )},
+                {"role": "user", "content": user_text},
             ],
             "temperature": float(os.getenv("OPENAI_TEMPERATURE", "0.2")),
             "max_tokens":  int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "1400")),
         }
-        resp = _rq.post(url, headers=headers, json=payload, timeout=45)
+        resp = requests.post(url, headers=headers, json=payload, timeout=45)
         rj = resp.json() if resp.content else {}
         if resp.status_code >= 400:
-            err = ""
-            if isinstance(rj, dict):
-                e = rj.get("error")
-                if isinstance(e, dict):
-                    err = e.get("message") or ""
+            err = (rj.get("error") or {}).get("message", "") if isinstance(rj, dict) else ""
             return f"IA erro ({resp.status_code}). {err}".strip()
         try:
-            text = rj["choices"][0]["message"]["content"].strip()
+            return rj["choices"][0]["message"]["content"].strip()
         except (KeyError, IndexError, TypeError):
-            text = _openai_extract_text(rj)
-        return text or "IA não retornou texto. Tente novamente."
+            return _openai_extract_text(rj) or "IA não retornou texto. Tente novamente."
     except Exception as e:
         return f"IA falhou: {e}"
 
