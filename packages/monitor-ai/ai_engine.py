@@ -1,5 +1,7 @@
 """monitor-ai/ai_engine.py — Motor de IA Contextual do OCME.
 
+v2: classify_intent integrado, memória persistente em SQLite, modelo atualizado.
+
 Chama OpenAI / OpenRouter com contexto on-chain real do usuário.
 Governança preservada: ai_global_enabled, ai_admin_only, ai_mode.
 
@@ -25,7 +27,6 @@ import os
 import re
 import sqlite3
 import time
-from collections import deque
 from typing import Dict, List, Optional
 
 import requests
@@ -33,6 +34,11 @@ import requests
 from context_builder import ContextBuilder
 
 logger = logging.getLogger("monitor-ai.ai_engine")
+
+# Modelo padrão: claude-3.5-haiku — melhor custo-benefício para pt-BR financeiro
+_DEFAULT_MODEL = "anthropic/claude-3-5-haiku-20241022"
+_MEMORY_MAX = 12          # mensagens na memória deslizante
+_MEMORY_TTL_HOURS = 24    # memória persiste 24h no SQLite
 
 
 def _env(key: str, default: str = "") -> str:
@@ -61,9 +67,13 @@ class AIEngine:
         - ai_global_enabled: "1" / "0"
         - ai_admin_only:     "1" / "0"
         - ai_mode:           "full" / "restricted"
-    """
 
-    _MEMORY_MAX = 12
+    Melhorias v2:
+        - classify_intent() agora direciona o contexto antes de cada chamada
+        - Memória persistente em SQLite (tabela ai_memory) — sobrevive a restarts
+        - Modelo padrão: anthropic/claude-3-5-haiku-20241022
+        - TVL e dados de liquidez dinâmicos via context_builder
+    """
 
     def __init__(
         self,
@@ -76,11 +86,32 @@ class AIEngine:
         self._ctx_builder = ContextBuilder(db_path)
         self._api_key = api_key or _env("OPENROUTER_API_KEY") or _env("OPENAI_API_KEY", "")
         self._base_url = base_url or _env("AI_BASE_URL", "https://openrouter.ai/api/v1")
-        self._model = model or _env("OPENAI_MODEL", "openai/gpt-4o-mini")
-        self._memory: Dict[int, deque] = {}
+        self._model = model or _env("OPENAI_MODEL", _DEFAULT_MODEL)
 
         if not self._api_key:
             logger.warning("[ai_engine] Nenhuma API key configurada — IA desabilitada")
+
+        self._ensure_memory_table()
+
+    # ── Schema ────────────────────────────────────────────────────────────
+    def _ensure_memory_table(self):
+        """Cria tabela ai_memory se não existir."""
+        try:
+            c = sqlite3.connect(self._db_path)
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS ai_memory (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id    TEXT NOT NULL,
+                    role       TEXT NOT NULL,
+                    content    TEXT NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+            c.execute("CREATE INDEX IF NOT EXISTS idx_ai_memory_chat ON ai_memory(chat_id, created_at)")
+            c.commit()
+            c.close()
+        except Exception as e:
+            logger.warning("[ai_engine] Não foi possível criar tabela ai_memory: %s", e)
 
     # ── Governança ────────────────────────────────────────────────────────
     def _get_config(self, key: str, default: str = "") -> str:
@@ -119,16 +150,54 @@ class AIEngine:
         except Exception:
             return None
 
-    # ── Memória curta ─────────────────────────────────────────────────────
+    # ── Memória persistente (SQLite) ──────────────────────────────────────
     def mem_add(self, chat_id: int, role: str, text: str):
-        q = self._memory.setdefault(chat_id, deque(maxlen=self._MEMORY_MAX))
-        q.append({"role": role, "content": text})
+        """Adiciona mensagem à memória persistente."""
+        try:
+            c = sqlite3.connect(self._db_path)
+            c.execute(
+                "INSERT INTO ai_memory (chat_id, role, content) VALUES (?, ?, ?)",
+                (str(chat_id), role, text)
+            )
+            # Mantém apenas as últimas _MEMORY_MAX mensagens por chat
+            c.execute("""
+                DELETE FROM ai_memory WHERE id IN (
+                    SELECT id FROM ai_memory WHERE chat_id=?
+                    ORDER BY created_at DESC LIMIT -1 OFFSET ?
+                )
+            """, (str(chat_id), _MEMORY_MAX))
+            c.commit()
+            c.close()
+        except Exception as e:
+            logger.debug("[ai_engine] mem_add error: %s", e)
 
     def mem_get(self, chat_id: int) -> List[Dict]:
-        return list(self._memory.get(chat_id, []))
+        """Recupera histórico recente do chat (últimas 24h, máx _MEMORY_MAX msgs)."""
+        try:
+            c = sqlite3.connect(self._db_path)
+            cutoff = time.strftime(
+                "%Y-%m-%d %H:%M:%S",
+                time.localtime(time.time() - _MEMORY_TTL_HOURS * 3600)
+            )
+            rows = c.execute("""
+                SELECT role, content FROM ai_memory
+                WHERE chat_id=? AND created_at >= ?
+                ORDER BY created_at ASC LIMIT ?
+            """, (str(chat_id), cutoff, _MEMORY_MAX)).fetchall()
+            c.close()
+            return [{"role": r[0], "content": r[1]} for r in rows]
+        except Exception:
+            return []
 
     def mem_clear(self, chat_id: int):
-        self._memory.pop(chat_id, None)
+        """Limpa histórico do chat."""
+        try:
+            c = sqlite3.connect(self._db_path)
+            c.execute("DELETE FROM ai_memory WHERE chat_id=?", (str(chat_id),))
+            c.commit()
+            c.close()
+        except Exception as e:
+            logger.debug("[ai_engine] mem_clear error: %s", e)
 
     # ── API call ──────────────────────────────────────────────────────────
     def _call_api(self, messages: List[Dict], timeout: int = 30) -> str:
@@ -139,7 +208,6 @@ class AIEngine:
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
         }
-        # OpenRouter extra headers
         if "openrouter" in self._base_url.lower():
             headers["HTTP-Referer"] = "https://ocme.webdex.io"
             headers["X-Title"] = "OCME Intelligence"
@@ -175,6 +243,27 @@ class AIEngine:
             logger.error("[ai_engine] call_api: %s", exc)
             return "❌ Erro ao conectar à IA — tente novamente"
 
+    # ── Intent classification ─────────────────────────────────────────────
+    def classify_intent(self, text: str) -> str:
+        """Classifica intenção da pergunta para direcionar contexto correto."""
+        t = text.lower().strip()
+        checks = [
+            (["resultado", "lucro", "perda", "ganho", "rendimento", "profit", "loss", "líquido", "ganhei", "perdi"], "resultado"),
+            (["capital", "saldo", "quanto tenho", "patrimônio", "balance", "meu dinheiro"], "capital"),
+            (["ciclo", "inatividade", "último trade", "frequência", "parado", "inativo"], "ciclo"),
+            (["gas", "gás", "custo", "taxa", "fee", "pol", "gwei", "quanto paguei de gas"], "gas"),
+            (["execução", "trade", "transação", "on-chain", "openposition", "operação"], "openposition"),
+            (["ranking", "melhor", "pior", "top", "dashboard", "subconta"], "dashboard"),
+            (["liquidez", "supply", "lp", "tvl", "pool", "lp-usd", "lp-usdt"], "liquidez"),
+            (["tríade", "risco", "responsabilidade", "retorno", "vale a pena", "tríade"], "triade"),
+            (["como funciona", "o que é", "me explica", "aprend", "educação", "ensina"], "educacao"),
+            (["governança", "protocolo", "webdex", "token bd", "bd token"], "governance"),
+        ]
+        for keywords, intent in checks:
+            if any(k in t for k in keywords):
+                return intent
+        return "general"
+
     # ── Main entry point ──────────────────────────────────────────────────
     def answer(
         self,
@@ -187,9 +276,11 @@ class AIEngine:
     ) -> str:
         """Processa pergunta do usuário e retorna resposta contextualizada.
 
+        v2: classify_intent() direciona o contexto antes da chamada à API.
+
         Args:
             user_text: Texto enviado pelo usuário
-            chat_id:   ID Telegram (para memória e governança)
+            chat_id:   ID Telegram (para memória persistente e governança)
             wallet:    Endereço 0x (sobrescreve lookup por chat_id)
             period:    Período de análise (24h, 7d, 30d, ciclo)
             is_admin:  Override de permissão admin
@@ -205,47 +296,35 @@ class AIEngine:
             if chat_id and not self._is_admin(chat_id):
                 return "🔒 Acesso à IA restrito a administradores."
 
-        # Resolve wallet
+        # 1. Classifica intent ANTES de construir o contexto
+        intent = self.classify_intent(user_text)
+        logger.debug("[ai_engine] intent=%s user=%s", intent, chat_id)
+
+        # 2. Resolve wallet
         effective_wallet = wallet
         if not effective_wallet and chat_id:
             effective_wallet = self._get_wallet(chat_id)
 
-        # Constrói contexto on-chain
-        ctx = self._ctx_builder.build(wallet=effective_wallet, period=period)
+        # 3. Constrói contexto direcionado pelo intent
+        ctx = self._ctx_builder.build(
+            wallet=effective_wallet,
+            period=period,
+            intent=intent,
+        )
         system_prompt = self._ctx_builder.to_system_prompt(ctx)
 
-        # Monta histórico
+        # 4. Monta histórico persistente
         history = self.mem_get(chat_id) if chat_id else []
         messages = [{"role": "system", "content": system_prompt}]
-        messages.extend(history[-8:])  # últimas 8 mensagens da memória
+        messages.extend(history[-8:])
         messages.append({"role": "user", "content": user_text})
 
-        # Chama API
+        # 5. Chama API
         reply = self._call_api(messages)
 
-        # Salva na memória
+        # 6. Persiste na memória SQLite
         if chat_id and reply and not reply.startswith("❌"):
             self.mem_add(chat_id, "user", user_text)
             self.mem_add(chat_id, "assistant", reply)
 
         return _pretty_ai_text(reply) if pretty else reply
-
-    def classify_intent(self, text: str) -> str:
-        """Classifica intenção da pergunta para direcionar contexto correto."""
-        t = text.lower().strip()
-        checks = [
-            (["resultado", "lucro", "perda", "ganho", "rendimento", "profit", "loss", "líquido"], "resultado"),
-            (["capital", "saldo", "quanto tenho", "patrimônio", "balance"], "capital"),
-            (["ciclo", "inatividade", "último trade", "frequência", "parado"], "ciclo"),
-            (["gas", "gás", "custo", "taxa", "fee", "pol", "gwei"], "gas"),
-            (["execução", "trade", "transação", "on-chain", "openposition"], "openposition"),
-            (["ranking", "melhor", "pior", "top", "dashboard"], "dashboard"),
-            (["liquidez", "supply", "lp", "tvl", "pool"], "liquidez"),
-            (["tríade", "risco", "responsabilidade", "retorno", "vale a pena"], "triade"),
-            (["como funciona", "o que é", "me explica", "aprend", "educação"], "educacao"),
-            (["governança", "protocolo", "webdex", "token bd"], "governance"),
-        ]
-        for keywords, intent in checks:
-            if any(k in t for k in keywords):
-                return intent
-        return "general"
