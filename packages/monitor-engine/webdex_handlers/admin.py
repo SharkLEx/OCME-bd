@@ -856,27 +856,72 @@ def _lucro_real_callback(c):
 
 
 # ==============================================================================
-# 🧾 FORNECIMENTO E LIQUIDEZ — on-chain LP reserves por ambiente
+# 🧾 FORNECIMENTO E LIQUIDEZ — on-chain via balanceOf + DexScreener
 # ==============================================================================
-_ABI_LP_MIN = json.loads('[{"inputs":[],"name":"getReserves","outputs":[{"name":"reserve0","type":"uint112"},{"name":"reserve1","type":"uint112"},{"name":"blockTimestampLast","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]')
 
-def _fetch_lp_data(lp_addr: str, label: str, dec_r0: int = 6, dec_r1: int = 9) -> dict:
-    """Busca reserves e totalSupply de um LP on-chain."""
+# ABI mínima ERC-20: balanceOf + totalSupply (funciona em QUALQUER token/par)
+_ABI_ERC20_BASIC = json.loads('[{"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]')
+
+def _fetch_lp_data(lp_addr: str, label: str, usdt_addr: str, loop_addr: str) -> dict:
+    """
+    Busca dados do pool LP usando balanceOf nos tokens USDT e LOOP.
+    NÃO usa getReserves() — funciona com qualquer tipo de contrato AMM.
+    Fallback: DexScreener para pool_usd total.
+    """
     from webdex_config import RPC_CAPITAL
     from webdex_chain import web3_for_rpc
+    import requests as _req
+
+    result = {"ok": False, "label": label, "addr": lp_addr,
+              "usdt": 0.0, "loop": 0.0, "supply": 0.0, "pool_usd": 0.0,
+              "source": "?"}
     try:
-        w3 = web3_for_rpc(RPC_CAPITAL, timeout=8)
-        c  = w3.eth.contract(address=Web3.to_checksum_address(lp_addr), abi=_ABI_LP_MIN)
-        reserves    = c.functions.getReserves().call()
-        total_supply_raw = c.functions.totalSupply().call()
-        r0 = float(reserves[0]) / (10 ** dec_r0)
-        r1 = float(reserves[1]) / (10 ** dec_r1)
-        ts = float(total_supply_raw) / (10 ** dec_r0)  # LP dec = same as r0 for these pools
-        pool_usd = r0 * 2  # AMM invariant: pool_total_usd = reserve_stable * 2
-        return {"ok": True, "label": label, "r0": r0, "r1": r1, "supply": ts,
-                "pool_usd": pool_usd, "addr": lp_addr}
-    except Exception as e:
-        return {"ok": False, "label": label, "error": str(e), "addr": lp_addr}
+        w3    = web3_for_rpc(RPC_CAPITAL, timeout=8)
+        usdt  = w3.eth.contract(address=Web3.to_checksum_address(usdt_addr), abi=_ABI_ERC20_BASIC)
+        loop  = w3.eth.contract(address=Web3.to_checksum_address(loop_addr), abi=_ABI_ERC20_BASIC)
+        lp_c  = w3.eth.contract(address=Web3.to_checksum_address(lp_addr),   abi=_ABI_ERC20_BASIC)
+
+        usdt_raw   = usdt.functions.balanceOf(Web3.to_checksum_address(lp_addr)).call()
+        loop_raw   = loop.functions.balanceOf(Web3.to_checksum_address(lp_addr)).call()
+        supply_raw = lp_c.functions.totalSupply().call()
+
+        usdt_amt = float(usdt_raw) / 1e6    # USDT = 6 decimals
+        loop_amt = float(loop_raw) / 1e9    # LOOP = 9 decimals
+        supply   = float(supply_raw) / 1e18  # LP tokens = 18 decimals (padrão AMM)
+
+        pool_usd = usdt_amt * 2   # AMM 50/50: reserva USDT = metade do pool
+
+        result.update({"ok": True, "usdt": usdt_amt, "loop": loop_amt,
+                        "supply": supply, "pool_usd": pool_usd, "source": "on-chain"})
+    except Exception as e_chain:
+        logger.warning("⚠️ [lp_data] balanceOf falhou %s: %s — tentando DexScreener", lp_addr[:10], e_chain)
+
+    # Fallback/validação via DexScreener (sem API key)
+    if not result["ok"] or result["pool_usd"] == 0:
+        try:
+            resp = _req.get(
+                f"https://api.dexscreener.com/latest/dex/pairs/polygon/{lp_addr}",
+                timeout=8
+            )
+            data = resp.json()
+            pair = (data.get("pairs") or [data.get("pair")] or [None])[0]
+            if pair:
+                liq_usd = float((pair.get("liquidity") or {}).get("usd") or 0)
+                if liq_usd > 0:
+                    result["pool_usd"] = liq_usd
+                    result["source"]   = "DexScreener"
+                    result["ok"]       = True
+                    # reserves via liquidity.base / quote se disponíveis
+                    liq = pair.get("liquidity") or {}
+                    if result["usdt"] == 0 and liq.get("quote"):
+                        result["usdt"] = float(liq["quote"] or 0)
+                    if result["loop"] == 0 and liq.get("base"):
+                        result["loop"] = float(liq["base"] or 0)
+        except Exception as e_dex:
+            logger.warning("⚠️ [lp_data] DexScreener falhou %s: %s", lp_addr[:10], e_dex)
+
+    return result
+
 
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "🧾 Fornecimento e Liquidez")
 def adm_fornecimento_liquidez(m):
@@ -885,21 +930,22 @@ def adm_fornecimento_liquidez(m):
     bot.send_chat_action(m.chat.id, "typing")
     bot.send_message(m.chat.id, "⏳ Consultando pools on-chain...", parse_mode="HTML")
     try:
-        from webdex_config import CONTRACTS
+        from webdex_config import CONTRACTS, ADDR_USDT0, ADDR_LPLPUSD
         from webdex_chain import chain_pol_price
+        import concurrent.futures as _cf
 
         pol_price = chain_pol_price() or 0.50
 
-        # Definição dos LPs por ambiente
-        lps = [
-            # (env_label, lp_addr, pool_name, dec_r0, dec_r1)
-            ("AG_C_bd", CONTRACTS["AG_C_bd"]["LP_USDT"], "LP-USDT (AG_C_bd)", 6, 9),
-            ("AG_C_bd", CONTRACTS["AG_C_bd"]["LP_LOOP"], "LP-LOOP (AG_C_bd)", 6, 9),
-            ("bd_v5",   CONTRACTS["bd_v5"]["LP_USDT"],  "LP-USDT (bd_v5)",   6, 9),
-            ("bd_v5",   CONTRACTS["bd_v5"]["LP_LOOP"],  "LP-LOOP (bd_v5)",   6, 9),
+        # Pools por ambiente — endereços USDT e LOOP vêm do config (sem hardcode)
+        pools = [
+            # (env_label, lp_addr, pool_name)
+            ("AG_C_bd", CONTRACTS["AG_C_bd"]["LP_USDT"], "LP-USDT"),
+            ("AG_C_bd", CONTRACTS["AG_C_bd"]["LP_LOOP"], "LP-LOOP"),
+            ("bd_v5",   CONTRACTS["bd_v5"]["LP_USDT"],   "LP-USDT"),
+            ("bd_v5",   CONTRACTS["bd_v5"]["LP_LOOP"],   "LP-LOOP"),
         ]
 
-        # Busca capital dos usuários por env (do capital_cache)
+        # Capital dos usuários por env (do capital_cache)
         with DB_LOCK:
             cap_rows = conn.execute("""
                 SELECT COALESCE(c.env, u.env, 'AG_C_bd'), COALESCE(SUM(c.total_usd), 0)
@@ -908,59 +954,68 @@ def adm_fornecimento_liquidez(m):
                 WHERE c.total_usd > 0
                 GROUP BY COALESCE(c.env, u.env, 'AG_C_bd')
             """).fetchall()
-        cap_by_env: dict = {}
-        for env_raw, cap in cap_rows:
-            cap_by_env[str(env_raw or "").lower()] = float(cap or 0)
+        cap_by_env: dict = {str(e or "").lower(): float(c or 0) for e, c in cap_rows}
 
+        # Busca on-chain em paralelo (4 pools × 2 fontes)
+        futures: dict = {}
+        with _cf.ThreadPoolExecutor(max_workers=4) as ex:
+            for env_lbl, lp_addr, pool_name in pools:
+                label = f"{pool_name} ({env_lbl})"
+                fut = ex.submit(_fetch_lp_data, lp_addr, label, ADDR_USDT0, ADDR_LPLPUSD)
+                futures[fut] = (env_lbl, pool_name)
+
+        results_by_env: dict = {}
+        for fut, (env_lbl, pool_name) in futures.items():
+            results_by_env.setdefault(env_lbl, []).append(fut.result())
+
+        # Monta relatório
         lines = [
             "🧾 <b>FORNECIMENTO E LIQUIDEZ — WEbdEX</b>",
-            f"💰 POL/USD: <b>${pol_price:.4f}</b>",
+            f"💰 POL/USD: <b>${pol_price:.4f}</b>  <i>(Chainlink on-chain)</i>",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
         ]
 
-        # Busca on-chain em paralelo
-        import concurrent.futures as _cf
-        futures = {}
-        with _cf.ThreadPoolExecutor(max_workers=4) as ex:
-            for env_label, addr, pool_name, d0, d1 in lps:
-                futures[ex.submit(_fetch_lp_data, addr, pool_name, d0, d1)] = (env_label, pool_name)
-
-        results_by_env: dict = {}
-        for fut, (env_label, pool_name) in futures.items():
-            r = fut.result()
-            results_by_env.setdefault(env_label, []).append(r)
-
         total_pool_usd = 0.0
-        for env_label, pool_results in results_by_env.items():
-            env_cap = cap_by_env.get(env_label.lower(), 0.0)
-            lines.append(f"{'🔵' if 'v5' in env_label.lower() else '🟠'} <b>{esc(env_label)}</b>")
+        total_cap      = 0.0
+
+        for env_lbl in ("AG_C_bd", "bd_v5"):
+            pool_results = results_by_env.get(env_lbl, [])
+            env_cap      = cap_by_env.get(env_lbl.lower(), 0.0)
+            total_cap   += env_cap
+            icon         = "🔵" if "v5" in env_lbl.lower() else "🟠"
+            lines.append(f"{icon} <b>{esc(env_lbl)}</b>")
+
             env_pool_usd = 0.0
             for r in pool_results:
                 if r["ok"]:
-                    coverage = (env_cap / r["pool_usd"] * 100) if r["pool_usd"] > 0 else 0
-                    cov_icon = "🟢" if coverage < 80 else ("🟡" if coverage < 95 else "🔴")
-                    lines.append(
-                        f"  📦 <b>{esc(r['label'])}</b>\n"
-                        f"     USDT reserve: <b>{r['r0']:,.2f}</b>  LOOP reserve: <b>{r['r1']:,.4f}</b>\n"
-                        f"     Pool total:   <b>${r['pool_usd']:,.2f} USD</b>\n"
-                        f"     {cov_icon} Cobertura (cap/pool): <b>{coverage:.1f}%</b>"
-                    )
                     env_pool_usd += r["pool_usd"]
+                    src = f"<i>({r['source']})</i>"
+                    supply_str = f"{r['supply']:,.2f}" if r["supply"] > 0 else "—"
+                    lines.append(
+                        f"  📦 <b>{esc(r['label'])}</b> {src}\n"
+                        f"     💵 USDT no pool:   <b>{r['usdt']:,.2f}</b>\n"
+                        f"     🔁 LOOP no pool:   <b>{r['loop']:,.4f}</b>\n"
+                        f"     📊 Fornecimento LP: <b>{supply_str}</b>\n"
+                        f"     🏊 Liquidez total:  <b>${r['pool_usd']:,.2f}</b>"
+                    )
                 else:
-                    lines.append(f"  ⚠️ {esc(r['label'])}: erro — {esc(str(r.get('error','?'))[:60])}")
-            lines.append(f"  💰 Capital usuários ({env_label}): <b>${env_cap:,.2f}</b>")
-            lines.append(f"  🏊 Liquidez total pool: <b>${env_pool_usd:,.2f}</b>\n")
+                    lines.append(f"  ⚠️ {esc(r['label'])}: sem dados")
+
+            cov = (env_cap / env_pool_usd * 100) if env_pool_usd > 0 else 0
+            cov_icon = "🟢" if cov < 80 else ("🟡" if cov < 95 else "🔴")
+            lines.append(f"  💼 Capital usuários: <b>${env_cap:,.2f}</b>")
+            lines.append(f"  🏦 Liquidez do env:  <b>${env_pool_usd:,.2f}</b>")
+            lines.append(f"  {cov_icon} Cobertura cap/pool: <b>{cov:.1f}%</b>\n")
             total_pool_usd += env_pool_usd
 
-        total_cap = sum(cap_by_env.values())
         cov_total = (total_cap / total_pool_usd * 100) if total_pool_usd > 0 else 0
         cov_icon  = "🟢" if cov_total < 80 else ("🟡" if cov_total < 95 else "🔴")
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        lines.append(f"🌐 <b>GLOBAL</b>")
-        lines.append(f"  💼 Capital total usuários: <b>${total_cap:,.2f}</b>")
-        lines.append(f"  🏊 Liquidez total pools:   <b>${total_pool_usd:,.2f}</b>")
+        lines.append("🌐 <b>GLOBAL</b>")
+        lines.append(f"  💼 Capital total: <b>${total_cap:,.2f}</b>")
+        lines.append(f"  🏊 Liquidez total pools: <b>${total_pool_usd:,.2f}</b>")
         lines.append(f"  {cov_icon} Cobertura global: <b>{cov_total:.1f}%</b>")
-        lines.append("\n<i>💡 Cobertura &lt; 80% = pool tem folga. &gt; 95% = pool próximo da capacidade.</i>")
+        lines.append("\n<i>💡 Cobertura &lt;80% = pool com folga  |  &gt;95% = pool próximo do limite</i>")
 
         send_support(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
     except Exception as e:
