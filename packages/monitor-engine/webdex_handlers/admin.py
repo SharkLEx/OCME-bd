@@ -856,168 +856,286 @@ def _lucro_real_callback(c):
 
 
 # ==============================================================================
-# 🧾 FORNECIMENTO E LIQUIDEZ — on-chain via balanceOf + DexScreener
+# 🧾 FORNECIMENTO E LIQUIDEZ — on-chain (padrão original WEbdEX V30)
+#
+# Lógica correta:
+#   Fornecimento = LP_token.totalSupply()            — quantos LP tokens existem
+#   Liquidez     = TOKEN.balanceOf(SUBACCOUNTS_addr) — capital no contrato SubAccounts
+#   Gás          = MANAGER.gasBalance()              — POL disponível no Manager
 # ==============================================================================
 
-# ABI mínima ERC-20: balanceOf + totalSupply (funciona em QUALQUER token/par)
 _ABI_ERC20_BASIC = json.loads('[{"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]')
+_ABI_MANAGER_GAS = json.loads('[{"inputs":[],"name":"gasBalance","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"}]')
 
-def _fetch_lp_data(lp_addr: str, label: str, usdt_addr: str, loop_addr: str) -> dict:
-    """
-    Busca dados do pool LP usando balanceOf nos tokens USDT e LOOP.
-    NÃO usa getReserves() — funciona com qualquer tipo de contrato AMM.
-    Fallback: DexScreener para pool_usd total.
-    """
-    from webdex_config import RPC_CAPITAL
-    from webdex_chain import web3_for_rpc
-    import requests as _req
-
-    result = {"ok": False, "label": label, "addr": lp_addr,
-              "usdt": 0.0, "loop": 0.0, "supply": 0.0, "pool_usd": 0.0,
-              "source": "?"}
+def _fl_supply(w3, lp_addr: str, dec: int) -> float:
+    """totalSupply do LP token — quantos LP tokens foram emitidos."""
     try:
-        w3    = web3_for_rpc(RPC_CAPITAL, timeout=8)
-        usdt  = w3.eth.contract(address=Web3.to_checksum_address(usdt_addr), abi=_ABI_ERC20_BASIC)
-        loop  = w3.eth.contract(address=Web3.to_checksum_address(loop_addr), abi=_ABI_ERC20_BASIC)
-        lp_c  = w3.eth.contract(address=Web3.to_checksum_address(lp_addr),   abi=_ABI_ERC20_BASIC)
+        c = w3.eth.contract(address=Web3.to_checksum_address(lp_addr), abi=_ABI_ERC20_BASIC)
+        return float(c.functions.totalSupply().call()) / (10 ** dec)
+    except Exception:
+        return -1.0
 
-        usdt_raw   = usdt.functions.balanceOf(Web3.to_checksum_address(lp_addr)).call()
-        loop_raw   = loop.functions.balanceOf(Web3.to_checksum_address(lp_addr)).call()
-        supply_raw = lp_c.functions.totalSupply().call()
+def _fl_balance(w3, token_addr: str, holder_addr: str, dec: int) -> float:
+    """balanceOf(holder) — capital do token mantido no endereço holder."""
+    try:
+        c = w3.eth.contract(address=Web3.to_checksum_address(token_addr), abi=_ABI_ERC20_BASIC)
+        return float(c.functions.balanceOf(Web3.to_checksum_address(holder_addr)).call()) / (10 ** dec)
+    except Exception:
+        return -1.0
 
-        usdt_amt = float(usdt_raw) / 1e6    # USDT = 6 decimals
-        loop_amt = float(loop_raw) / 1e9    # LOOP = 9 decimals
-        supply   = float(supply_raw) / 1e18  # LP tokens = 18 decimals (padrão AMM)
+def _fl_manager_gas(w3, mgr_addr: str) -> float:
+    """gasBalance() do Manager — POL disponível para gas."""
+    try:
+        c = w3.eth.contract(address=Web3.to_checksum_address(mgr_addr), abi=_ABI_MANAGER_GAS)
+        return float(w3.from_wei(c.functions.gasBalance().call(), "ether"))
+    except Exception:
+        return -1.0
 
-        pool_usd = usdt_amt * 2   # AMM 50/50: reserva USDT = metade do pool
-
-        result.update({"ok": True, "usdt": usdt_amt, "loop": loop_amt,
-                        "supply": supply, "pool_usd": pool_usd, "source": "on-chain"})
-    except Exception as e_chain:
-        logger.warning("⚠️ [lp_data] balanceOf falhou %s: %s — tentando DexScreener", lp_addr[:10], e_chain)
-
-    # Fallback/validação via DexScreener (sem API key)
-    if not result["ok"] or result["pool_usd"] == 0:
-        try:
-            resp = _req.get(
-                f"https://api.dexscreener.com/latest/dex/pairs/polygon/{lp_addr}",
-                timeout=8
+def _fl_save_snapshot(env: str, lp_u: float, lp_l: float,
+                      liq_u: float, liq_l: float, gas_pol: float, pol_price: float):
+    try:
+        from webdex_db import now_br
+        ts        = now_br().strftime("%Y-%m-%d %H:%M:%S")
+        total_usd = max(liq_u, 0) + max(liq_l, 0)
+        with DB_LOCK:
+            conn.execute(
+                "INSERT INTO fl_snapshots "
+                "(ts,env,lp_usdt_supply,lp_loop_supply,liq_usdt,liq_loop,gas_pol,pol_price,total_usd) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (ts, env, max(lp_u, 0), max(lp_l, 0),
+                 max(liq_u, 0), max(liq_l, 0), max(gas_pol, 0), pol_price, total_usd)
             )
-            data = resp.json()
-            pair = (data.get("pairs") or [data.get("pair")] or [None])[0]
-            if pair:
-                liq_usd = float((pair.get("liquidity") or {}).get("usd") or 0)
-                if liq_usd > 0:
-                    result["pool_usd"] = liq_usd
-                    result["source"]   = "DexScreener"
-                    result["ok"]       = True
-                    # reserves via liquidity.base / quote se disponíveis
-                    liq = pair.get("liquidity") or {}
-                    if result["usdt"] == 0 and liq.get("quote"):
-                        result["usdt"] = float(liq["quote"] or 0)
-                    if result["loop"] == 0 and liq.get("base"):
-                        result["loop"] = float(liq["base"] or 0)
-        except Exception as e_dex:
-            logger.warning("⚠️ [lp_data] DexScreener falhou %s: %s", lp_addr[:10], e_dex)
+            conn.commit()
+    except Exception:
+        pass
 
-    return result
+def _fl_last_snapshot(env: str) -> dict:
+    try:
+        with DB_LOCK:
+            row = conn.execute(
+                "SELECT ts,lp_usdt_supply,lp_loop_supply,liq_usdt,liq_loop,gas_pol "
+                "FROM fl_snapshots WHERE env=? ORDER BY id DESC LIMIT 1",
+                (env,)
+            ).fetchone()
+        if row:
+            return {"ts": row[0], "lp_usdt": row[1], "lp_loop": row[2],
+                    "liq_usdt": row[3], "liq_loop": row[4], "gas": row[5]}
+    except Exception:
+        pass
+    return {}
+
+def _fl_fmt(v: float, dec: int = 4) -> str:
+    return "⚠️ RPC" if v < 0 else f"{v:,.{dec}f}"
+
+def _fl_pct_bar(pct: float, width: int = 10) -> str:
+    if pct < 0: return "░" * width
+    filled = min(round(pct / 100 * width), width)
+    return "█" * filled + "░" * (width - filled)
+
+def _fl_delta_str(now: float, prev: float) -> str:
+    if prev <= 0 or now < 0: return ""
+    diff = now - prev
+    pct  = diff / prev * 100
+    arrow = "▲" if diff > 0 else ("▼" if diff < 0 else "≈")
+    return f" {arrow}{abs(pct):.2f}%"
+
+def _fl_db_stats(env_tag: str, days: int = 30) -> dict:
+    from datetime import timedelta
+    from webdex_db import now_br
+    since = (now_br() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with DB_LOCK:
+            r = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(valor),0), COALESCE(SUM(gas_usd),0), "
+                "COALESCE(SUM(valor)-SUM(gas_usd),0) "
+                "FROM operacoes WHERE tipo='Trade' AND data_hora>=? AND ambiente=?",
+                (since, env_tag)
+            ).fetchone()
+        return {"trades": int(r[0] or 0), "bruto": float(r[1] or 0),
+                "gas": float(r[2] or 0), "liquido": float(r[3] or 0)}
+    except Exception:
+        return {"trades": 0, "bruto": 0.0, "gas": 0.0, "liquido": 0.0}
+
+def _fl_db_stats_total(days: int = 30) -> dict:
+    from datetime import timedelta
+    from webdex_db import now_br
+    since = (now_br() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        with DB_LOCK:
+            r = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(valor),0), COALESCE(SUM(gas_usd),0), "
+                "COALESCE(SUM(valor)-SUM(gas_usd),0) "
+                "FROM operacoes WHERE tipo='Trade' AND data_hora>=?",
+                (since,)
+            ).fetchone()
+        return {"trades": int(r[0] or 0), "bruto": float(r[1] or 0),
+                "gas": float(r[2] or 0), "liquido": float(r[3] or 0)}
+    except Exception:
+        return {"trades": 0, "bruto": 0.0, "gas": 0.0, "liquido": 0.0}
 
 
-@bot.message_handler(func=lambda m: (m.text or "").strip() == "🧾 Fornecimento e Liquidez")
+@bot.message_handler(func=lambda m: (m.text or "").strip() in {
+    "🧾 Fornecimento e Liquidez", "🧾 Fornecimento & Liquidez"
+})
 def adm_fornecimento_liquidez(m):
     if not _is_admin(m.chat.id):
         return bot.reply_to(m, "⛔ Acesso negado.")
     bot.send_chat_action(m.chat.id, "typing")
-    bot.send_message(m.chat.id, "⏳ Consultando pools on-chain...", parse_mode="HTML")
+    bot.send_message(m.chat.id, "🔄 Consultando protocolo on-chain...", parse_mode="HTML")
     try:
-        from webdex_config import CONTRACTS, ADDR_USDT0, ADDR_LPLPUSD
-        from webdex_chain import chain_pol_price
+        from webdex_config import CONTRACTS, ADDR_USDT0, ADDR_LPLPUSD, RPC_CAPITAL
+        from webdex_chain import chain_pol_price, web3_for_rpc
+        from webdex_db import now_br
         import concurrent.futures as _cf
 
         pol_price = chain_pol_price() or 0.50
+        w3        = web3_for_rpc(RPC_CAPITAL, timeout=8)
+        ts_now    = now_br().strftime("%d/%m/%Y %H:%M:%S")
 
-        # Pools por ambiente — endereços USDT e LOOP vêm do config (sem hardcode)
-        pools = [
-            # (env_label, lp_addr, pool_name)
-            ("AG_C_bd", CONTRACTS["AG_C_bd"]["LP_USDT"], "LP-USDT"),
-            ("AG_C_bd", CONTRACTS["AG_C_bd"]["LP_LOOP"], "LP-LOOP"),
-            ("bd_v5",   CONTRACTS["bd_v5"]["LP_USDT"],   "LP-USDT"),
-            ("bd_v5",   CONTRACTS["bd_v5"]["LP_LOOP"],   "LP-LOOP"),
-        ]
+        try:
+            gwei = float(w3.eth.gas_price) / 1e9
+        except Exception:
+            gwei = -1.0
 
-        # Capital dos usuários por env (do capital_cache)
-        with DB_LOCK:
-            cap_rows = conn.execute("""
-                SELECT COALESCE(c.env, u.env, 'AG_C_bd'), COALESCE(SUM(c.total_usd), 0)
-                FROM capital_cache c
-                JOIN users u ON u.chat_id = c.chat_id
-                WHERE c.total_usd > 0
-                GROUP BY COALESCE(c.env, u.env, 'AG_C_bd')
-            """).fetchall()
-        cap_by_env: dict = {str(e or "").lower(): float(c or 0) for e, c in cap_rows}
+        # ── Coleta on-chain por ambiente em paralelo ──────────────────────────
+        def _collect_env(env_name: str, c_info: dict) -> dict:
+            sub_addr     = c_info.get("SUBACCOUNTS", "")
+            mgr_addr     = c_info.get("MANAGER", "")
+            lp_usdt_addr = c_info.get("LP_USDT", "")
+            lp_loop_addr = c_info.get("LP_LOOP", "")
 
-        # Busca on-chain em paralelo (4 pools × 2 fontes)
-        futures: dict = {}
-        with _cf.ThreadPoolExecutor(max_workers=4) as ex:
-            for env_lbl, lp_addr, pool_name in pools:
-                label = f"{pool_name} ({env_lbl})"
-                fut = ex.submit(_fetch_lp_data, lp_addr, label, ADDR_USDT0, ADDR_LPLPUSD)
-                futures[fut] = (env_lbl, pool_name)
+            # FORNECIMENTO: totalSupply dos tokens LP
+            lp_usdt_s = _fl_supply(w3, lp_usdt_addr, 6) if lp_usdt_addr else -1.0
+            lp_loop_s = _fl_supply(w3, lp_loop_addr, 9) if lp_loop_addr else -1.0
 
-        results_by_env: dict = {}
-        for fut, (env_lbl, pool_name) in futures.items():
-            results_by_env.setdefault(env_lbl, []).append(fut.result())
+            # LIQUIDEZ: capital USDT e LOOP custodiado no SubAccounts
+            liq_usdt  = _fl_balance(w3, ADDR_USDT0,   sub_addr, 6) if sub_addr else -1.0
+            liq_loop  = _fl_balance(w3, ADDR_LPLPUSD, sub_addr, 9) if sub_addr else -1.0
 
-        # Monta relatório
-        lines = [
-            "🧾 <b>FORNECIMENTO E LIQUIDEZ — WEbdEX</b>",
-            f"💰 POL/USD: <b>${pol_price:.4f}</b>  <i>(Chainlink on-chain)</i>",
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n",
-        ]
+            # GÁS do Manager
+            gas_pol   = _fl_manager_gas(w3, mgr_addr) if mgr_addr else -1.0
 
-        total_pool_usd = 0.0
-        total_cap      = 0.0
+            # Snapshot anterior para deltas
+            prev = _fl_last_snapshot(env_name)
 
-        for env_lbl in ("AG_C_bd", "bd_v5"):
-            pool_results = results_by_env.get(env_lbl, [])
-            env_cap      = cap_by_env.get(env_lbl.lower(), 0.0)
-            total_cap   += env_cap
-            icon         = "🔵" if "v5" in env_lbl.lower() else "🟠"
-            lines.append(f"{icon} <b>{esc(env_lbl)}</b>")
+            # Salva snapshot no DB
+            _fl_save_snapshot(env_name, lp_usdt_s, lp_loop_s,
+                              liq_usdt, liq_loop, gas_pol, pol_price)
 
-            env_pool_usd = 0.0
-            for r in pool_results:
-                if r["ok"]:
-                    env_pool_usd += r["pool_usd"]
-                    src = f"<i>({r['source']})</i>"
-                    supply_str = f"{r['supply']:,.2f}" if r["supply"] > 0 else "—"
-                    lines.append(
-                        f"  📦 <b>{esc(r['label'])}</b> {src}\n"
-                        f"     💵 USDT no pool:   <b>{r['usdt']:,.2f}</b>\n"
-                        f"     🔁 LOOP no pool:   <b>{r['loop']:,.4f}</b>\n"
-                        f"     📊 Fornecimento LP: <b>{supply_str}</b>\n"
-                        f"     🏊 Liquidez total:  <b>${r['pool_usd']:,.2f}</b>"
-                    )
-                else:
-                    lines.append(f"  ⚠️ {esc(r['label'])}: sem dados")
+            return {
+                "tag": c_info["TAG"],
+                "lp_usdt_addr": lp_usdt_addr,
+                "lp_loop_addr": lp_loop_addr,
+                "lp_usdt_supply": lp_usdt_s,
+                "lp_loop_supply": lp_loop_s,
+                "liq_usdt": liq_usdt,
+                "liq_loop": liq_loop,
+                "gas_pol": gas_pol,
+                "prev": prev,
+                "stat": _fl_db_stats(env_name, days=30),
+            }
 
-            cov = (env_cap / env_pool_usd * 100) if env_pool_usd > 0 else 0
-            cov_icon = "🟢" if cov < 80 else ("🟡" if cov < 95 else "🔴")
-            lines.append(f"  💼 Capital usuários: <b>${env_cap:,.2f}</b>")
-            lines.append(f"  🏦 Liquidez do env:  <b>${env_pool_usd:,.2f}</b>")
-            lines.append(f"  {cov_icon} Cobertura cap/pool: <b>{cov:.1f}%</b>\n")
-            total_pool_usd += env_pool_usd
+        env_futures = {}
+        with _cf.ThreadPoolExecutor(max_workers=2) as ex:
+            for env_name, c_info in CONTRACTS.items():
+                env_futures[ex.submit(_collect_env, env_name, c_info)] = env_name
 
-        cov_total = (total_cap / total_pool_usd * 100) if total_pool_usd > 0 else 0
-        cov_icon  = "🟢" if cov_total < 80 else ("🟡" if cov_total < 95 else "🔴")
-        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        lines.append("🌐 <b>GLOBAL</b>")
-        lines.append(f"  💼 Capital total: <b>${total_cap:,.2f}</b>")
-        lines.append(f"  🏊 Liquidez total pools: <b>${total_pool_usd:,.2f}</b>")
-        lines.append(f"  {cov_icon} Cobertura global: <b>{cov_total:.1f}%</b>")
-        lines.append("\n<i>💡 Cobertura &lt;80% = pool com folga  |  &gt;95% = pool próximo do limite</i>")
+        env_data = {}
+        for fut, env_name in env_futures.items():
+            env_data[env_name] = fut.result()
 
-        send_support(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
+        # ── Monta relatório ───────────────────────────────────────────────────
+        msg  = "🧾 <b>FORNECIMENTO &amp; LIQUIDEZ — WEbdEX</b>\n"
+        msg += f"🕒 {ts_now}  |  ⛽ {_fl_fmt(gwei, 1)} Gwei  |  💱 ${pol_price:.4f} POL\n"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+
+        for env_name in ("AG_C_bd", "bd_v5"):
+            if env_name not in env_data:
+                continue
+            d    = env_data[env_name]
+            prev = d["prev"]
+
+            msg += f"🏛 <b>{esc(d['tag'])}</b>\n"
+
+            # Fornecimento
+            msg += "  📦 <b>Fornecimento (Supply LP)</b>\n"
+            s_u = d["lp_usdt_supply"]
+            msg += f"  🟣 LP-USDT supply: <b>{_fl_fmt(s_u, 4)}</b>{esc(_fl_delta_str(s_u, prev.get('lp_usdt', 0)))}\n"
+            msg += f"     <code>{esc(d['lp_usdt_addr'])}</code>\n"
+            s_l = d["lp_loop_supply"]
+            msg += f"  🟣 LP-LOOP supply: <b>{_fl_fmt(s_l, 4)}</b>{esc(_fl_delta_str(s_l, prev.get('lp_loop', 0)))}\n"
+            msg += f"     <code>{esc(d['lp_loop_addr'])}</code>\n"
+
+            # Liquidez (capital no SubAccounts)
+            msg += "  💧 <b>Liquidez (Capital no SubAccounts)</b>\n"
+            lq_u = d["liq_usdt"]
+            msg += f"  🔵 USDT: <b>{_fl_fmt(lq_u, 4)}</b>{esc(_fl_delta_str(lq_u, prev.get('liq_usdt', 0)))}\n"
+            lq_l = d["liq_loop"]
+            msg += f"  🔄 LOOP: <b>{_fl_fmt(lq_l, 4)}</b>{esc(_fl_delta_str(lq_l, prev.get('liq_loop', 0)))}\n"
+
+            # Ratio capital/supply
+            msg += "  📐 <b>Ratio Capital / Supply</b>\n"
+            if s_u > 0 and lq_u >= 0:
+                r = lq_u / s_u * 100
+                st = " 🟢" if r >= 80 else (" ⚠️ Baixo" if r < 10 else "")
+                msg += f"  🔵 USDT/LP-USDT: {_fl_pct_bar(r)} <b>{r:.2f}%</b>{st}\n"
+            if s_l > 0 and lq_l >= 0:
+                r = lq_l / s_l * 100
+                st = " 🟢" if r >= 80 else (" ⚠️ Baixo" if r < 10 else "")
+                msg += f"  🔄 LOOP/LP-LOOP: {_fl_pct_bar(r)} <b>{r:.2f}%</b>{st}\n"
+
+            # Gás
+            gp = d["gas_pol"]
+            g_s = "🟢" if gp >= 10 else ("🟡" if gp >= 2 else ("🔴 BAIXO" if gp >= 0 else "⚠️"))
+            g_u = f" (~${gp * pol_price:,.2f})" if gp >= 0 and pol_price > 0 else ""
+            msg += f"  ⛽ Manager Gas: <b>{_fl_fmt(gp, 4)} POL</b>{esc(g_u)} {g_s}\n"
+
+            # Atividade 30d
+            st = d["stat"]
+            if st["trades"] > 0:
+                lq_ic = "🟢" if st["liquido"] > 0 else "🔴"
+                msg += (f"  📈 30d: <b>{st['trades']:,}</b> trades | "
+                        f"Bruto <b>{st['bruto']:,.2f}</b> | "
+                        f"{lq_ic} Líq <b>{st['liquido']:,.2f} USD</b>\n")
+
+            if prev.get("ts"):
+                msg += f"  🗂 Snapshot anterior: <i>{esc(prev['ts'])}</i>\n"
+
+            msg += "\n"
+
+        # Análise comparativa
+        if len(env_data) >= 2:
+            envs = list(env_data.values())
+            e1, e2 = envs[0], envs[1]
+            msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            msg += "📊 <b>ANÁLISE COMPARATIVA</b>\n\n"
+            for sym, k1, k2, icon in [("USDT", "liq_usdt", "lp_usdt_supply", "🔵"),
+                                       ("LOOP", "liq_loop", "lp_loop_supply", "🔄")]:
+                v1 = e1[k1]; v2 = e2[k1]
+                tot = max(v1, 0) + max(v2, 0)
+                msg += f"{icon} <b>{sym} Liquidez</b>"
+                if tot <= 0 or v1 < 0 or v2 < 0:
+                    msg += ": sem dados\n\n"
+                    continue
+                p1 = v1 / tot * 100; p2 = v2 / tot * 100
+                dom = e1["tag"] if p1 >= p2 else e2["tag"]
+                msg += f" — Total: <b>{tot:,.4f}</b>\n"
+                msg += f"  {esc(e1['tag'])}: {_fl_pct_bar(p1)} <b>{p1:.1f}%</b>  ({v1:,.4f})\n"
+                msg += f"  {esc(e2['tag'])}: {_fl_pct_bar(p2)} <b>{p2:.1f}%</b>  ({v2:,.4f})\n"
+                msg += f"  Δ <b>{abs(p1-p2):.1f}pp</b> → <b>{esc(dom)}</b> lidera\n\n"
+
+        # Total protocolo
+        total_stat = _fl_db_stats_total(days=30)
+        lq_ic = "🟢" if total_stat["liquido"] > 0 else "🔴"
+        msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        msg += "🌐 <b>TOTAL PROTOCOLO (30 dias)</b>\n"
+        msg += f"📈 Trades: <b>{total_stat['trades']:,}</b>\n"
+        msg += f"💰 Vol. Bruto: <b>{total_stat['bruto']:,.4f} USD</b>\n"
+        msg += f"⛽ Gás Total: <b>{total_stat['gas']:,.4f} USD</b>\n"
+        msg += f"{lq_ic} Líq. Total: <b>{total_stat['liquido']:,.4f} USD</b>\n"
+        msg += "\n🗂 <i>Snapshot salvo · Fonte: Contratos WEbdEX · Polygon · Tempo real</i>"
+
+        send_support(m.chat.id, msg, reply_markup=adm_kb())
     except Exception as e:
         logger.exception(e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
