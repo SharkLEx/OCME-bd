@@ -1553,44 +1553,59 @@ def adm_progressao_capital(m):
     prev_totals = {r[0]: float(r[1] or 0) for r in prev_rows}
     prev_grand  = sum(prev_totals.values())
 
-    # ── 4. LP Reserves on-chain (pool liquidity) ──────────────────────────────
-    lps_config = []
+    # ── 4. Pool data from fl_snapshots (calculado pelo worker a cada 30min) ───
+    # Fonte correta: balanceOf(USDT0, SubAccounts) + totalSupply(LP tokens)
+    # NÃO usa getReserves() — esses LP tokens não são pares Uniswap V2
+    pool_per_env:    dict = {}  # env → snapshot dict
+    _env_from_cache: set  = set()
     try:
-        for env_key, c_data in CONTRACTS.items():
-            for lp_key in ("LP_USDT", "LP_LOOP"):
-                addr = c_data.get(lp_key)
-                if addr:
-                    lps_config.append((env_key, addr, lp_key))
-    except Exception:
-        pass
+        with DB_LOCK:
+            _snap_rows = conn.execute("""
+                SELECT s.env, s.liq_usdt, s.liq_loop,
+                       s.lp_usdt_supply, s.lp_loop_supply,
+                       s.gas_pol, s.pol_price, s.total_usd, s.ts
+                FROM fl_snapshots s
+                INNER JOIN (
+                    SELECT env, MAX(ts) AS max_ts FROM fl_snapshots GROUP BY env
+                ) latest ON s.env = latest.env AND s.ts = latest.max_ts
+            """).fetchall()
+        for _row in _snap_rows:
+            _env, _lu, _ll, _su, _sl, _gp, _pp, _tu, _ts = _row
+            pool_per_env[_env] = {
+                "liq_usdt":       float(_lu or 0),
+                "liq_loop":       float(_ll or 0),
+                "lp_usdt_supply": float(_su or 0),
+                "lp_loop_supply": float(_sl or 0),
+                "gas_pol":        float(_gp or 0),
+                "pol_price":      float(_pp or 0),
+                "total_usd":      float(_tu or 0),
+                "ts":             str(_ts),
+            }
+    except Exception as _e:
+        logger.debug("[progressao_capital] fl_snapshots: %s", _e)
 
-    lp_results: dict = {}  # env -> {pool: pool_usd}
-    def _fetch_lp(env_key, addr, pool_name):
-        try:
-            w3 = web3_for_rpc("", timeout=8)
-            c  = w3.eth.contract(
-                address=w3.to_checksum_address(addr),
-                abi=_ABI_LP_MIN
-            )
-            res = c.functions.getReserves().call()
-            r0  = float(res[0]) / 1e6   # USDT0 = 6 dec
-            r1  = float(res[1]) / 1e9   # LOOP  = 9 dec
-            pool_usd = r0 * 2           # AMM invariant
-            return env_key, pool_name, r0, r1, pool_usd
-        except Exception:
-            return env_key, pool_name, 0.0, 0.0, 0.0
+    # ── 4b. Capital fallback via capital_cache para envs sem wallets linkadas ─
+    # bd_v5 users tipicamente não têm wallet linkada no bot → on-chain retorna 0
+    # Usamos capital_cache populado pelos workers como fonte alternativa
+    _all_envs = set(list(env_totals.keys()) + list(pool_per_env.keys()) + list(CONTRACTS.keys()))
+    for _env_k in _all_envs:
+        if _env_k not in env_totals:
+            try:
+                with DB_LOCK:
+                    _cc = conn.execute(
+                        "SELECT SUM(total_usd), COUNT(DISTINCT chat_id) FROM capital_cache "
+                        "WHERE env=? AND updated_ts > ? AND total_usd > 0.5",
+                        (_env_k, now_ts - 86400)
+                    ).fetchone()
+                if _cc and _cc[0] and float(_cc[0]) > 0:
+                    env_totals[_env_k]  = float(_cc[0])
+                    env_wallets[_env_k] = int(_cc[1] or 0)
+                    grand_total        += float(_cc[0])
+                    _env_from_cache.add(_env_k)
+            except Exception:
+                pass
 
-    if lps_config:
-        with _cf.ThreadPoolExecutor(max_workers=4) as ex:
-            lp_futs = [ex.submit(_fetch_lp, *lp) for lp in lps_config]
-            for fut in _cf.as_completed(lp_futs, timeout=15):
-                try:
-                    env_k, pool_n, r0, r1, pool_usd = fut.result()
-                    lp_results.setdefault(env_k, []).append((pool_n, r0, r1, pool_usd))
-                except Exception:
-                    pass
-
-    # ── 5. Monta relatório ───────────────────────────────────────────────────
+    # ── 5. Monta relatório ────────────────────────────────────────────────────
     delta_grand = grand_total - prev_grand
     delta_icon  = "📈" if delta_grand >= 0 else "📉"
     delta_pct   = (delta_grand / prev_grand * 100) if prev_grand > 0 else 0
@@ -1604,57 +1619,83 @@ def adm_progressao_capital(m):
     ]
 
     total_pool_all = 0.0
-    for env_k in sorted(set(list(env_totals.keys()) + list(lp_results.keys()))):
-        cap  = env_totals.get(env_k, 0.0)
-        wlts = env_wallets.get(env_k, 0)
-        prev = prev_totals.get(env_k, 0.0)
-        d    = cap - prev
-        d_ic = "📈" if d >= 0 else "📉"
-        icon = "🔵" if "v5" in env_k.lower() else "🟠"
+    total_tvl_all  = 0.0
+    _all_env_keys  = sorted(set(list(env_totals.keys()) + list(pool_per_env.keys())))
+    for env_k in _all_env_keys:
+        cap   = env_totals.get(env_k, 0.0)
+        wlts  = env_wallets.get(env_k, 0)
+        prev  = prev_totals.get(env_k, 0.0)
+        d     = cap - prev
+        d_ic  = "📈" if d >= 0 else "📉"
+        icon  = "🔵" if "v5" in env_k.lower() else "🟠"
+        src   = "📋 cache 24h" if env_k in _env_from_cache else "⛓️ on-chain"
 
-        # Top subcontas desse ambiente
+        # Top subcontas desse ambiente (só disponível para on-chain)
         subs_env = sorted(env_sub_caps.get(env_k, []), key=lambda x: x[1], reverse=True)[:3]
         subs_str = ""
         for i, (sid, sv) in enumerate(subs_env, 1):
             subs_str += f"\n     {_medal(i)} Sub {str(sid)[:16]}: <b>${sv:,.2f}</b>"
 
-        # LP pools desse ambiente
-        pool_usd_env = 0.0
-        pool_lines = []
-        for pool_n, r0, r1, pool_usd in lp_results.get(env_k, []):
-            pool_usd_env += pool_usd
-            pool_lines.append(
-                f"     🏊 {esc(pool_n[:16])}: <b>${pool_usd:,.2f}</b>"
-                f"  (r0={r0:,.0f} USDT0 | r1={r1:,.2f} LOOP)"
-            )
-        total_pool_all += pool_usd_env
+        # Pool data do fl_snapshots (correto — balanceOf SubAccounts)
+        snap      = pool_per_env.get(env_k, {})
+        liq_usdt  = snap.get("liq_usdt", 0.0)    # USDT0 no SubAccounts
+        liq_loop  = snap.get("liq_loop", 0.0)    # LP-USD no SubAccounts
+        lp_usdt_s = snap.get("lp_usdt_supply", 0.0)
+        lp_loop_s = snap.get("lp_loop_supply", 0.0)
+        pool_tvl  = snap.get("total_usd", 0.0)
+        snap_ts   = snap.get("ts", "")[:16]
 
-        # Cobertura capital vs pool
-        cov = (cap / pool_usd_env * 100) if pool_usd_env > 0 else 0
+        # Pool = USDT0 custodiado no contrato SubAccounts (fonte de verdade)
+        pool_usd_env   = liq_usdt
+        total_pool_all += pool_usd_env
+        total_tvl_all  += pool_tvl
+
+        # Cobertura = capital dos usuários do bot / USDT total no pool
+        cov      = (cap / pool_usd_env * 100) if pool_usd_env > 0 else 0.0
         cov_icon = "🔴" if cov > 90 else ("🟡" if cov > 70 else "🟢")
 
-        lines += [
-            f"",
-            f"{icon} <b>{esc(env_k)}</b>",
-            f"   💵 Capital: <b>${cap:,.2f}</b>  ({wlts} wallets)",
+        # Ratio de utilização dos LP tokens
+        lp_ratio_u = (liq_usdt / lp_usdt_s * 100) if lp_usdt_s > 0 else 0.0
+        lp_ratio_l = (liq_loop / lp_loop_s * 100) if lp_loop_s > 0 else 0.0
+
+        block = [
+            "",
+            f"{icon} <b>{esc(env_k)}</b>  <i>({src})</i>",
+            f"   💵 Capital usuários: <b>${cap:,.2f}</b>  ({wlts} wallets)",
             f"   {d_ic} Delta: <b>{d:+,.2f}</b>",
         ]
-        lines += [subs_str] if subs_str else []
-        lines += [
-            f"   🏦 Liquidez pool: <b>${pool_usd_env:,.2f}</b>",
-            f"   {cov_icon} Cobertura: <b>{cov:.1f}%</b>  capital/pool",
+        if subs_str:
+            block.append(subs_str)
+        block += [
+            f"   🏦 USDT no SubAccounts: <b>${liq_usdt:,.2f}</b>",
+            f"   {cov_icon} Cobertura: <b>{cov:.1f}%</b>  cap/pool",
         ]
-        lines += pool_lines
+        if lp_usdt_s > 0:
+            block.append(
+                f"   🟣 LP-USDT supply: <b>{lp_usdt_s:,.2f}</b>"
+                f"  ({lp_ratio_u:.1f}% utilizado)"
+            )
+        if lp_loop_s > 0:
+            block.append(
+                f"   🟣 LP-LOOP supply: <b>{lp_loop_s:,.2f}</b>"
+                f"  ({lp_ratio_l:.1f}% utilizado)"
+            )
+        if pool_tvl > 0:
+            block.append(f"   📊 TVL env: <b>${pool_tvl:,.2f}</b>")
+        if snap_ts:
+            block.append(f"   🕒 Snapshot: <i>{esc(snap_ts)}</i>")
+        lines += block
 
     # Totais globais
-    cov_total = (grand_total / total_pool_all * 100) if total_pool_all > 0 else 0
+    cov_total  = (grand_total / total_pool_all * 100) if total_pool_all > 0 else 0
     cov_t_icon = "🔴" if cov_total > 90 else ("🟡" if cov_total > 70 else "🟢")
     lines += [
         "",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "🌐 <b>GLOBAL</b>",
-        f"   💼 Capital total:   <b>${grand_total:,.2f} USD</b>",
-        f"   🏊 Liquidez total:  <b>${total_pool_all:,.2f} USD</b>",
+        f"   💼 Capital usuários:  <b>${grand_total:,.2f} USD</b>",
+        f"   🏦 USDT no protocolo: <b>${total_pool_all:,.2f} USD</b>",
+        f"   📊 TVL total:         <b>${total_tvl_all:,.2f} USD</b>",
         f"   {cov_t_icon} Cobertura global: <b>{cov_total:.1f}%</b>",
         f"   {delta_icon} Delta vs anterior: <b>{delta_grand:+,.2f}</b> ({delta_pct:+.2f}%)",
         f"   💲 POL/USD: <b>${pol_price:.4f}</b>",
@@ -1663,12 +1704,12 @@ def adm_progressao_capital(m):
         "<i>📸 Snapshot salvo — próxima comparação mostrará delta de crescimento</i>",
     ]
 
-    # ── 6. TVL histórico via fl_snapshots ────────────────────────────────────
+    # ── 6. EVOLUÇÃO TVL (fl_snapshots histórico) ──────────────────────────────
     lines += ["", "📊 <b>EVOLUÇÃO TVL (fl_snapshots)</b>"]
     try:
         with DB_LOCK:
             _fl_rows = conn.execute("""
-                SELECT env, tvl_usd, ts
+                SELECT env, total_usd, ts
                 FROM fl_snapshots
                 ORDER BY ts DESC
                 LIMIT 20
@@ -1678,22 +1719,20 @@ def adm_progressao_capital(m):
             for _fe, _fv, _ft in _fl_rows:
                 _fl_by_env.setdefault(_fe, []).append((_ft, float(_fv or 0)))
             for _env_k in sorted(_fl_by_env.keys()):
-                _snaps = _fl_by_env[_env_k]          # newest first
-                _latest_tvl = _snaps[0][1]
-                _oldest_tvl = _snaps[-1][1]
-                _delta_tvl  = _latest_tvl - _oldest_tvl
-                _d_ic       = "📈" if _delta_tvl >= 0 else "📉"
-                _ico        = "🔵" if "v5" in str(_env_k).lower() else "🟠"
+                _snaps     = _fl_by_env[_env_k]
+                _latest    = _snaps[0][1]
+                _oldest    = _snaps[-1][1]
+                _delta_tvl = _latest - _oldest
+                _d_ic      = "📈" if _delta_tvl >= 0 else "📉"
+                _ico       = "🔵" if "v5" in str(_env_k).lower() else "🟠"
                 lines.append(
                     f"  {_ico} <b>{esc(str(_env_k)[:14])}</b>  "
-                    f"TVL: <b>${_latest_tvl:,.2f}</b>  "
-                    f"{_d_ic} {_delta_tvl:+,.2f}"
+                    f"TVL: <b>${_latest:,.2f}</b>  {_d_ic} {_delta_tvl:+,.2f}"
                 )
-                # Últimas 3 entradas como histórico
                 for _snap_ts, _snap_tvl in _snaps[:3]:
                     lines.append(f"     <code>{str(_snap_ts)[:16]}</code>  ${_snap_tvl:,.2f}")
         else:
-            lines.append("  <i>(sem snapshots ainda — worker fl_snapshot gera a cada 30min)</i>")
+            lines.append("  <i>(sem snapshots — worker fl_snapshot gera a cada 30min)</i>")
     except Exception as _fe:
         logger.debug("[progressao_capital fl_snapshots] %s", _fe)
         lines.append("  <i>(fl_snapshots indisponível)</i>")
