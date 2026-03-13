@@ -364,6 +364,15 @@ ADMIN_USER_IDS = sorted(set(int(x) for x in ADMIN_USER_IDS if str(x).strip().lst
 # ==============================================================================
 # 🏛️ CONTRATOS
 # ==============================================================================
+
+# Blocos de criação (deploy) dos contratos PAYMENTS — fonte: Polygonscan
+# bd_v5:   tx 0x8a25055d... → bloco 72939182 (2026-06-21 / ~267 dias atrás)
+# AG_C_bd: tx 0x21c4253a... → bloco 80211665 (2025-12-12 / ~91 dias atrás)
+CONTRACTS_DEPLOY_BLOCK: dict = {
+    "bd_v5":   72_939_182,
+    "AG_C_bd": 80_211_665,
+}
+
 CONTRACTS = {
     "AG_C_bd": {
         "PAYMENTS":    "0x96bF20B20de9c01D5F1f0fC74321ccC63E3f29F1",

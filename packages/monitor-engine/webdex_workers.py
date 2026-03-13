@@ -263,16 +263,19 @@ def _capital_snapshot_worker():
 # ==============================================================================
 # 🔍 PROTOCOL OPS SYNC WORKER — backfill histórico de TODOS os traders
 # ==============================================================================
-_PROTO_SYNC_BATCH   = 1000    # blocos por lote de eth_getLogs
-_PROTO_SYNC_SLEEP   = 1800    # 30min entre ciclos incrementais
-_PROTO_30D_BLOCKS   = 1_080_000  # ~30 dias em blocos Polygon (2.4s/bloco)
+_PROTO_SYNC_BATCH        = 2000    # blocos por lote (máx Alchemy getLogs)
+_PROTO_SYNC_SLEEP        = 1800    # 30min entre ciclos quando em dia
+_PROTO_BACKFILL_SLEEP    = 0.3     # 300ms entre batches durante backfill histórico
+_PROTO_BACKFILL_THRESHOLD = 200_000  # gap > 200k blocos → modo backfill acelerado
 
 def _protocol_ops_sync_worker():
     """
     Worker de background: sincroniza TODOS os eventos OpenPosition de ambos
     os ambientes para a tabela protocol_ops, independente de registro no bot.
-    - 1ª execução: faz backfill dos últimos 30 dias
-    - Execuções seguintes: sincroniza apenas blocos novos (incremental)
+    - 1ª execução: começa do bloco de DEPLOY do contrato (histórico completo)
+    - Backfill acelerado: batches de 2000 blocos, sleep 300ms (não bloqueia bot)
+    - Modo incremental: quando em dia, ciclo a cada 30min
+    - Reset automático: se proto_genesis_done_* não setado, reinicia do deploy
     """
     from webdex_config import CONTRACTS, Web3 as _W3, logger as _log
     from webdex_chain import rpc_pool, TOPIC_OPENPOSITION
@@ -280,33 +283,66 @@ def _protocol_ops_sync_worker():
     from webdex_db import DB_LOCK, conn, get_config, set_config
     from datetime import datetime
 
-    _log.info("🔍 Protocol ops sync worker: Ativo...")
+    _log.info("🔍 Protocol ops sync worker: Ativo (histórico completo desde deploy)...")
     time.sleep(90)  # aguarda vigia e chain_cache inicializarem
+
+    from webdex_config import CONTRACTS_DEPLOY_BLOCK
 
     while True:
         try:
             curr_block = int(web3.eth.block_number)
 
             for env_key, c_data in CONTRACTS.items():
-                payments_addr = _W3.to_checksum_address(c_data["PAYMENTS"])
-                config_key    = f"proto_sync_block_{env_key}"
+                payments_addr  = _W3.to_checksum_address(c_data["PAYMENTS"])
+                config_key     = f"proto_sync_block_{env_key}"
+                genesis_key    = f"proto_genesis_done_{env_key}"
+                deploy_block   = CONTRACTS_DEPLOY_BLOCK.get(env_key, 1)
 
                 last_synced = int(get_config(config_key, "0") or "0")
-                if last_synced == 0:
-                    # Primeiro run: começa 30 dias atrás
-                    last_synced = max(1, curr_block - _PROTO_30D_BLOCKS)
-                    _log.info("[proto_sync] %s: backfill desde bloco %d", env_key, last_synced)
+
+                # Primeiro run OU genesis não concluído → começa do deploy
+                genesis_done = get_config(genesis_key, "0")
+                if last_synced == 0 or genesis_done != "1":
+                    if last_synced == 0 or last_synced > deploy_block + 100:
+                        # Reset para o bloco de deploy (histórico completo)
+                        last_synced = deploy_block - 1
+                        set_config(config_key, str(last_synced))
+                        _log.info(
+                            "[proto_sync] %s: backfill COMPLETO desde deploy bloco %d "
+                            "(curr=%d, gap=%d blocos / ~%.1f dias)",
+                            env_key, deploy_block, curr_block,
+                            curr_block - deploy_block,
+                            (curr_block - deploy_block) * 2.4 / 86400
+                        )
 
                 if last_synced >= curr_block:
+                    # Histórico 100% completo — marca genesis como done
+                    if genesis_done != "1":
+                        set_config(genesis_key, "1")
+                        _log.info("[proto_sync] %s: ✅ genesis completo — histórico 100%% indexado", env_key)
                     continue
 
+                gap = curr_block - last_synced
+                # Modo backfill acelerado quando gap > 200k blocos
+                in_backfill = gap > _PROTO_BACKFILL_THRESHOLD
+                batch_size  = _PROTO_SYNC_BATCH          # 2000 blocos/batch
+                batch_sleep = _PROTO_BACKFILL_SLEEP if in_backfill else 1.0
+
+                # Processa até 200 batches por ciclo (não bloqueia outras threads)
                 from_block = last_synced + 1
-                to_block   = min(curr_block, from_block + _PROTO_SYNC_BATCH * 100)
+                to_block   = min(curr_block, from_block + batch_size * 200)
                 saved = 0
+
+                if in_backfill and from_block % 100_000 == 0:
+                    pct = (from_block - deploy_block) / max(1, curr_block - deploy_block) * 100
+                    _log.info(
+                        "[proto_sync] %s backfill: bloco %d / %d (%.1f%% | gap=%d blocos)",
+                        env_key, from_block, curr_block, pct, gap
+                    )
 
                 b = from_block
                 while b <= to_block:
-                    end = min(b + _PROTO_SYNC_BATCH - 1, to_block)
+                    end = min(b + batch_size - 1, to_block)
                     try:
                         logs = rpc_pool.get_logs({
                             "fromBlock": hex(b),
@@ -319,7 +355,6 @@ def _protocol_ops_sync_worker():
                                 tx       = str(log["transactionHash"].hex()) if hasattr(log["transactionHash"], "hex") else str(log["transactionHash"])
                                 log_idx  = int(log["logIndex"])
                                 bloco    = int(log["blockNumber"])
-                                # Decodifica evento
                                 from webdex_chain import CONTRACTS_A, CONTRACTS_B
                                 _c = CONTRACTS_B if env_key == "bd_v5" else CONTRACTS_A
                                 evt  = _c["payments"].events.OpenPosition().process_log(log)
@@ -333,7 +368,6 @@ def _protocol_ops_sync_worker():
                                 bot_id      = str(args["details"].get("botId") or "").strip()
                                 sub_conta   = str(args.get("accountId", ""))
                                 coin_sym    = str(meta["sym"])
-                                # Timestamp aproximado via block (usa cache se disponível)
                                 try:
                                     from webdex_db import get_block_ts
                                     bts = get_block_ts(bloco)
@@ -357,16 +391,28 @@ def _protocol_ops_sync_worker():
                         logger.debug("[proto_sync] getLogs err bloco %d-%d: %s", b, end, _be)
                         time.sleep(2)
                     b = end + 1
-                    time.sleep(0.3)  # respeita rate limit RPC
+                    time.sleep(batch_sleep)
 
                 set_config(config_key, str(to_block))
                 if saved:
-                    _log.info("[proto_sync] %s: salvos %d eventos até bloco %d", env_key, saved, to_block)
+                    _log.info("[proto_sync] %s: +%d eventos | bloco %d | gap=%d", env_key, saved, to_block, curr_block - to_block)
 
         except Exception as _e:
             logger.warning("[protocol_ops_sync_worker] erro: %s", _e)
 
-        time.sleep(_PROTO_SYNC_SLEEP)
+        # Em backfill: reinicia imediatamente. Em dia: espera 30min
+        try:
+            curr_b = int(web3.eth.block_number)
+            any_backfill = any(
+                (curr_b - int(get_config(f"proto_sync_block_{ek}", "0") or "0")) > _PROTO_BACKFILL_THRESHOLD
+                for ek in CONTRACTS
+            )
+            if not any_backfill:
+                time.sleep(_PROTO_SYNC_SLEEP)
+            else:
+                time.sleep(5)  # pausa mínima entre ciclos de backfill
+        except Exception:
+            time.sleep(_PROTO_SYNC_SLEEP)
 
 
 # ==============================================================================
