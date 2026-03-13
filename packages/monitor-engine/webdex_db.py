@@ -328,6 +328,25 @@ cursor.execute("CREATE TABLE IF NOT EXISTS op_blocktime (hash TEXT, log_index IN
 cursor.execute("CREATE TABLE IF NOT EXISTS block_time_cache (bloco INTEGER PRIMARY KEY, ts INTEGER)")
 
 cursor.execute("""
+CREATE TABLE IF NOT EXISTS protocol_ops (
+    hash        TEXT,
+    log_index   INTEGER,
+    ts          TEXT,
+    bloco       INTEGER,
+    env         TEXT,
+    wallet      TEXT,
+    sub_conta   TEXT,
+    bot_id      TEXT,
+    coin        TEXT,
+    profit      REAL DEFAULT 0.0,
+    fee_bd      REAL DEFAULT 0.0,
+    gas_pol     REAL DEFAULT 0.0,
+    old_balance REAL DEFAULT 0.0,
+    PRIMARY KEY (hash, log_index)
+)
+""")
+
+cursor.execute("""
 CREATE TABLE IF NOT EXISTS fl_snapshots (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     ts               TEXT NOT NULL,

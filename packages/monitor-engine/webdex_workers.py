@@ -261,6 +261,115 @@ def _capital_snapshot_worker():
         time.sleep(_CAPITAL_SNAP_INTERVAL)
 
 # ==============================================================================
+# 🔍 PROTOCOL OPS SYNC WORKER — backfill histórico de TODOS os traders
+# ==============================================================================
+_PROTO_SYNC_BATCH   = 1000    # blocos por lote de eth_getLogs
+_PROTO_SYNC_SLEEP   = 1800    # 30min entre ciclos incrementais
+_PROTO_30D_BLOCKS   = 1_080_000  # ~30 dias em blocos Polygon (2.4s/bloco)
+
+def _protocol_ops_sync_worker():
+    """
+    Worker de background: sincroniza TODOS os eventos OpenPosition de ambos
+    os ambientes para a tabela protocol_ops, independente de registro no bot.
+    - 1ª execução: faz backfill dos últimos 30 dias
+    - Execuções seguintes: sincroniza apenas blocos novos (incremental)
+    """
+    from webdex_config import CONTRACTS, Web3 as _W3, logger as _log
+    from webdex_chain import rpc_pool, TOPIC_OPENPOSITION
+    from webdex_bot_core import get_token_meta, formatar_moeda
+    from webdex_db import DB_LOCK, conn, get_config, set_config
+    from datetime import datetime
+
+    _log.info("🔍 Protocol ops sync worker: Ativo...")
+    time.sleep(90)  # aguarda vigia e chain_cache inicializarem
+
+    while True:
+        try:
+            curr_block = int(web3.eth.block_number)
+
+            for env_key, c_data in CONTRACTS.items():
+                payments_addr = _W3.to_checksum_address(c_data["PAYMENTS"])
+                config_key    = f"proto_sync_block_{env_key}"
+
+                last_synced = int(get_config(config_key, "0") or "0")
+                if last_synced == 0:
+                    # Primeiro run: começa 30 dias atrás
+                    last_synced = max(1, curr_block - _PROTO_30D_BLOCKS)
+                    _log.info("[proto_sync] %s: backfill desde bloco %d", env_key, last_synced)
+
+                if last_synced >= curr_block:
+                    continue
+
+                from_block = last_synced + 1
+                to_block   = min(curr_block, from_block + _PROTO_SYNC_BATCH * 100)
+                saved = 0
+
+                b = from_block
+                while b <= to_block:
+                    end = min(b + _PROTO_SYNC_BATCH - 1, to_block)
+                    try:
+                        logs = rpc_pool.get_logs({
+                            "fromBlock": hex(b),
+                            "toBlock":   hex(end),
+                            "address":   payments_addr,
+                            "topics":    [TOPIC_OPENPOSITION],
+                        })
+                        for log in logs:
+                            try:
+                                tx       = str(log["transactionHash"].hex()) if hasattr(log["transactionHash"], "hex") else str(log["transactionHash"])
+                                log_idx  = int(log["logIndex"])
+                                bloco    = int(log["blockNumber"])
+                                # Decodifica evento
+                                from webdex_chain import CONTRACTS_A, CONTRACTS_B
+                                _c = CONTRACTS_B if env_key == "bd_v5" else CONTRACTS_A
+                                evt  = _c["payments"].events.OpenPosition().process_log(log)
+                                args = evt["args"]
+                                uw   = str(args["user"]).lower().strip()
+                                meta = get_token_meta(args["details"]["coin"])
+                                profit_usd  = float(int(args["details"].get("profit", 0))) / (10 ** meta["dec"])
+                                fee_bd      = float(int(args["details"].get("fee", 0))) / 1e9
+                                gas_pol     = float(int(args["details"].get("gas", 0))) / 1e18
+                                old_bal_usd = float(int(args["details"].get("oldBalance", 0))) / (10 ** meta["dec"])
+                                bot_id      = str(args["details"].get("botId") or "").strip()
+                                sub_conta   = str(args.get("accountId", ""))
+                                coin_sym    = str(meta["sym"])
+                                # Timestamp aproximado via block (usa cache se disponível)
+                                try:
+                                    from webdex_db import get_block_ts
+                                    bts = get_block_ts(bloco)
+                                    ts_str = datetime.utcfromtimestamp(bts).strftime("%Y-%m-%d %H:%M:%S") if bts else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                                except Exception:
+                                    ts_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+                                with DB_LOCK:
+                                    conn.execute("""
+                                        INSERT OR IGNORE INTO protocol_ops
+                                            (hash, log_index, ts, bloco, env, wallet, sub_conta,
+                                             bot_id, coin, profit, fee_bd, gas_pol, old_balance)
+                                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                    """, (tx, log_idx, ts_str, bloco, env_key, uw, sub_conta,
+                                          bot_id, coin_sym, profit_usd, fee_bd, gas_pol, old_bal_usd))
+                                    conn.commit()
+                                saved += 1
+                            except Exception as _le:
+                                logger.debug("[proto_sync] decode err: %s", _le)
+                    except Exception as _be:
+                        logger.debug("[proto_sync] getLogs err bloco %d-%d: %s", b, end, _be)
+                        time.sleep(2)
+                    b = end + 1
+                    time.sleep(0.3)  # respeita rate limit RPC
+
+                set_config(config_key, str(to_block))
+                if saved:
+                    _log.info("[proto_sync] %s: salvos %d eventos até bloco %d", env_key, saved, to_block)
+
+        except Exception as _e:
+            logger.warning("[protocol_ops_sync_worker] erro: %s", _e)
+
+        time.sleep(_PROTO_SYNC_SLEEP)
+
+
+# ==============================================================================
 # 📸 FL SNAPSHOT WORKER — TVL automático a cada 30min
 # ==============================================================================
 _FL_SNAP_INTERVAL = 1800  # 30 minutos

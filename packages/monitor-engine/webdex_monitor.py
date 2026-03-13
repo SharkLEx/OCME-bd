@@ -584,6 +584,33 @@ def process_log(log, tipo_evento):
             evt = c["payments"].events.OpenPosition().process_log(log)
             args = evt["args"]
             uw = str(args["user"]).lower().strip()
+
+            # ── Salva em protocol_ops para TODOS os traders (independente de registro) ──
+            try:
+                _meta_proto = get_token_meta(args["details"]["coin"])
+                _profit_raw  = int(args["details"].get("profit", 0))
+                _profit_usd  = float(_profit_raw) / (10 ** _meta_proto["dec"]) if _profit_raw else 0.0
+                _fee_bd_raw  = int(args["details"].get("fee", 0))
+                _fee_bd      = float(_fee_bd_raw) / 1e9 if _fee_bd_raw else 0.0
+                _gas_pol_raw = int(args["details"].get("gas", 0))
+                _gas_pol_p   = float(_gas_pol_raw) / 1e18 if _gas_pol_raw else 0.0
+                _old_bal_raw = int(args["details"].get("oldBalance", 0))
+                _old_bal_usd = float(_old_bal_raw) / (10 ** _meta_proto["dec"]) if _old_bal_raw else 0.0
+                _ts_proto    = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                _bot_id_p    = str(args["details"].get("botId") or "").strip()
+                with DB_LOCK:
+                    conn.execute("""
+                        INSERT OR IGNORE INTO protocol_ops
+                            (hash, log_index, ts, bloco, env, wallet, sub_conta, bot_id,
+                             coin, profit, fee_bd, gas_pol, old_balance)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, (tx, int(log["logIndex"]), _ts_proto, int(log["blockNumber"]),
+                          ambiente, uw, str(args.get("accountId", "")), _bot_id_p,
+                          str(_meta_proto["sym"]), _profit_usd, _fee_bd, _gas_pol_p, _old_bal_usd))
+                    conn.commit()
+            except Exception as _pe:
+                logger.debug("[protocol_ops] erro ao salvar: %s", _pe)
+
             if uw not in wallet_map:
                 return
             meta = get_token_meta(args["details"]["coin"])

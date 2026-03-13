@@ -858,14 +858,16 @@ def _lucro_real_callback(c):
 
 # ==============================================================================
 # 💎 LUCRO TOTAL DO PROTOCOLO
+# Fonte: protocol_ops (TODOS os traders, on-chain) + fl_snapshots (TVL)
 # 3 métricas:
-#   1. Lucro do Protocolo  = delta TVL (fl_snapshots)
-#   2. Lucro dos Usuários  = SUM(operacoes.valor) — P&L real das posições
-#   3. BD coletado         = SUM(operacoes.fee)   — tokens BD das fees
+#   1. Lucro dos Traders    = SUM(protocol_ops.profit) — todos os traders
+#   2. Gás consumido        = SUM(protocol_ops.gas_pol) — gas real em POL
+#   3. BD/Passe coletado    = SUM(protocol_ops.fee_bd)  — fees em BD/LOOP
 # ==============================================================================
 
 def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
     from webdex_db import _ciclo_21h_since, _ciclo_21h_label, period_to_hours
+    from webdex_chain import chain_pol_price
     from datetime import datetime, timedelta
 
     if periodo == "ciclo":
@@ -879,47 +881,59 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
         since = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
         label = periodo.upper()
 
+    pol_price = chain_pol_price()
+
     with DB_LOCK:
         cur = conn.cursor()
 
-        # ── Lucro dos Usuários (P&L das posições abertas) ──────────────────────
-        usr_rows = cur.execute("""
+        # Conta total de registros em protocol_ops para saber se backfill rodou
+        proto_count = cur.execute("SELECT COUNT(*) FROM protocol_ops").fetchone()[0] or 0
+
+        # ── protocol_ops: TODOS os traders (on-chain completo) ─────────────────
+        proto_rows = cur.execute("""
             SELECT
-                COALESCE(ambiente, 'TOTAL') AS amb,
-                COUNT(*)                               AS trades,
-                ROUND(SUM(valor), 4)                   AS bruto,
-                ROUND(SUM(gas_usd), 4)                 AS gas,
-                ROUND(SUM(valor) - SUM(gas_usd), 4)   AS liq,
-                ROUND(SUM(CASE WHEN valor > 0 THEN valor ELSE 0 END), 4) AS ganhos,
-                ROUND(SUM(CASE WHEN valor < 0 THEN valor ELSE 0 END), 4) AS perdas
-            FROM operacoes
-            WHERE tipo='Trade' AND data_hora >= ?
-            GROUP BY amb ORDER BY liq DESC
+                COALESCE(env, 'UNKNOWN')                               AS env,
+                COUNT(*)                                               AS trades,
+                COUNT(DISTINCT wallet)                                 AS traders,
+                ROUND(SUM(profit), 4)                                  AS lucro_total,
+                ROUND(SUM(CASE WHEN profit > 0 THEN profit ELSE 0 END), 4) AS ganhos,
+                ROUND(SUM(CASE WHEN profit < 0 THEN profit ELSE 0 END), 4) AS perdas,
+                COUNT(CASE WHEN profit > 0 THEN 1 END)                AS wins,
+                ROUND(SUM(fee_bd), 6)                                  AS bd_total,
+                ROUND(SUM(gas_pol), 6)                                 AS gas_pol_total
+            FROM protocol_ops
+            WHERE ts >= ?
+            GROUP BY env ORDER BY lucro_total DESC
         """, (since,)).fetchall()
 
-        total_trades = sum(int(r[1] or 0) for r in usr_rows)
-        total_bruto  = sum(float(r[2] or 0) for r in usr_rows)
-        total_gas    = sum(float(r[3] or 0) for r in usr_rows)
-        total_liq    = sum(float(r[4] or 0) for r in usr_rows)
-        total_ganhos = sum(float(r[5] or 0) for r in usr_rows)
-        total_perdas = sum(float(r[6] or 0) for r in usr_rows)
+        # Totais globais
+        p_trades  = sum(int(r[1] or 0)   for r in proto_rows)
+        p_traders = max(int(r[2] or 0)   for r in proto_rows) if proto_rows else 0
+        p_lucro   = sum(float(r[3] or 0) for r in proto_rows)
+        p_ganhos  = sum(float(r[4] or 0) for r in proto_rows)
+        p_perdas  = sum(float(r[5] or 0) for r in proto_rows)
+        p_wins    = sum(int(r[6] or 0)   for r in proto_rows)
+        p_bd      = sum(float(r[7] or 0) for r in proto_rows)
+        p_gas_pol = sum(float(r[8] or 0) for r in proto_rows)
+        p_wr      = p_wins / p_trades * 100 if p_trades else 0.0
+        p_gas_usd = p_gas_pol * pol_price
 
-        # ── BD coletado (fees do protocolo) ───────────────────────────────────
-        bd_rows = cur.execute("""
-            SELECT
-                COALESCE(ambiente, 'TOTAL') AS amb,
-                COUNT(CASE WHEN fee > 0 THEN 1 END) AS ops_com_fee,
-                ROUND(SUM(fee), 6)                  AS bd_total
-            FROM operacoes
-            WHERE data_hora >= ?
-            GROUP BY amb ORDER BY bd_total DESC
+        # BD all-time (sem filtro de período)
+        bd_alltime = float(cur.execute(
+            "SELECT ROUND(SUM(fee_bd),4) FROM protocol_ops WHERE fee_bd > 0"
+        ).fetchone()[0] or 0)
+
+        # Top 5 traders por lucro (período)
+        top_traders = cur.execute("""
+            SELECT wallet,
+                   ROUND(SUM(profit),4)  AS lucro,
+                   COUNT(*)              AS trades,
+                   ROUND(SUM(fee_bd),4)  AS bd_pago,
+                   ROUND(SUM(gas_pol),4) AS gas
+            FROM protocol_ops
+            WHERE ts >= ?
+            GROUP BY wallet ORDER BY lucro DESC LIMIT 5
         """, (since,)).fetchall()
-
-        bd_total_geral = sum(float(r[2] or 0) for r in bd_rows)
-        bd_ops         = sum(int(r[1] or 0) for r in bd_rows)
-
-        # BD all-time (acumulado total, sem filtro de período)
-        bd_alltime = float(cur.execute("SELECT ROUND(SUM(fee),6) FROM operacoes WHERE fee > 0").fetchone()[0] or 0)
 
         # ── TVL delta (fl_snapshots) ───────────────────────────────────────────
         snap_rows = cur.execute("""
@@ -929,23 +943,19 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
                     ORDER BY s2.ts ASC LIMIT 1) AS tvl_inicio,
                    (SELECT total_usd FROM fl_snapshots s2
                     WHERE s2.env = s1.env
-                    ORDER BY s2.ts DESC LIMIT 1) AS tvl_fim,
-                   (SELECT ts FROM fl_snapshots s2
-                    WHERE s2.env = s1.env
-                    ORDER BY s2.ts DESC LIMIT 1) AS snap_ts
+                    ORDER BY s2.ts DESC LIMIT 1) AS tvl_fim
             FROM fl_snapshots s1
             GROUP BY env
         """, (since,)).fetchall()
 
         tvl_data: dict = {}
-        for env, tvl_i, tvl_f, snap_ts in snap_rows:
+        for env, tvl_i, tvl_f in snap_rows:
             if tvl_i is not None and tvl_f is not None:
                 tvl_data[env] = {
                     "inicio": float(tvl_i),
                     "fim":    float(tvl_f),
                     "delta":  float(tvl_f) - float(tvl_i),
                     "pct":    ((float(tvl_f) - float(tvl_i)) / float(tvl_i) * 100) if float(tvl_i) > 0 else 0.0,
-                    "ts":     snap_ts or "",
                 }
 
         tvl_total_inicio = sum(v["inicio"] for v in tvl_data.values())
@@ -953,72 +963,83 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
         tvl_total_delta  = tvl_total_fim - tvl_total_inicio
         tvl_total_pct    = (tvl_total_delta / tvl_total_inicio * 100) if tvl_total_inicio > 0 else 0.0
 
-    has_tvl = bool(tvl_data)
-    sg_liq  = "🟢" if total_liq >= 0 else "🔴"
-    sg_tvl  = "🟢" if tvl_total_delta >= 0 else "🔴"
-    sg_bd   = "💎"
+    sg_lucro = "🟢" if p_lucro >= 0 else "🔴"
+    sg_tvl   = "🟢" if tvl_total_delta >= 0 else "🔴"
+    s_lucro  = "+" if p_lucro >= 0 else ""
 
     lines = [
         "💎 <b>LUCRO TOTAL DO PROTOCOLO — WEbdEX</b>",
-        f"🗓️ <i>{esc(label)}</i>",
+        f"🗓️ <i>{esc(label)}</i>  |  POL: <b>${pol_price:.4f}</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
 
-    # ── Bloco 1: Lucro do Protocolo (TVL) ─────────────────────────────────────
-    lines.append("\n🏦 <b>LUCRO DO PROTOCOLO (TVL)</b>")
-    if not has_tvl:
-        lines.append("  ⏳ <i>Aguardando snapshots históricos (worker 30min)</i>")
-        lines.append("  💡 <i>Dados disponíveis após o primeiro ciclo completo</i>")
+    if proto_count == 0:
+        lines.append("\n⏳ <i>Backfill on-chain em andamento (worker ativo)...</i>")
+        lines.append("💡 <i>Dados disponíveis em ~30min após a primeira sincronização.</i>")
     else:
-        sign = "+" if tvl_total_delta >= 0 else ""
+        # ── Bloco 1: Lucro total dos traders ──────────────────────────────────
         lines.append(
-            f"  {sg_tvl} Delta TVL:  <b>{sign}${tvl_total_delta:,.2f}</b>  "
-            f"(<b>{sign}{tvl_total_pct:.2f}%</b>)"
+            f"\n📈 <b>LUCRO DOS TRADERS (Protocolo Completo)</b>\n"
+            f"  {sg_lucro} Lucro Líquido: <b>{s_lucro}${p_lucro:,.2f} USD</b>\n"
+            f"  💰 Ganhos:   <b>+${p_ganhos:,.2f}</b>  |  📉 Perdas: <b>${p_perdas:,.2f}</b>\n"
+            f"  📊 Trades: <b>{p_trades:,}</b>  |  👥 Traders: <b>{p_traders:,}</b>  |  WR: <b>{p_wr:.1f}%</b>"
         )
-        lines.append(f"  📊 TVL Início: <b>${tvl_total_inicio:,.2f}</b>")
-        lines.append(f"  📊 TVL Atual:  <b>${tvl_total_fim:,.2f}</b>")
-        for env, v in tvl_data.items():
-            ic = "🔵" if "v5" in env.lower() else "🟠"
-            s  = "+" if v["delta"] >= 0 else ""
+        for env, trades, traders, lucro, ganhos, perdas, wins, bd_tot, gas_pol in proto_rows:
+            ic  = "🔵" if "v5" in str(env).lower() else "🟠"
+            sg  = "🟢" if (lucro or 0) >= 0 else "🔴"
+            s   = "+" if (lucro or 0) >= 0 else ""
+            wr  = wins / trades * 100 if trades else 0.0
             lines.append(
-                f"\n  {ic} <b>{esc(env)}</b>\n"
-                f"     TVL: <b>${v['fim']:,.2f}</b>  "
-                f"(<b>{s}${v['delta']:,.2f}</b> / <b>{s}{v['pct']:.2f}%</b>)"
+                f"\n  {ic} <b>{esc(str(env))}</b>\n"
+                f"     {sg} Lucro: <b>{s}${(lucro or 0):,.2f}</b>  "
+                f"Trades: <b>{trades:,}</b>  WR: <b>{wr:.1f}%</b>\n"
+                f"     👥 Traders: <b>{traders}</b>  |  Gás: <b>{(gas_pol or 0):,.2f} POL</b>"
             )
 
-    # ── Bloco 2: Lucro dos Usuários ────────────────────────────────────────────
-    lines.append("\n\n👥 <b>LUCRO DOS USUÁRIOS (P&L Posições)</b>")
-    lines.append(
-        f"  {sg_liq} Líquido:  <b>{('+' if total_liq >= 0 else '')}${total_liq:,.4f}</b>\n"
-        f"  💰 Ganhos:  <b>+${total_ganhos:,.4f}</b>  |  📉 Perdas: <b>${total_perdas:,.4f}</b>\n"
-        f"  ⛽ Gás pago: <b>${total_gas:,.4f}</b>  |  📊 Trades: <b>{total_trades:,}</b>"
-    )
-    for amb, trades, bruto, gas, liq, ganhos, perdas in usr_rows:
-        if not trades:
-            continue
-        ic = "🔵" if "v5" in str(amb).lower() else "🟠"
-        sg = "🟢" if (liq or 0) >= 0 else "🔴"
-        s  = "+" if (liq or 0) >= 0 else ""
+        # ── Bloco 2: Gás consumido ─────────────────────────────────────────────
         lines.append(
-            f"\n  {ic} <b>{esc(str(amb)[:16])}</b>\n"
-            f"     {sg} Líq: <b>{s}${(liq or 0):,.4f}</b>  |  Trades: <b>{trades:,}</b>"
+            f"\n\n⛽ <b>GÁS CONSUMIDO (Transações)</b>\n"
+            f"  🔴 Total POL:  <b>{p_gas_pol:,.4f} POL</b>  (~<b>${p_gas_usd:,.2f}</b>)\n"
+            f"  📊 Média/trade: <b>{(p_gas_pol/p_trades):,.6f} POL</b>" if p_trades else
+            f"\n\n⛽ <b>GÁS CONSUMIDO</b>  <i>sem dados</i>"
         )
 
-    # ── Bloco 3: BD coletado ───────────────────────────────────────────────────
-    lines.append("\n\n🎟️ <b>BD COLETADO (Fee Protocolo)</b>")
-    lines.append(
-        f"  {sg_bd} Período:   <b>{bd_total_geral:,.4f} BD</b>  ({bd_ops} ops)\n"
-        f"  🏦 Acumulado: <b>{bd_alltime:,.4f} BD</b> <i>(all-time)</i>"
-    )
-    for amb, ops_fee, bd_tot in bd_rows:
-        if not ops_fee:
-            continue
-        ic = "🔵" if "v5" in str(amb).lower() else "🟠"
+        # ── Bloco 3: BD/Passe coletado ─────────────────────────────────────────
         lines.append(
-            f"\n  {ic} <b>{esc(str(amb)[:16])}</b>\n"
-            f"     💎 <b>{(bd_tot or 0):,.4f} BD</b>  ({ops_fee} ops com fee)"
+            f"\n\n🎟️ <b>BD/PASSE COLETADO (Fee Protocolo)</b>\n"
+            f"  💎 Período:    <b>{p_bd:,.4f} BD</b>\n"
+            f"  🏦 Acumulado:  <b>{bd_alltime:,.4f} BD</b>  <i>(all-time)</i>"
         )
 
+        # ── Bloco 4: TVL delta ─────────────────────────────────────────────────
+        if tvl_data:
+            s_tvl = "+" if tvl_total_delta >= 0 else ""
+            lines.append(
+                f"\n\n🏦 <b>TVL DO PROTOCOLO</b>\n"
+                f"  {sg_tvl} Delta: <b>{s_tvl}${tvl_total_delta:,.2f}</b>  ({s_tvl}{tvl_total_pct:.2f}%)\n"
+                f"  📊 Início: <b>${tvl_total_inicio:,.2f}</b>  →  Atual: <b>${tvl_total_fim:,.2f}</b>"
+            )
+            for env, v in tvl_data.items():
+                ic = "🔵" if "v5" in env.lower() else "🟠"
+                s  = "+" if v["delta"] >= 0 else ""
+                lines.append(
+                    f"\n  {ic} <b>{esc(env)}</b>  "
+                    f"<b>${v['fim']:,.2f}</b>  ({s}${v['delta']:,.2f})"
+                )
+
+        # ── Bloco 5: Top 5 traders ─────────────────────────────────────────────
+        if top_traders:
+            lines.append("\n\n🏆 <b>TOP 5 TRADERS (período)</b>")
+            for i, (wallet, lucro, trades, bd_pago, gas) in enumerate(top_traders, 1):
+                short_w = f"{wallet[:6]}...{wallet[-4:]}" if len(str(wallet)) > 10 else str(wallet)
+                sg = "🟢" if (lucro or 0) >= 0 else "🔴"
+                s  = "+" if (lucro or 0) >= 0 else ""
+                lines.append(
+                    f"  {i}. <code>{short_w}</code>\n"
+                    f"     {sg} <b>{s}${(lucro or 0):,.2f}</b>  |  {trades} trades  |  💎 {(bd_pago or 0):.3f} BD"
+                )
+
+    lines.append(f"\n\n<i>🔍 Fonte: on-chain ({proto_count:,} ops indexadas)</i>")
     return "\n".join(lines)
 
 
