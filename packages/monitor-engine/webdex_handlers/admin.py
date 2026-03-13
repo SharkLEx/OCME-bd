@@ -61,6 +61,7 @@ def adm_kb():
     kb.row("📊 Relatório Institucional")
     kb.row("📊 mybdBook ADM")
     kb.row("📈 Lucro Real (Total/Ambiente)")
+    kb.row("💎 Lucro Total do Protocolo")
     kb.row("🧾 Fornecimento e Liquidez")
     kb.row("📸 Progressão do Capital")
     kb.row("📨 Gerar Convites", "📢 Broadcast")
@@ -851,6 +852,214 @@ def _lucro_real_callback(c):
         txt = _lucro_real_text(periodo)
         bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
                               parse_mode="HTML", reply_markup=_lucro_real_kb(periodo))
+    except Exception as e:
+        logger.exception(e)
+
+
+# ==============================================================================
+# 💎 LUCRO TOTAL DO PROTOCOLO
+# 3 métricas:
+#   1. Lucro do Protocolo  = delta TVL (fl_snapshots)
+#   2. Lucro dos Usuários  = SUM(operacoes.valor) — P&L real das posições
+#   3. BD coletado         = SUM(operacoes.fee)   — tokens BD das fees
+# ==============================================================================
+
+def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
+    from webdex_db import _ciclo_21h_since, _ciclo_21h_label, period_to_hours
+    from datetime import datetime, timedelta
+
+    if periodo == "ciclo":
+        since = _ciclo_21h_since()
+        label = _ciclo_21h_label()
+    elif periodo == "all":
+        since = "2000-01-01 00:00:00"
+        label = "All-Time"
+    else:
+        hours = period_to_hours(periodo)
+        since = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
+        label = periodo.upper()
+
+    with DB_LOCK:
+        cur = conn.cursor()
+
+        # ── Lucro dos Usuários (P&L das posições abertas) ──────────────────────
+        usr_rows = cur.execute("""
+            SELECT
+                COALESCE(ambiente, 'TOTAL') AS amb,
+                COUNT(*)                               AS trades,
+                ROUND(SUM(valor), 4)                   AS bruto,
+                ROUND(SUM(gas_usd), 4)                 AS gas,
+                ROUND(SUM(valor) - SUM(gas_usd), 4)   AS liq,
+                ROUND(SUM(CASE WHEN valor > 0 THEN valor ELSE 0 END), 4) AS ganhos,
+                ROUND(SUM(CASE WHEN valor < 0 THEN valor ELSE 0 END), 4) AS perdas
+            FROM operacoes
+            WHERE tipo='Trade' AND data_hora >= ?
+            GROUP BY amb ORDER BY liq DESC
+        """, (since,)).fetchall()
+
+        total_trades = sum(int(r[1] or 0) for r in usr_rows)
+        total_bruto  = sum(float(r[2] or 0) for r in usr_rows)
+        total_gas    = sum(float(r[3] or 0) for r in usr_rows)
+        total_liq    = sum(float(r[4] or 0) for r in usr_rows)
+        total_ganhos = sum(float(r[5] or 0) for r in usr_rows)
+        total_perdas = sum(float(r[6] or 0) for r in usr_rows)
+
+        # ── BD coletado (fees do protocolo) ───────────────────────────────────
+        bd_rows = cur.execute("""
+            SELECT
+                COALESCE(ambiente, 'TOTAL') AS amb,
+                COUNT(CASE WHEN fee > 0 THEN 1 END) AS ops_com_fee,
+                ROUND(SUM(fee), 6)                  AS bd_total
+            FROM operacoes
+            WHERE data_hora >= ?
+            GROUP BY amb ORDER BY bd_total DESC
+        """, (since,)).fetchall()
+
+        bd_total_geral = sum(float(r[2] or 0) for r in bd_rows)
+        bd_ops         = sum(int(r[1] or 0) for r in bd_rows)
+
+        # BD all-time (acumulado total, sem filtro de período)
+        bd_alltime = float(cur.execute("SELECT ROUND(SUM(fee),6) FROM operacoes WHERE fee > 0").fetchone()[0] or 0)
+
+        # ── TVL delta (fl_snapshots) ───────────────────────────────────────────
+        snap_rows = cur.execute("""
+            SELECT env,
+                   (SELECT total_usd FROM fl_snapshots s2
+                    WHERE s2.env = s1.env AND s2.ts >= ?
+                    ORDER BY s2.ts ASC LIMIT 1) AS tvl_inicio,
+                   (SELECT total_usd FROM fl_snapshots s2
+                    WHERE s2.env = s1.env
+                    ORDER BY s2.ts DESC LIMIT 1) AS tvl_fim,
+                   (SELECT ts FROM fl_snapshots s2
+                    WHERE s2.env = s1.env
+                    ORDER BY s2.ts DESC LIMIT 1) AS snap_ts
+            FROM fl_snapshots s1
+            GROUP BY env
+        """, (since,)).fetchall()
+
+        tvl_data: dict = {}
+        for env, tvl_i, tvl_f, snap_ts in snap_rows:
+            if tvl_i is not None and tvl_f is not None:
+                tvl_data[env] = {
+                    "inicio": float(tvl_i),
+                    "fim":    float(tvl_f),
+                    "delta":  float(tvl_f) - float(tvl_i),
+                    "pct":    ((float(tvl_f) - float(tvl_i)) / float(tvl_i) * 100) if float(tvl_i) > 0 else 0.0,
+                    "ts":     snap_ts or "",
+                }
+
+        tvl_total_inicio = sum(v["inicio"] for v in tvl_data.values())
+        tvl_total_fim    = sum(v["fim"]    for v in tvl_data.values())
+        tvl_total_delta  = tvl_total_fim - tvl_total_inicio
+        tvl_total_pct    = (tvl_total_delta / tvl_total_inicio * 100) if tvl_total_inicio > 0 else 0.0
+
+    has_tvl = bool(tvl_data)
+    sg_liq  = "🟢" if total_liq >= 0 else "🔴"
+    sg_tvl  = "🟢" if tvl_total_delta >= 0 else "🔴"
+    sg_bd   = "💎"
+
+    lines = [
+        "💎 <b>LUCRO TOTAL DO PROTOCOLO — WEbdEX</b>",
+        f"🗓️ <i>{esc(label)}</i>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+
+    # ── Bloco 1: Lucro do Protocolo (TVL) ─────────────────────────────────────
+    lines.append("\n🏦 <b>LUCRO DO PROTOCOLO (TVL)</b>")
+    if not has_tvl:
+        lines.append("  ⏳ <i>Aguardando snapshots históricos (worker 30min)</i>")
+        lines.append("  💡 <i>Dados disponíveis após o primeiro ciclo completo</i>")
+    else:
+        sign = "+" if tvl_total_delta >= 0 else ""
+        lines.append(
+            f"  {sg_tvl} Delta TVL:  <b>{sign}${tvl_total_delta:,.2f}</b>  "
+            f"(<b>{sign}{tvl_total_pct:.2f}%</b>)"
+        )
+        lines.append(f"  📊 TVL Início: <b>${tvl_total_inicio:,.2f}</b>")
+        lines.append(f"  📊 TVL Atual:  <b>${tvl_total_fim:,.2f}</b>")
+        for env, v in tvl_data.items():
+            ic = "🔵" if "v5" in env.lower() else "🟠"
+            s  = "+" if v["delta"] >= 0 else ""
+            lines.append(
+                f"\n  {ic} <b>{esc(env)}</b>\n"
+                f"     TVL: <b>${v['fim']:,.2f}</b>  "
+                f"(<b>{s}${v['delta']:,.2f}</b> / <b>{s}{v['pct']:.2f}%</b>)"
+            )
+
+    # ── Bloco 2: Lucro dos Usuários ────────────────────────────────────────────
+    lines.append("\n\n👥 <b>LUCRO DOS USUÁRIOS (P&L Posições)</b>")
+    lines.append(
+        f"  {sg_liq} Líquido:  <b>{('+' if total_liq >= 0 else '')}${total_liq:,.4f}</b>\n"
+        f"  💰 Ganhos:  <b>+${total_ganhos:,.4f}</b>  |  📉 Perdas: <b>${total_perdas:,.4f}</b>\n"
+        f"  ⛽ Gás pago: <b>${total_gas:,.4f}</b>  |  📊 Trades: <b>{total_trades:,}</b>"
+    )
+    for amb, trades, bruto, gas, liq, ganhos, perdas in usr_rows:
+        if not trades:
+            continue
+        ic = "🔵" if "v5" in str(amb).lower() else "🟠"
+        sg = "🟢" if (liq or 0) >= 0 else "🔴"
+        s  = "+" if (liq or 0) >= 0 else ""
+        lines.append(
+            f"\n  {ic} <b>{esc(str(amb)[:16])}</b>\n"
+            f"     {sg} Líq: <b>{s}${(liq or 0):,.4f}</b>  |  Trades: <b>{trades:,}</b>"
+        )
+
+    # ── Bloco 3: BD coletado ───────────────────────────────────────────────────
+    lines.append("\n\n🎟️ <b>BD COLETADO (Fee Protocolo)</b>")
+    lines.append(
+        f"  {sg_bd} Período:   <b>{bd_total_geral:,.4f} BD</b>  ({bd_ops} ops)\n"
+        f"  🏦 Acumulado: <b>{bd_alltime:,.4f} BD</b> <i>(all-time)</i>"
+    )
+    for amb, ops_fee, bd_tot in bd_rows:
+        if not ops_fee:
+            continue
+        ic = "🔵" if "v5" in str(amb).lower() else "🟠"
+        lines.append(
+            f"\n  {ic} <b>{esc(str(amb)[:16])}</b>\n"
+            f"     💎 <b>{(bd_tot or 0):,.4f} BD</b>  ({ops_fee} ops com fee)"
+        )
+
+    return "\n".join(lines)
+
+
+def _lucro_protocolo_kb(periodo: str = "ciclo") -> types.InlineKeyboardMarkup:
+    periodos = [("Ciclo", "ciclo"), ("24h", "24h"), ("7d", "7d"), ("30d", "30d"), ("All", "all")]
+    kb = types.InlineKeyboardMarkup()
+    row = []
+    for label, p in periodos:
+        mark = f"✅ {label}" if p == periodo else label
+        row.append(types.InlineKeyboardButton(mark, callback_data=f"lproto_{p}"))
+    kb.row(*row)
+    kb.row(types.InlineKeyboardButton("✅ Fechar", callback_data="lproto_close"))
+    return kb
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "💎 Lucro Total do Protocolo")
+def adm_lucro_protocolo(m):
+    if not _is_admin(m.chat.id):
+        return bot.reply_to(m, "⛔ Acesso negado.")
+    bot.send_chat_action(m.chat.id, "typing")
+    try:
+        bot.send_message(m.chat.id, _lucro_protocolo_text("ciclo"),
+                         parse_mode="HTML", reply_markup=_lucro_protocolo_kb("ciclo"))
+    except Exception as e:
+        logger.exception(e)
+        bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("lproto_"))
+def _lucro_protocolo_callback(c):
+    if not _is_admin(c.from_user.id):
+        return bot.answer_callback_query(c.id, "⛔ Acesso negado.")
+    if c.data == "lproto_close":
+        bot.delete_message(c.message.chat.id, c.message.message_id)
+        return bot.answer_callback_query(c.id)
+    periodo = c.data.replace("lproto_", "")
+    bot.answer_callback_query(c.id, f"Carregando {periodo.upper()}...")
+    try:
+        txt = _lucro_protocolo_text(periodo)
+        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_lucro_protocolo_kb(periodo))
     except Exception as e:
         logger.exception(e)
 

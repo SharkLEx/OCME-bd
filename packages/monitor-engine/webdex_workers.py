@@ -261,6 +261,87 @@ def _capital_snapshot_worker():
         time.sleep(_CAPITAL_SNAP_INTERVAL)
 
 # ==============================================================================
+# 📸 FL SNAPSHOT WORKER — TVL automático a cada 30min
+# ==============================================================================
+_FL_SNAP_INTERVAL = 1800  # 30 minutos
+
+def _fl_snapshot_worker():
+    """
+    Worker de background: salva snapshot de TVL (fl_snapshots) a cada 30min.
+    Alimenta o cálculo de Lucro do Protocolo (delta TVL ao longo do tempo).
+    """
+    logger.info("📸 FL Snapshot worker: Ativo...")
+    time.sleep(60)  # aguarda sistema inicializar
+    while True:
+        try:
+            from webdex_config import CONTRACTS, RPC_URL, RPC_CAPITAL
+            from webdex_chain import web3_for_rpc, obter_preco_pol
+            from webdex_db import now_br
+
+            w3 = web3_for_rpc(RPC_CAPITAL, timeout=10)
+            pol_price = obter_preco_pol()
+            ts_now = now_br().strftime("%Y-%m-%d %H:%M:%S")
+
+            _ABI_ERC20 = '[{"inputs":[],"name":"totalSupply","outputs":[{"type":"uint256"}],"type":"function"},{"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"type":"uint256"}],"type":"function"}]'
+            import json as _json
+
+            for env_key, c_data in CONTRACTS.items():
+                try:
+                    lp_usdt_addr = c_data.get("LP_USDT", "")
+                    lp_loop_addr = c_data.get("LP_LOOP", "")
+                    sub_addr     = c_data.get("SUBACCOUNTS", "")
+                    mgr_addr     = c_data.get("MANAGER", "")
+
+                    from webdex_config import ADDR_USDT0, ADDR_LPLPUSD
+                    from web3 import Web3 as _W3
+
+                    _erc20 = lambda a: w3.eth.contract(
+                        address=_W3.to_checksum_address(a),
+                        abi=_json.loads(_ABI_ERC20)
+                    )
+
+                    lp_usdt_supply = float(_erc20(lp_usdt_addr).functions.totalSupply().call()) / 1e6  if lp_usdt_addr else 0.0
+                    lp_loop_supply = float(_erc20(lp_loop_addr).functions.totalSupply().call()) / 1e9  if lp_loop_addr else 0.0
+                    liq_usdt       = float(_erc20(ADDR_USDT0).functions.balanceOf(_W3.to_checksum_address(sub_addr)).call()) / 1e6  if sub_addr else 0.0
+                    liq_loop       = float(_erc20(ADDR_LPLPUSD).functions.balanceOf(_W3.to_checksum_address(sub_addr)).call()) / 1e9 if sub_addr else 0.0
+                    gas_pol        = float(w3.from_wei(w3.eth.get_balance(_W3.to_checksum_address(mgr_addr)), "ether")) if mgr_addr else 0.0
+
+                    # LP price via DexScreener (reutiliza lógica existente)
+                    try:
+                        lp_usdt_price = _fetch_lp_price_per_unit(w3, lp_usdt_addr, 6)
+                        lp_loop_price = _fetch_lp_price_per_unit(w3, lp_loop_addr, 9)
+                    except Exception:
+                        lp_usdt_price = lp_loop_price = 1.0
+
+                    total_usd = (
+                        liq_usdt +
+                        liq_loop * lp_loop_price +
+                        lp_usdt_supply * lp_usdt_price +
+                        gas_pol * pol_price
+                    )
+
+                    with DB_LOCK:
+                        conn.execute(
+                            """INSERT INTO fl_snapshots
+                               (ts, env, lp_usdt_supply, lp_loop_supply, liq_usdt, liq_loop, gas_pol, pol_price, total_usd)
+                               VALUES (?,?,?,?,?,?,?,?,?)""",
+                            (ts_now, env_key, lp_usdt_supply, lp_loop_supply,
+                             liq_usdt, liq_loop, gas_pol, pol_price, total_usd)
+                        )
+                        conn.commit()
+
+                    logger.info("[fl_snap] %s total_usd=%.2f liq_usdt=%.2f gas_pol=%.2f",
+                                env_key, total_usd, liq_usdt, gas_pol)
+                except Exception as _env_e:
+                    logger.warning("[fl_snap] erro env=%s: %s", env_key, _env_e)
+
+        except Exception as _e:
+            logger.warning("[fl_snapshot_worker] erro geral: %s", _e)
+
+        time.sleep(_FL_SNAP_INTERVAL)
+
+
+# ==============================================================================
 # 👥 USER CAPITAL REFRESH WORKER
 # ==============================================================================
 _CAP_WORKER_RUNNING = False

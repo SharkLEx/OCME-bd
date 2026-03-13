@@ -19,6 +19,7 @@ from webdex_workers import (
     _user_capital_refresh_worker,
     _funnel_worker,
     _inactivity_auto_loop,
+    _fl_snapshot_worker,
 )
 
 # Importar handlers — registra os @bot.message_handler
@@ -37,6 +38,7 @@ _THREAD_REGISTRY: dict[str, callable] = {
     "user_capital_refresh":    _user_capital_refresh_worker,
     "funnel_worker":           _funnel_worker,
     "inactivity_auto_loop":    _inactivity_auto_loop,
+    "fl_snapshot_worker":      _fl_snapshot_worker,
 }
 
 
