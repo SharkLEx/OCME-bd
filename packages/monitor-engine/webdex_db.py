@@ -869,11 +869,49 @@ conn.commit()
 
 
 def populate_known_wallets() -> int:
-    """Importa todas as wallets com trades de op_owner para known_wallets.
-    Seguro para rodar múltiplas vezes (INSERT OR IGNORE).
+    """Importa wallets com trades de protocol_ops (todos) + op_owner (registrados).
+    Seguro para rodar múltiplas vezes (INSERT OR IGNORE + UPDATE se melhor dado).
     Retorna número de wallets novas inseridas."""
     with DB_LOCK:
-        rows = cursor.execute("""
+        # ── Fonte 1: protocol_ops — TODOS os traders on-chain ─────────────────
+        proto_rows = cursor.execute("""
+            SELECT wallet,
+                   env,
+                   COUNT(*)                                        AS n,
+                   SUM(CASE WHEN profit > 0 THEN 1 ELSE 0 END)   AS wins,
+                   SUM(CASE WHEN profit < 0 THEN 1 ELSE 0 END)   AS losses,
+                   ROUND(SUM(profit), 6)                          AS lucro,
+                   MAX(ts)                                        AS ultimo
+            FROM protocol_ops
+            WHERE wallet != '' AND env != 'UNKNOWN'
+            GROUP BY wallet, env
+            ORDER BY n DESC
+        """).fetchall()
+
+        inserted = 0
+        for wallet, env, n, wins, losses, lucro, ultimo in proto_rows:
+            if not wallet:
+                continue
+            try:
+                cursor.execute("""
+                    INSERT INTO known_wallets
+                        (wallet, env, trade_count, wins, losses, lucro_total, last_trade)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(wallet) DO UPDATE SET
+                        trade_count = MAX(trade_count, excluded.trade_count),
+                        wins        = MAX(wins,        excluded.wins),
+                        losses      = MAX(losses,      excluded.losses),
+                        lucro_total = excluded.lucro_total,
+                        last_trade  = COALESCE(excluded.last_trade, last_trade),
+                        env         = COALESCE(NULLIF(excluded.env,''), env)
+                """, (wallet.lower(), env or "", n, wins or 0, losses or 0, lucro or 0, ultimo))
+                if cursor.rowcount:
+                    inserted += 1
+            except Exception:
+                pass
+
+        # ── Fonte 2: op_owner + operacoes — retrocompatibilidade ──────────────
+        old_rows = cursor.execute("""
             SELECT oo.wallet,
                    o.ambiente,
                    COUNT(*) as n,
@@ -888,18 +926,24 @@ def populate_known_wallets() -> int:
             ORDER BY n DESC
         """).fetchall()
 
-        inserted = 0
-        for wallet, env, n, wins, losses, lucro, ultimo in rows:
+        for wallet, env, n, wins, losses, lucro, ultimo in old_rows:
             try:
                 cursor.execute("""
-                    INSERT OR IGNORE INTO known_wallets
+                    INSERT INTO known_wallets
                         (wallet, env, trade_count, wins, losses, lucro_total, last_trade)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(wallet) DO UPDATE SET
+                        trade_count = MAX(trade_count, excluded.trade_count),
+                        wins        = MAX(wins,        excluded.wins),
+                        losses      = MAX(losses,      excluded.losses),
+                        lucro_total = excluded.lucro_total,
+                        last_trade  = COALESCE(excluded.last_trade, last_trade)
                 """, (wallet.lower(), env or "", n, wins or 0, losses or 0, lucro or 0, ultimo))
                 if cursor.rowcount:
                     inserted += 1
             except Exception:
                 pass
+
         conn.commit()
         return inserted
 

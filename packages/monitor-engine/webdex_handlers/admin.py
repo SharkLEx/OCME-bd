@@ -500,6 +500,36 @@ def adm_relatorio_institucional(m):
             f"💰 <b>Capital Total:</b> ${total_capital:,.2f} (on-chain)",
             f"🏆 <b>Concentração Top 3:</b> {top3_percent:.1f}%",
         ]
+
+        # Cobertura do protocolo via protocol_ops
+        try:
+            with DB_LOCK:
+                _cov_wallets = cursor.execute(
+                    "SELECT COUNT(DISTINCT wallet) FROM protocol_ops"
+                ).fetchone()[0]
+                _cov_trades = cursor.execute(
+                    "SELECT COUNT(*) FROM protocol_ops"
+                ).fetchone()[0]
+                _cov_bd = cursor.execute(
+                    "SELECT ROUND(SUM(fee_bd),4) FROM protocol_ops"
+                ).fetchone()[0] or 0.0
+                _cov_profit = cursor.execute(
+                    "SELECT ROUND(SUM(profit),4) FROM protocol_ops"
+                ).fetchone()[0] or 0.0
+            _coverage = (total_users / _cov_wallets * 100) if _cov_wallets > 0 else 0.0
+            lines += [
+                "",
+                "🔗 <b>Cobertura do Protocolo (on-chain)</b>",
+                f"  👤 Traders on-chain: <b>{_cov_wallets:,}</b>",
+                f"  🤖 No bot (OCME):    <b>{total_users}</b>",
+                f"  📊 Cobertura:        <b>{_coverage:.1f}%</b>",
+                f"  📈 Trades indexados: <b>{_cov_trades:,}</b>",
+                f"  💵 Lucro total:      <b>{_cov_profit:+.4f}</b>",
+                f"  💎 BD coletado:      <b>{_cov_bd:.4f}</b> tokens",
+            ]
+        except Exception as _ce:
+            logger.debug("[relatorio_institucional coverage] %s", _ce)
+
         _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
     except Exception as e:
         logger.exception(e)
@@ -726,6 +756,44 @@ def adm_analise_subaccounts(m):
             logger.warning("[adm_subaccounts onchain] %s", _oc_e)
         if not onchain_ok:
             lines.append("  <i>(dados on-chain indisponíveis — use mybdBook para capital individual)</i>")
+
+        # ── Seção protocol_ops: TODOS os traders on-chain ──────────────────
+        lines.append("\n🌐 <b>Todos os Traders On-Chain (protocol_ops)</b>")
+        try:
+            with DB_LOCK:
+                _proto_env = cursor.execute("""
+                    SELECT env,
+                           COUNT(DISTINCT wallet)                          AS wallets,
+                           COUNT(*)                                        AS trades,
+                           ROUND(SUM(profit), 4)                          AS profit,
+                           ROUND(SUM(fee_bd), 4)                          AS fee_bd,
+                           COUNT(CASE WHEN profit > 0 THEN 1 END)         AS wins
+                    FROM protocol_ops
+                    GROUP BY env ORDER BY trades DESC
+                """).fetchall()
+                _proto_total_w = cursor.execute(
+                    "SELECT COUNT(DISTINCT wallet) FROM protocol_ops"
+                ).fetchone()[0]
+                _proto_total_t = cursor.execute(
+                    "SELECT COUNT(*) FROM protocol_ops"
+                ).fetchone()[0]
+            lines.append(
+                f"  📊 Total wallets únicas: <b>{_proto_total_w:,}</b>  "
+                f"Trades: <b>{_proto_total_t:,}</b>"
+            )
+            for _env, _wlt, _tr, _pft, _fbd, _wns in _proto_env:
+                _wr = _wns / _tr * 100 if _tr else 0
+                _sg = "🟢" if (_pft or 0) >= 0 else "🔴"
+                _ico = "🔵" if "v5" in str(_env).lower() else "🟠"
+                lines.append(
+                    f"  {_ico} <b>{esc(str(_env)[:14])}</b>  "
+                    f"Wallets:{_wlt}  Trades:{_tr:,}\n"
+                    f"     {_sg} Lucro:{(_pft or 0):+.4f}  "
+                    f"BD:{(_fbd or 0):.4f}  WR:{_wr:.1f}%"
+                )
+        except Exception as _pe:
+            logger.debug("[adm_subaccounts proto_ops] %s", _pe)
+            lines.append("  <i>(protocol_ops indisponível — sync em andamento)</i>")
 
         _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
     except Exception as e:
@@ -1595,6 +1663,41 @@ def adm_progressao_capital(m):
         "<i>📸 Snapshot salvo — próxima comparação mostrará delta de crescimento</i>",
     ]
 
+    # ── 6. TVL histórico via fl_snapshots ────────────────────────────────────
+    lines += ["", "📊 <b>EVOLUÇÃO TVL (fl_snapshots)</b>"]
+    try:
+        with DB_LOCK:
+            _fl_rows = conn.execute("""
+                SELECT env, tvl_usd, ts
+                FROM fl_snapshots
+                ORDER BY ts DESC
+                LIMIT 20
+            """).fetchall()
+        if _fl_rows:
+            _fl_by_env: dict = {}
+            for _fe, _fv, _ft in _fl_rows:
+                _fl_by_env.setdefault(_fe, []).append((_ft, float(_fv or 0)))
+            for _env_k in sorted(_fl_by_env.keys()):
+                _snaps = _fl_by_env[_env_k]          # newest first
+                _latest_tvl = _snaps[0][1]
+                _oldest_tvl = _snaps[-1][1]
+                _delta_tvl  = _latest_tvl - _oldest_tvl
+                _d_ic       = "📈" if _delta_tvl >= 0 else "📉"
+                _ico        = "🔵" if "v5" in str(_env_k).lower() else "🟠"
+                lines.append(
+                    f"  {_ico} <b>{esc(str(_env_k)[:14])}</b>  "
+                    f"TVL: <b>${_latest_tvl:,.2f}</b>  "
+                    f"{_d_ic} {_delta_tvl:+,.2f}"
+                )
+                # Últimas 3 entradas como histórico
+                for _snap_ts, _snap_tvl in _snaps[:3]:
+                    lines.append(f"     <code>{str(_snap_ts)[:16]}</code>  ${_snap_tvl:,.2f}")
+        else:
+            lines.append("  <i>(sem snapshots ainda — worker fl_snapshot gera a cada 30min)</i>")
+    except Exception as _fe:
+        logger.debug("[progressao_capital fl_snapshots] %s", _fe)
+        lines.append("  <i>(fl_snapshots indisponível)</i>")
+
     try:
         _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
     except Exception as e:
@@ -1666,6 +1769,26 @@ def _status_monitor_text() -> str:
             detail = f"erros: {errs}" if errs > 0 else "ok"
         pool_lines.append(f"  {icon} {label} ({detail})")
 
+    # protocol_ops sync status
+    proto_sync_icon = "🟢" if "protocol_ops_sync" in alive else "🔴"
+    try:
+        with DB_LOCK:
+            _ops_count = conn.execute("SELECT COUNT(*) FROM protocol_ops").fetchone()[0]
+            _sync_b1 = conn.execute(
+                "SELECT value FROM config WHERE key='proto_sync_block_AG_C_bd'"
+            ).fetchone()
+            _sync_b2 = conn.execute(
+                "SELECT value FROM config WHERE key='proto_sync_block_bd_v5'"
+            ).fetchone()
+        _sync_b1_str = f"AG_C_bd→{int(_sync_b1[0]):,}" if _sync_b1 else "AG_C_bd→n/a"
+        _sync_b2_str = f"bd_v5→{int(_sync_b2[0]):,}" if _sync_b2 else "bd_v5→n/a"
+        proto_sync_str = (
+            f"{proto_sync_icon} ops={_ops_count:,}  "
+            f"{_sync_b1_str}  {_sync_b2_str}"
+        )
+    except Exception:
+        proto_sync_str = f"{proto_sync_icon} (indisponível)"
+
     return (
         "📡 <b>STATUS DO MONITOR</b>\n\n"
         f"⏱️ Uptime:       {uptime}\n"
@@ -1682,6 +1805,8 @@ def _status_monitor_text() -> str:
         f"🔌 RPC Pool (3 endpoints)\n"
         + "\n".join(pool_lines) + "\n\n"
         f"🗂️ Wallet map: {wm_str}\n\n"
+        f"🔗 Protocol sync (protocol_ops)\n"
+        f"  {proto_sync_str}\n\n"
         f"🧵 Threads críticas\n"
         + "\n".join(thread_lines) + "\n\n"
         f"⚠️ Último erro:\n<code>{esc(str(last_err)[:200])}</code>"
