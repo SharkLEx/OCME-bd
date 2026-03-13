@@ -861,11 +861,10 @@ def _lucro_real_callback(c):
 # Lógica correta:
 #   Fornecimento = LP_token.totalSupply()            — quantos LP tokens existem
 #   Liquidez     = TOKEN.balanceOf(SUBACCOUNTS_addr) — capital no contrato SubAccounts
-#   Gás          = MANAGER.gasBalance()              — POL disponível no Manager
+#   Gás          = w3.eth.get_balance(MANAGER_addr)  — saldo nativo POL do contrato
 # ==============================================================================
 
 _ABI_ERC20_BASIC = json.loads('[{"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]')
-_ABI_MANAGER_GAS = json.loads('[{"inputs":[],"name":"gasBalance","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"}]')
 
 def _fl_supply(w3, lp_addr: str, dec: int) -> float:
     """totalSupply do LP token — quantos LP tokens foram emitidos."""
@@ -884,10 +883,10 @@ def _fl_balance(w3, token_addr: str, holder_addr: str, dec: int) -> float:
         return -1.0
 
 def _fl_manager_gas(w3, mgr_addr: str) -> float:
-    """gasBalance() do Manager — POL disponível para gas."""
+    """Saldo nativo POL do Manager — capital depositado por usuários para gas de transações."""
     try:
-        c = w3.eth.contract(address=Web3.to_checksum_address(mgr_addr), abi=_ABI_MANAGER_GAS)
-        return float(w3.from_wei(c.functions.gasBalance().call(), "ether"))
+        raw = w3.eth.get_balance(Web3.to_checksum_address(mgr_addr))
+        return float(w3.from_wei(raw, "ether"))
     except Exception:
         return -1.0
 
@@ -1084,11 +1083,11 @@ def adm_fornecimento_liquidez(m):
                 st = " 🟢" if r >= 80 else (" ⚠️ Baixo" if r < 10 else "")
                 msg += f"  🔄 LOOP/LP-LOOP: {_fl_pct_bar(r)} <b>{r:.2f}%</b>{st}\n"
 
-            # Gás
+            # Gás (saldo nativo POL depositado pelos usuários no Manager)
             gp = d["gas_pol"]
-            g_s = "🟢" if gp >= 10 else ("🟡" if gp >= 2 else ("🔴 BAIXO" if gp >= 0 else "⚠️"))
+            g_s = "🟢" if gp >= 100 else ("🟡" if gp >= 10 else ("🔴 BAIXO" if gp >= 0 else "⚠️"))
             g_u = f" (~${gp * pol_price:,.2f})" if gp >= 0 and pol_price > 0 else ""
-            msg += f"  ⛽ Manager Gas: <b>{_fl_fmt(gp, 4)} POL</b>{esc(g_u)} {g_s}\n"
+            msg += f"  ⛽ Gas Manager (usuários): <b>{_fl_fmt(gp, 2)} POL</b>{esc(g_u)} {g_s}\n"
 
             # Atividade 30d
             st = d["stat"]
