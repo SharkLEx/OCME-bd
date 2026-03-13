@@ -167,9 +167,10 @@ def _compute_user_capital(urow: dict):
     return 0.0, {}
 
 def _adm_pro_report(limit_users: int = 80) -> str:
+    from webdex_db import _ciclo_21h_since, _ciclo_21h_label, now_br
     now_ts = time.time()
-    dt_24h = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-    dt_7d  = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    dt_24h = _ciclo_21h_since()   # P&L do ciclo atual (desde 21h)
+    dt_7d  = (now_br() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
 
     total_users = int(cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0] or 0)
     active_users = int(cursor.execute("SELECT COUNT(*) FROM users WHERE active=1").fetchone()[0] or 0)
@@ -285,9 +286,9 @@ def _adm_pro_report(limit_users: int = 80) -> str:
         "",
         "━━━━━━━━━━━━━━━━━━━━",
         "📊 <b>Performance do Protocolo</b>",
-        f"    Trades (24h):  <b>{trd_24h}</b>",
-        f"    {wr_icon} WinRate (24h): <b>{wr_24h:.1f}%</b>",
-        f"    P&L (24h):     <b>{pnl24_sign}${pnl_24h:,.2f}</b>",
+        f"    Trades (ciclo):<b>{trd_24h}</b>",
+        f"    {wr_icon} WinRate (ciclo):<b>{wr_24h:.1f}%</b>",
+        f"    P&L (ciclo):   <b>{pnl24_sign}${pnl_24h:,.2f}</b>",
         f"    P&L (7d):      <b>{pnl7d_sign}${pnl_7d:,.2f}</b>",
         "",
         "━━━━━━━━━━━━━━━━━━━━",
@@ -764,13 +765,15 @@ def _lucro_real_text(periodo: str = "ciclo") -> str:
             ORDER BY liq DESC
         """, (since,)).fetchall()
 
+        # Agrupa por ciclo 21h: shift -21h para que o "dia" do ciclo comece às 21h
+        # Ex.: trade às 22:00 do dia X → datetime(22:00, '-21h') = 01:00 do dia X+1 → DATE = X+1 (ciclo X→X+1)
         daily = cur.execute("""
-            SELECT DATE(data_hora) AS dia,
+            SELECT DATE(datetime(data_hora, '-21 hours')) AS dia_ciclo,
                    ROUND(SUM(valor) - SUM(gas_usd), 4) AS liq,
                    COUNT(*) AS trades
             FROM operacoes
             WHERE tipo='Trade' AND data_hora >= ?
-            GROUP BY dia ORDER BY dia DESC LIMIT 7
+            GROUP BY dia_ciclo ORDER BY dia_ciclo DESC LIMIT 7
         """, (since,)).fetchall()
 
     total_trades = sum(int(r[1] or 0) for r in env_rows)
@@ -805,10 +808,10 @@ def _lucro_real_text(periodo: str = "ciclo") -> str:
         )
 
     if daily:
-        lines.append("\n\n📅 <b>ÚLTIMOS 7 DIAS</b>")
-        for dia, liq, trades in daily:
+        lines.append("\n\n📅 <b>ÚLTIMOS 7 CICLOS (21h→21h)</b>")
+        for dia_ciclo, liq, trades in daily:
             ic = "🟢" if (liq or 0) >= 0 else "🔴"
-            lines.append(f"  {ic} {dia}: <b>{(liq or 0):+.4f}</b>  ({trades} trades)")
+            lines.append(f"  {ic} {dia_ciclo} (21h→): <b>{(liq or 0):+.4f}</b>  ({trades} trades)")
 
     return "\n".join(lines)
 
@@ -855,7 +858,7 @@ def _lucro_real_callback(c):
 # ==============================================================================
 # 🧾 FORNECIMENTO E LIQUIDEZ — on-chain LP reserves por ambiente
 # ==============================================================================
-_ABI_LP_MIN = json.loads('[{"inputs":[],"name":"getReserves","outputs":[{"name":"reserve0","type":"uint128"},{"name":"reserve1","type":"uint128"},{"name":"blockTimestampLast","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"}]')
+_ABI_LP_MIN = json.loads('[{"inputs":[],"name":"getReserves","outputs":[{"name":"reserve0","type":"uint112"},{"name":"reserve1","type":"uint112"},{"name":"blockTimestampLast","type":"uint32"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]')
 
 def _fetch_lp_data(lp_addr: str, label: str, dec_r0: int = 6, dec_r1: int = 9) -> dict:
     """Busca reserves e totalSupply de um LP on-chain."""

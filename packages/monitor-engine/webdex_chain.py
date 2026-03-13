@@ -223,6 +223,28 @@ def _chain_cache_worker():
         time.sleep(12)
 
 def obter_preco_pol() -> float:
+    """Busca preço do POL/MATIC via Chainlink on-chain (Polygon) com fallback Binance."""
+    _CHAINLINK_MATIC_USD = "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0"
+    _ABI_CHAINLINK = [{"inputs":[],"name":"latestRoundData","outputs":[
+        {"name":"roundId","type":"uint80"},
+        {"name":"answer","type":"int256"},
+        {"name":"startedAt","type":"uint256"},
+        {"name":"updatedAt","type":"uint256"},
+        {"name":"answeredInRound","type":"uint80"}
+    ],"stateMutability":"view","type":"function"}]
+    try:
+        w3 = web3_for_rpc(RPC_CAPITAL, timeout=5)
+        feed = w3.eth.contract(
+            address=Web3.to_checksum_address(_CHAINLINK_MATIC_USD),
+            abi=_ABI_CHAINLINK,
+        )
+        _, answer, _, updated_at, _ = feed.functions.latestRoundData().call()
+        # Chainlink retorna 8 casas decimais; rejeita dados com +1h de atraso
+        if answer > 0 and (time.time() - updated_at) < 3600:
+            return float(answer) / 1e8
+    except Exception:
+        pass
+    # Fallback: Binance REST
     try:
         r = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=POLUSDT", timeout=3).json()
         return float(r["price"])
