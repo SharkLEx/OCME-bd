@@ -302,18 +302,19 @@ def _protocol_ops_sync_worker():
 
                 # Primeiro run OU genesis não concluído → começa do deploy
                 genesis_done = get_config(genesis_key, "0")
-                if last_synced == 0 or genesis_done != "1":
-                    if last_synced == 0 or last_synced > deploy_block + 100:
-                        # Reset para o bloco de deploy (histórico completo)
+                if genesis_done != "1":
+                    if last_synced == 0:
+                        # Primeira execução — inicia backfill do bloco de deploy
                         last_synced = deploy_block - 1
                         set_config(config_key, str(last_synced))
                         _log.info(
-                            "[proto_sync] %s: backfill COMPLETO desde deploy bloco %d "
+                            "[proto_sync] %s: iniciando backfill desde deploy bloco %d "
                             "(curr=%d, gap=%d blocos / ~%.1f dias)",
                             env_key, deploy_block, curr_block,
                             curr_block - deploy_block,
                             (curr_block - deploy_block) * 2.4 / 86400
                         )
+                    # else: backfill em progresso — continua de last_synced sem resetar
 
                 if last_synced >= curr_block:
                     # Histórico 100% completo — marca genesis como done
