@@ -994,25 +994,28 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
         proto_count = cur.execute("SELECT COUNT(*) FROM protocol_ops").fetchone()[0] or 0
 
         # ── Backfill progress (só usado na aba All) ────────────────────────────
-        # NOTA: usa cur.execute direto — get_config() adquire DB_LOCK e causaria deadlock
+        # NOTA: usa cur.execute direto (chave/valor) — get_config() adquire DB_LOCK → deadlock
         if periodo == "all":
-            from webdex_config import CONTRACTS_DEPLOY_BLOCK
-            def _cfg(k, d="0"):
-                row = cur.execute("SELECT value FROM config WHERE key=?", (k,)).fetchone()
-                return row[0] if row else d
-            _curr_blk = int(_cfg("last_block") or "0")
-            for _ek in ("bd_v5", "AG_C_bd"):
-                _synced = int(_cfg(f"proto_sync_block_{_ek}") or "0")
-                _deploy = CONTRACTS_DEPLOY_BLOCK.get(_ek, 0)
-                _total  = max(1, _curr_blk - _deploy)
-                _done   = max(0, _synced - _deploy)
-                _pct    = min(100.0, _done / _total * 100)
-                _genesis = _cfg(f"proto_genesis_done_{_ek}") or "0"
-                _bf_data[_ek] = {
-                    "synced": _synced, "deploy": _deploy,
-                    "curr": _curr_blk, "pct": _pct,
-                    "complete": _genesis == "1",
-                }
+            try:
+                from webdex_config import CONTRACTS_DEPLOY_BLOCK
+                def _cfg(k, d="0"):
+                    row = cur.execute("SELECT valor FROM config WHERE chave=?", (k,)).fetchone()
+                    return row[0] if row else d
+                _curr_blk = int(_cfg("last_block") or "0")
+                for _ek in ("bd_v5", "AG_C_bd"):
+                    _synced = int(_cfg(f"proto_sync_block_{_ek}") or "0")
+                    _deploy = CONTRACTS_DEPLOY_BLOCK.get(_ek, 0)
+                    _total  = max(1, _curr_blk - _deploy)
+                    _done   = max(0, _synced - _deploy)
+                    _pct    = min(100.0, _done / _total * 100)
+                    _genesis = _cfg(f"proto_genesis_done_{_ek}") or "0"
+                    _bf_data[_ek] = {
+                        "synced": _synced, "deploy": _deploy,
+                        "curr": _curr_blk, "pct": _pct,
+                        "complete": _genesis == "1",
+                    }
+            except Exception as _bf_err:
+                logger.warning("[lucro_proto] backfill data error: %s", _bf_err)
 
             # Breakdown mensal por ambiente
             _monthly = cur.execute("""
@@ -1125,14 +1128,14 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
         lines += ["", "⏳ <i>Backfill on-chain em andamento (worker ativo)...</i>",
                   "💡 <i>Dados disponíveis em ~30min após a primeira sincronização.</i>"]
     else:
-        # ── Bloco 1: Consolidado global ────────────────────────────────────────
+        # ── Bloco 1: P&L dos Traders (resultado on-chain) ─────────────────────
         lpt_p = p_lucro / p_trades if p_trades else 0
         lines += [
             "",
-            "🌐 <b>CONSOLIDADO GLOBAL</b>",
+            "📈 <b>P&amp;L DOS TRADERS</b>  <i>(resultado on-chain dos usuários)</i>",
             f"  ├─ 📊 Trades: <b>{p_trades:,}</b>  👥 Traders: <b>{p_traders:,}</b>  WR: <b>{p_wr:.1f}%</b>",
-            f"  ├─ 💰 Ganhos: <b>+${p_ganhos:,.2f}</b>  📉 Perdas: <b>${p_perdas:,.2f}</b>",
-            f"  └─ {sg_lucro} Líquido: <b>{s_lucro}${p_lucro:,.2f} USD</b>  (<b>{lpt_p:+.4f}/trade</b>)",
+            f"  ├─ ✅ Lucros: <b>+${p_ganhos:,.2f}</b>  ❌ Perdas: <b>${p_perdas:,.2f}</b>",
+            f"  └─ {sg_lucro} Resultado: <b>{s_lucro}${p_lucro:,.2f} USD</b>  (<b>{lpt_p:+.4f}/trade</b>)",
             "",
             sep,
         ]
@@ -1148,11 +1151,10 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
                 "",
                 f"{ic} <b>{esc(str(env))}</b>",
                 f"  ├─ 📊 Trades: <b>{trades:,}</b>  👥 Traders: <b>{traders:,}</b>  WR: <b>{wr:.1f}%</b>",
-                f"  ├─ 💰 Ganhos: <b>+${(ganhos or 0):,.2f}</b>  📉 Perdas: <b>${(perdas or 0):,.2f}</b>",
-                f"  └─ {sg} Líquido: <b>{s}${(lucro or 0):,.2f} USD</b>  (<b>{lpt:+.4f}/trade</b>)",
+                f"  ├─ ✅ Lucros: <b>+${(ganhos or 0):,.2f}</b>  ❌ Perdas: <b>${(perdas or 0):,.2f}</b>",
+                f"  └─ {sg} Resultado: <b>{s}${(lucro or 0):,.2f} USD</b>  (<b>{lpt:+.4f}/trade</b>)",
             ]
 
-        # ── Bloco 2: Gás consumido ─────────────────────────────────────────────
         # ── Bloco 2: Gás consumido ─────────────────────────────────────────────
         lines += ["", sep, "", "⛽ <b>GÁS CONSUMIDO (Transações)</b>"]
         if p_trades:
@@ -1163,12 +1165,12 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
         else:
             lines.append("  <i>sem dados</i>")
 
-        # ── Bloco 3: BD/Passe coletado ─────────────────────────────────────────
+        # ── Bloco 3: Receita do protocolo (BD fee) ─────────────────────────────
         lines += [
             "", sep, "",
-            "🎟️ <b>BD/PASSE COLETADO (Fee Protocolo)</b>",
-            f"  ├─ 💎 Período:   <b>{p_bd:,.4f} BD</b>",
-            f"  └─ 🏦 Acumulado: <b>{bd_alltime:,.4f} BD</b>  <i>(all-time)</i>",
+            "💎 <b>RECEITA DO PROTOCOLO</b>  <i>(BD/Passe coletado on-chain)</i>",
+            f"  ├─ 🏦 Período:   <b>{p_bd:,.4f} BD</b>",
+            f"  └─ 📦 Acumulado: <b>{bd_alltime:,.4f} BD</b>  <i>(all-time indexado)</i>",
         ]
 
         # ── Bloco 4: TVL delta ─────────────────────────────────────────────────
@@ -1219,7 +1221,7 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
                 lines.append("  <i>💡 Dados históricos serão completados ao final do backfill</i>")
 
             if _monthly_by_env:
-                lines += ["", sep, "", "📅 <b>HISTÓRICO MENSAL (OpenPosition events)</b>"]
+                lines += ["", sep, "", "📅 <b>HISTÓRICO MENSAL</b>  <i>(P&amp;L traders | 💎 receita protocolo)</i>"]
                 for _env in sorted(_monthly_by_env, key=lambda e: (0 if "v5" in e.lower() else 1, e)):
                     _ic = "🔵" if "v5" in _env.lower() else "🟠"
                     lines += ["", f"{_ic} <b>{esc(_env)}</b>"]
