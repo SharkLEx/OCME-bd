@@ -632,168 +632,123 @@ def adm_analise_subaccounts(m):
     if not _is_admin(m.chat.id):
         return bot.reply_to(m, "⛔ Acesso negado.")
     bot.send_chat_action(m.chat.id, "typing")
+
+    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
     try:
         with DB_LOCK:
             cur = conn.cursor()
 
-            # Por ambiente: n° de subcontas distintas, trades, lucro, wallets
+            # 1. Por ambiente — subconta, wallet, trades, liq, wins/losses
             env_rows = cur.execute("""
                 SELECT
-                    COALESCE(o.ambiente, 'UNKNOWN') AS amb,
-                    COUNT(DISTINCT o.sub_conta)                             AS n_subs,
-                    COUNT(*)                                                AS trades,
-                    ROUND(SUM(o.valor) - SUM(o.gas_usd), 4)               AS liq,
-                    COUNT(CASE WHEN o.valor - o.gas_usd > 0 THEN 1 END)   AS wins,
-                    COUNT(DISTINCT ow.wallet)                              AS wallets
+                    COALESCE(o.ambiente, 'UNKNOWN')                        AS amb,
+                    COUNT(DISTINCT o.sub_conta)                            AS n_subs,
+                    COUNT(*)                                               AS trades,
+                    ROUND(SUM(o.valor) - SUM(o.gas_usd), 4)              AS liq,
+                    COUNT(CASE WHEN o.valor - o.gas_usd > 0 THEN 1 END)  AS wins,
+                    COUNT(CASE WHEN o.valor - o.gas_usd < 0 THEN 1 END)  AS losses,
+                    COUNT(DISTINCT ow.wallet)                             AS wallets
                 FROM operacoes o
-                JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                LEFT JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
                 WHERE o.tipo='Trade'
                 GROUP BY amb
-                ORDER BY liq DESC
             """).fetchall()
 
-            # Top 15 subcontas por lucro líquido (all time)
+            # bd_v5 primeiro
+            env_rows = sorted(env_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1, -float(r[3] or 0)))
+
+            # 2. Top 10 subcontas por lucro líquido (all time)
             top_subs = cur.execute("""
                 SELECT sub_conta, COALESCE(ambiente,'?') AS amb,
                        COUNT(*) AS trades,
                        ROUND(SUM(valor) - SUM(gas_usd), 4) AS liq,
-                       COUNT(CASE WHEN valor > 0 THEN 1 END) AS wins
+                       COUNT(CASE WHEN valor - gas_usd > 0 THEN 1 END) AS wins,
+                       COUNT(CASE WHEN valor - gas_usd < 0 THEN 1 END) AS losses
                 FROM operacoes WHERE tipo='Trade'
                 GROUP BY sub_conta, amb
                 ORDER BY liq DESC
-                LIMIT 15
+                LIMIT 10
             """).fetchall()
 
+            # 3. Totais globais
             total_subs  = cur.execute("SELECT COUNT(DISTINCT sub_conta) FROM operacoes WHERE tipo='Trade'").fetchone()[0]
+            total_wlt   = cur.execute("SELECT COUNT(DISTINCT ow.wallet) FROM operacoes o LEFT JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index WHERE o.tipo='Trade'").fetchone()[0]
             total_trade = cur.execute("SELECT COUNT(*) FROM operacoes WHERE tipo='Trade'").fetchone()[0]
 
+            # 4. Capital vivo — capital_cache por ambiente (100% DB, zero RPC)
+            cap_cache = cur.execute("""
+                SELECT COALESCE(u.env, 'AG_C_bd') AS env,
+                       COUNT(*) AS users,
+                       ROUND(SUM(cc.total_usd), 2) AS total
+                FROM capital_cache cc
+                LEFT JOIN users u ON u.chat_id = cc.chat_id
+                WHERE cc.total_usd > 0.5
+                GROUP BY env
+            """).fetchall()
+
+        # ── totais globais ─────────────────────────────────────────────────
+        total_liq  = sum(float(r[3] or 0) for r in env_rows)
+        total_wins = sum(int(r[4] or 0) for r in env_rows)
+        total_loss = sum(int(r[5] or 0) for r in env_rows)
+        wr_g   = total_wins / total_trade * 100 if total_trade else 0
+        pf_g   = (total_wins / total_loss) if total_loss else float("inf")
+        pf_g_s = f"{pf_g:.2f}" if pf_g != float("inf") else "∞"
+        lpt_g  = total_liq / total_trade if total_trade else 0
+        sg_g   = "🟢" if total_liq >= 0 else "🔴"
+
         lines = [
-            "📊 <b>ANÁLISE SUBACCOUNTS — WEbdEX</b>\n",
-            f"🔢 Total subcontas únicas: <b>{total_subs:,}</b>",
-            f"📈 Total trades (all time): <b>{total_trade:,}</b>\n",
-            "🌐 <b>Por Ambiente</b>",
+            "📊 <b>ANÁLISE SUBACCOUNTS — WEbdEX</b>",
+            f"🕒 <i>{datetime.now().strftime('%d/%m/%Y %H:%M')}</i>",
+            sep,
+            "",
+            "🌐 <b>CONSOLIDADO GLOBAL</b>",
+            f"  ├─ 🔑 Subcontas: <b>{total_subs:,}</b>  👥 Wallets: <b>{total_wlt:,}</b>",
+            f"  ├─ 📊 Trades:    <b>{total_trade:,}</b>  (WR: <b>{wr_g:.1f}%</b>  PF: <b>{pf_g_s}</b>)",
+            f"  └─ {sg_g} Líquido: <b>{total_liq:+.2f} USD</b>  (<b>{lpt_g:+.4f}/trade</b>)",
+            "",
+            sep,
         ]
-        for amb, n_subs, trades, liq, wins, wallets in env_rows:
-            wr  = wins / trades * 100 if trades else 0
-            sg  = "🟢" if (liq or 0) >= 0 else "🔴"
-            lines.append(
-                f"  {'🔵' if 'v5' in str(amb).lower() else '🟠'} <b>{esc(str(amb)[:14])}</b>\n"
-                f"     Subs: <b>{n_subs}</b>  Wallets: <b>{wallets}</b>  Trades: <b>{trades:,}</b>\n"
-                f"     {sg} Líquido: <b>{(liq or 0):+.4f}</b>  WR: <b>{wr:.1f}%</b>"
-            )
 
-        lines.append("\n🏆 <b>Top 15 Subcontas (Lucro Líquido)</b>")
-        for i, (sub, amb, trades, liq, wins) in enumerate(top_subs, 1):
-            sg = "🟢" if (liq or 0) >= 0 else "🔴"
-            wr = wins / trades * 100 if trades else 0
-            med = _medal(i)
-            sub_short = (str(sub or "")[:18] + "…") if len(str(sub or "")) > 18 else str(sub or "—")
-            lines.append(
-                f"  {med or f'{i}.'} <code>{esc(sub_short)}</code> [{esc(str(amb)[:8])}]\n"
-                f"     {sg} <b>{(liq or 0):+.4f}</b>  T:{trades}  WR:{wr:.0f}%"
-            )
+        # ── por ambiente ───────────────────────────────────────────────────
+        for amb, n_subs, trades, liq, wins, losses, wallets in env_rows:
+            wr   = wins / trades * 100 if trades else 0
+            pf_v = (wins / losses) if losses else float("inf")
+            pf_s = f"{pf_v:.2f}" if pf_v != float("inf") else "∞"
+            sg   = "🟢" if (liq or 0) >= 0 else "🔴"
+            lpt  = (liq or 0) / trades if trades else 0
+            eico = "🔵" if "v5" in str(amb).lower() else "🟠"
+            lines += [
+                "",
+                f"{eico} <b>{esc(str(amb))}</b>",
+                f"  ├─ 🔑 Subs: <b>{n_subs:,}</b>  👥 Wallets: <b>{wallets:,}</b>",
+                f"  ├─ 📊 Trades: <b>{trades:,}</b>  (WR: <b>{wr:.1f}%</b>  PF: <b>{pf_s}</b>)",
+                f"  └─ {sg} Líquido: <b>{(liq or 0):+.2f} USD</b>  (<b>{lpt:+.4f}/trade</b>)",
+            ]
 
-        # ── Seção On-Chain: saldos vivos por ambiente ──────────────────────
-        lines.append("\n🔗 <b>Saldos On-Chain (Capital Vivo)</b>")
-        onchain_ok = False
-        try:
-            from webdex_chain import get_contracts, web3, rpc_pool
-            from webdex_config import CONTRACTS, ADDR_USDT0
-            from webdex_db import DB_LOCK as _DL
-            import concurrent.futures
+        # ── top 10 subcontas ───────────────────────────────────────────────
+        lines += ["", sep, "", "🏆 <b>TOP 10 SUBCONTAS (Lucro all time)</b>"]
+        for i, (sub, amb, trades, liq, wins, losses) in enumerate(top_subs, 1):
+            sg   = "🟢" if (liq or 0) >= 0 else "🔴"
+            wr   = wins / trades * 100 if trades else 0
+            eico = "🔵" if "v5" in str(amb).lower() else "🟠"
+            sub_s = f"{str(sub or '')[:6]}…{str(sub or '')[-4:]}" if len(str(sub or "")) > 12 else str(sub or "—")
+            lines += [
+                f"  {_medal(i) or f'{i:02d}.'} {eico} <code>{esc(sub_s)}</code>",
+                f"       {sg} <b>{(liq or 0):+.2f} USD</b>  ({trades:,}t · WR: {wr:.0f}%)",
+            ]
 
-            # Busca wallets ativas com capital para consultar
-            with _DL:
-                wallets_to_check = cursor.execute(
-                    "SELECT DISTINCT u.wallet, u.env FROM users u "
-                    "JOIN capital_cache cc ON cc.chat_id=u.chat_id "
-                    "WHERE u.wallet<>'' AND u.active=1 AND cc.total_usd>0 "
-                    "LIMIT 10"
-                ).fetchall()
-
-            env_onchain: dict = {}
-            def _fetch_wallet_capital(wallet_env):
-                wlt, env = wallet_env
-                try:
-                    from webdex_chain import get_contracts, web3
-                    from webdex_config import ADDR_USDT0
-                    c = get_contracts(env or "AG_C_bd", web3)
-                    mgr = web3.to_checksum_address(c["addr"]["MANAGER"])
-                    usr = web3.to_checksum_address(wlt)
-                    subs = c["sub"].functions.getSubAccounts(mgr, usr).call()[:20]
-                    total = 0.0
-                    for s in subs:
-                        sid = s[0]
-                        try:
-                            strats = c["sub"].functions.getStrategies(mgr, usr, sid).call()[:10]
-                        except Exception:
-                            continue
-                        for st in strats:
-                            try:
-                                bals = c["sub"].functions.getBalances(mgr, usr, sid, st).call()
-                            except Exception:
-                                continue
-                            for b in bals:
-                                if str(b[1]).lower() == ADDR_USDT0.lower():
-                                    total += int(b[0]) / (10 ** int(b[2]))
-                    return (env or "AG_C_bd"), total
-                except Exception:
-                    return None, 0.0
-
-            if wallets_to_check:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-                    results = list(ex.map(_fetch_wallet_capital, wallets_to_check, timeout=15))
-                for env_r, cap_r in results:
-                    if env_r:
-                        env_onchain[env_r] = env_onchain.get(env_r, 0.0) + cap_r
-                total_onchain = sum(env_onchain.values())
-                for env_r, cap_r in sorted(env_onchain.items()):
-                    icon = "🔵" if "v5" in str(env_r).lower() else "🟠"
-                    lines.append(f"  {icon} <b>{esc(str(env_r)[:12])}</b>: <b>${cap_r:,.2f}</b>")
-                lines.append(f"  💼 <b>Total on-chain:</b> <b>${total_onchain:,.2f}</b>")
-                onchain_ok = True
-        except Exception as _oc_e:
-            logger.warning("[adm_subaccounts onchain] %s", _oc_e)
-        if not onchain_ok:
-            lines.append("  <i>(dados on-chain indisponíveis — use mybdBook para capital individual)</i>")
-
-        # ── Seção protocol_ops: TODOS os traders on-chain ──────────────────
-        lines.append("\n🌐 <b>Todos os Traders On-Chain (protocol_ops)</b>")
-        try:
-            with DB_LOCK:
-                _proto_env = cursor.execute("""
-                    SELECT env,
-                           COUNT(DISTINCT wallet)                          AS wallets,
-                           COUNT(*)                                        AS trades,
-                           ROUND(SUM(profit), 4)                          AS profit,
-                           ROUND(SUM(fee_bd), 4)                          AS fee_bd,
-                           COUNT(CASE WHEN profit > 0 THEN 1 END)         AS wins
-                    FROM protocol_ops
-                    GROUP BY env ORDER BY trades DESC
-                """).fetchall()
-                _proto_total_w = cursor.execute(
-                    "SELECT COUNT(DISTINCT wallet) FROM protocol_ops"
-                ).fetchone()[0]
-                _proto_total_t = cursor.execute(
-                    "SELECT COUNT(*) FROM protocol_ops"
-                ).fetchone()[0]
-            lines.append(
-                f"  📊 Total wallets únicas: <b>{_proto_total_w:,}</b>  "
-                f"Trades: <b>{_proto_total_t:,}</b>"
-            )
-            for _env, _wlt, _tr, _pft, _fbd, _wns in _proto_env:
-                _wr = _wns / _tr * 100 if _tr else 0
-                _sg = "🟢" if (_pft or 0) >= 0 else "🔴"
-                _ico = "🔵" if "v5" in str(_env).lower() else "🟠"
-                lines.append(
-                    f"  {_ico} <b>{esc(str(_env)[:14])}</b>  "
-                    f"Wallets:{_wlt}  Trades:{_tr:,}\n"
-                    f"     {_sg} Lucro:{(_pft or 0):+.4f}  "
-                    f"BD:{(_fbd or 0):.4f}  WR:{_wr:.1f}%"
-                )
-        except Exception as _pe:
-            logger.debug("[adm_subaccounts proto_ops] %s", _pe)
-            lines.append("  <i>(protocol_ops indisponível — sync em andamento)</i>")
+        # ── capital vivo (capital_cache — 100% DB) ─────────────────────────
+        lines += ["", sep, "", "💼 <b>CAPITAL VIVO (mybdBook snapshots)</b>"]
+        if cap_cache:
+            cap_sorted = sorted(cap_cache, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
+            total_cap  = sum(float(r[2] or 0) for r in cap_sorted)
+            for env_c, users_c, total_c in cap_sorted:
+                eico = "🔵" if "v5" in str(env_c).lower() else "🟠"
+                lines.append(f"  {eico} <b>{esc(str(env_c))}</b>: <b>${total_c:,.2f}</b>  ({users_c} usuários)")
+            lines.append(f"  └─ 💼 Total: <b>${total_cap:,.2f}</b>")
+        else:
+            lines.append("  <i>(sem dados — usuários precisam chamar mybdBook ao menos 1x)</i>")
 
         _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
     except Exception as e:
