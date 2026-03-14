@@ -994,16 +994,20 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
         proto_count = cur.execute("SELECT COUNT(*) FROM protocol_ops").fetchone()[0] or 0
 
         # ── Backfill progress (só usado na aba All) ────────────────────────────
+        # NOTA: usa cur.execute direto — get_config() adquire DB_LOCK e causaria deadlock
         if periodo == "all":
             from webdex_config import CONTRACTS_DEPLOY_BLOCK
-            _curr_blk = int(get_config("last_block", "0") or "0")
+            def _cfg(k, d="0"):
+                row = cur.execute("SELECT value FROM config WHERE key=?", (k,)).fetchone()
+                return row[0] if row else d
+            _curr_blk = int(_cfg("last_block") or "0")
             for _ek in ("bd_v5", "AG_C_bd"):
-                _synced = int(get_config(f"proto_sync_block_{_ek}", "0") or "0")
+                _synced = int(_cfg(f"proto_sync_block_{_ek}") or "0")
                 _deploy = CONTRACTS_DEPLOY_BLOCK.get(_ek, 0)
                 _total  = max(1, _curr_blk - _deploy)
                 _done   = max(0, _synced - _deploy)
                 _pct    = min(100.0, _done / _total * 100)
-                _genesis = get_config(f"proto_genesis_done_{_ek}", "0") or "0"
+                _genesis = _cfg(f"proto_genesis_done_{_ek}") or "0"
                 _bf_data[_ek] = {
                     "synced": _synced, "deploy": _deploy,
                     "curr": _curr_blk, "pct": _pct,
