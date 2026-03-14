@@ -1678,7 +1678,6 @@ def adm_progressao_capital(m):
                 )
                 lines.append(
                     f"     └─ {_dico(_td)} <b>{_td:>+,.2f} USD</b>  (<b>{_pd['delta_pct']:>+.2f}%</b>)"
-                    f"  <i>[{_pd['prev_ts']} → {_pd['curr_ts']}]</i>"
                 )
             else:
                 lines.append(f"     Atual: <b>${_pd['curr_tvl']:,.2f}</b>  <i>[{_pd['curr_ts']}]</i>")
@@ -1693,11 +1692,10 @@ def adm_progressao_capital(m):
                 "",
                 f"  🌐 <b>RESULTADOS ACUMULADOS (on-chain)</b>",
                 f"     ├─ 👥 Carteiras:   <b>{_pe['wallets']:,}</b>",
-                f"     ├─ 📊 Trades:      <b>{_pe['trades']:,}</b>  <i>({_pe['first']} → {_pe['last']})</i>",
+                f"     ├─ 📊 Trades:      <b>{_pe['trades']:,}</b>",
                 f"     ├─ {_dico(_pe['profit'])} P&amp;L líquido: <b>{_pe['profit']:>+,.4f} USDT</b>",
-                f"     ├─ 🏆 Acerto:      <b>{_wr:.1f}%</b>  ({_pe['wins']:,}✅ / {_pe['losses']:,}❌)",
-                f"     ├─ 📐 Profit Factor:<b>{_pf:.2f}</b>",
-                f"     ├─ ⛽ Gás total:   <b>{_pe['gas_pol']:,.4f} POL</b>",
+                f"     ├─ 🏆 Acerto:      <b>{_wr:.1f}%</b>",
+                f"     ├─ 📐 Profit Factor: <b>{_pf:.2f}</b>",
                 f"     └─ 💎 Fees BD:     <b>{_pe['fee_bd']:,.4f}</b>",
             ]
 
@@ -1719,7 +1717,6 @@ def adm_progressao_capital(m):
                 lines.append(
                     f"     └─ {_dico(_eu_delt)} <b>{_eu_delt:>+,.2f} USD</b>"
                     f"  (<b>{_pct(_eu_delt, _eu_prev):>+.2f}%</b>)"
-                    f"  {len(_eu_w)}/{len(_eu)} usuários"
                 )
             else:
                 lines.append(f"     Capital atual: <b>${_eu_curr:,.2f}</b>  ({len(_eu)} usuários)")
@@ -1731,7 +1728,7 @@ def adm_progressao_capital(m):
                     _ud = _u["delta"]
                     lines.append(
                         f"     • <b>{_lbl}</b>"
-                        f"  <b>${_u['prev']:,.2f}</b> → <b>${_u['curr']:,.2f}</b>"
+                        f"  ${_u['prev']:,.0f} → ${_u['curr']:,.0f}"
                         f"  {_dico(_ud)} <b>{_ud:>+,.2f}</b> ({_u['delta_pct']:>+.2f}%)"
                     )
                     lines.append(
@@ -1750,32 +1747,23 @@ def adm_progressao_capital(m):
 
     lines += ["", sep, "", "🌐 <b>CONSOLIDADO GLOBAL</b>", ""]
 
-    # TVL
+    # TVL + on-chain — linha compacta
     if _tvl_prev > 0:
+        _tvl_d_str = f"{_dico(_tvl_delt)} <b>{_tvl_delt:>+,.0f}</b>" if _tvl_delt else ""
         lines += [
-            f"  🏦 <b>TVL Total</b>",
-            f"     Antes → Agora: <b>${_tvl_prev:,.2f}</b> → <b>${_tvl_curr:,.2f}</b>",
-            f"     └─ {_dico(_tvl_delt)} <b>{_tvl_delt:>+,.2f} USD</b>"
-            f"  ({_pct(_tvl_delt, _tvl_prev):>+.2f}%)",
+            f"  🏦 <b>TVL Total:</b> ${_tvl_prev:,.0f} → ${_tvl_curr:,.0f}  {_tvl_d_str}",
             "",
         ]
     else:
-        lines += [f"  🏦 TVL Total: <b>${_tvl_curr:,.2f}</b>", ""]
+        lines += [f"  🏦 <b>TVL Total:</b> <b>${_tvl_curr:,.0f}</b>", ""]
 
-    # Acumulado on-chain total
     if proto_total["trades"] > 0:
         _pt_wr = _pct(proto_total["wins"], proto_total["trades"])
         _pt_pf = (proto_total["wins"] / proto_total["losses"]) if proto_total["losses"] > 0 else float(proto_total["wins"] or 0)
+        _pt_pico = _dico(proto_total["profit"])
         lines += [
-            "  🌐 <b>RESULTADOS ACUMULADOS — PROTOCOLO TOTAL</b>",
-            f"     ├─ 👥 Carteiras:     <b>{proto_total['wallets']:,}</b>  (ambos ambientes)",
-            f"     ├─ 📊 Trades:        <b>{proto_total['trades']:,}</b>",
-            f"     ├─ {_dico(proto_total['profit'])} P&amp;L líquido:  <b>{proto_total['profit']:>+,.4f} USDT</b>",
-            f"     ├─ 🏆 Acerto:        <b>{_pt_wr:.1f}%</b>  ({proto_total['wins']:,}✅ / {proto_total['losses']:,}❌)",
-            f"     ├─ 📐 Profit Factor: <b>{_pt_pf:.2f}</b>",
-            f"     ├─ ⛽ Gás total:     <b>{proto_total['gas_pol']:,.4f} POL</b>",
-            f"     ├─ 💎 Fees BD:       <b>{proto_total['fee_bd']:,.4f}</b>",
-            f"     └─ 🗓️ Período: <i>{proto_total['first']} → {proto_total['last']}</i>",
+            f"  👥 <b>{proto_total['wallets']:,}</b> carteiras  ·  📊 <b>{proto_total['trades']:,}</b> trades",
+            f"  {_pt_pico} P&amp;L: <b>{proto_total['profit']:>+,.0f} USDT</b>  ·  🏆 <b>{_pt_wr:.1f}%</b>  ·  PF: <b>{_pt_pf:.2f}</b>",
             "",
         ]
 
@@ -1795,15 +1783,13 @@ def adm_progressao_capital(m):
 
     # Capital bot total
     if user_prog:
-        lines.append("  💼 <b>Capital Bot Total</b>")
         if _udelta:
-            lines += [
-                f"     Antes → Agora: <b>${_bot_prev:,.2f}</b> → <b>${_bot_curr:,.2f}</b>",
-                f"     └─ {_dico(_bot_delt)} <b>{_bot_delt:>+,.2f} USD</b>  ({_bot_dpct:>+.2f}%)"
-                f"  <i>({len(_udelta)}/{len(user_prog)} usuários comparados)</i>",
-            ]
+            lines.append(
+                f"  💼 <b>Capital Bot:</b> ${_bot_prev:,.0f} → ${_bot_curr:,.0f}"
+                f"  {_dico(_bot_delt)} <b>{_bot_delt:>+,.2f}</b> ({_bot_dpct:>+.2f}%)"
+            )
         else:
-            lines.append(f"     Capital atual: <b>${_bot_curr:,.2f}</b>  ({len(user_prog)} usuários)")
+            lines.append(f"  💼 <b>Capital Bot:</b> <b>${_bot_curr:,.0f}</b>  ({len(user_prog)} usuários)")
 
     # Tabela diária de capital bot (se disponível)
     if daily_user_cap:
