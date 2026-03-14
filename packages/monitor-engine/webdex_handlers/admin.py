@@ -1654,7 +1654,11 @@ def adm_progressao_capital(m):
     # ─────────────────────────────────────────────────────────────────────────
     # MONTA MENSAGEM
     # ─────────────────────────────────────────────────────────────────────────
-    _all_envs = sorted(set(list(pool_data.keys()) + list(proto_env.keys()) + list(_users_by_env.keys())))
+    # bd_v5 sempre primeiro (principal), AG_C_bd depois (colaboração)
+    _all_envs = sorted(
+        set(list(pool_data.keys()) + list(proto_env.keys()) + list(_users_by_env.keys())),
+        key=lambda e: (0 if "v5" in e.lower() else 1, e)
+    )
 
     lines = [
         "📸 <b>PROGRESSÃO DO CAPITAL — WEbdEX</b>",
