@@ -816,34 +816,35 @@ def _lucro_real_text(periodo: str = "ciclo") -> str:
         since = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
         label = periodo.upper()
 
+    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
     with DB_LOCK:
         cur = conn.cursor()
-
         env_rows = cur.execute("""
             SELECT
                 COALESCE(ambiente, 'UNKNOWN') AS amb,
                 COUNT(*)                                              AS trades,
-                ROUND(SUM(valor), 6)                                  AS bruto,
-                ROUND(SUM(gas_usd), 6)                                AS gas,
-                ROUND(SUM(valor) - SUM(gas_usd), 6)                  AS liq,
+                ROUND(SUM(valor), 4)                                  AS bruto,
+                ROUND(SUM(gas_usd), 4)                                AS gas,
+                ROUND(SUM(valor) - SUM(gas_usd), 4)                  AS liq,
                 COUNT(CASE WHEN valor - gas_usd > 0 THEN 1 END)      AS wins,
                 COUNT(CASE WHEN valor - gas_usd < 0 THEN 1 END)      AS losses
             FROM operacoes
             WHERE tipo='Trade' AND data_hora >= ?
             GROUP BY amb
-            ORDER BY liq DESC
         """, (since,)).fetchall()
 
-        # Agrupa por ciclo 21h: shift -21h para que o "dia" do ciclo comece às 21h
-        # Ex.: trade às 22:00 do dia X → datetime(22:00, '-21h') = 01:00 do dia X+1 → DATE = X+1 (ciclo X→X+1)
         daily = cur.execute("""
             SELECT DATE(datetime(data_hora, '-21 hours')) AS dia_ciclo,
-                   ROUND(SUM(valor) - SUM(gas_usd), 4) AS liq,
+                   ROUND(SUM(valor) - SUM(gas_usd), 2) AS liq,
                    COUNT(*) AS trades
             FROM operacoes
             WHERE tipo='Trade' AND data_hora >= ?
             GROUP BY dia_ciclo ORDER BY dia_ciclo DESC LIMIT 7
         """, (since,)).fetchall()
+
+    # bd_v5 sempre primeiro, depois demais por liq desc
+    env_rows = sorted(env_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1, -float(r[4] or 0)))
 
     total_trades = sum(int(r[1] or 0) for r in env_rows)
     total_bruto  = sum(float(r[2] or 0) for r in env_rows)
@@ -851,36 +852,48 @@ def _lucro_real_text(periodo: str = "ciclo") -> str:
     total_liq    = sum(float(r[4] or 0) for r in env_rows)
     total_wins   = sum(int(r[5] or 0) for r in env_rows)
     wr_global    = total_wins / total_trades * 100 if total_trades else 0
+    lpt_global   = total_liq / total_trades if total_trades else 0  # liq per trade
 
     sg_g = "🟢" if total_liq >= 0 else "🔴"
     lines = [
-        f"📈 <b>LUCRO REAL — WEbdEX</b>",
+        "📈 <b>LUCRO REAL — WEbdEX</b>",
         f"🗓️ <i>{esc(label)}</i>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"\n💼 <b>TOTAL GLOBAL</b>",
-        f"  📊 Trades:   <b>{total_trades:,}</b>  WR: <b>{wr_global:.1f}%</b>",
-        f"  💰 Bruto:    <b>{total_bruto:+.4f} USD</b>",
-        f"  ⛽ Gás:     <b>{total_gas:.4f} USD</b>",
-        f"  {sg_g} Líquido: <b>{total_liq:+.4f} USD</b>\n",
-        "🌐 <b>POR AMBIENTE</b>",
+        sep,
+        "",
+        "🌐 <b>CONSOLIDADO GLOBAL</b>",
+        f"  ├─ 📊 Trades:    <b>{total_trades:,}</b>  (WR: <b>{wr_global:.1f}%</b>)",
+        f"  ├─ 💰 Bruto:     <b>{total_bruto:+.2f} USD</b>",
+        f"  ├─ ⛽ Gás:      <b>{total_gas:.2f} USD</b>",
+        f"  └─ {sg_g} Líquido: <b>{total_liq:+.2f} USD</b>  (<b>{lpt_global:+.4f}/trade</b>)",
     ]
+
+    lines += ["", sep]
+
     for amb, trades, bruto, gas, liq, wins, losses in env_rows:
-        wr  = wins / trades * 100 if trades else 0
-        sg  = "🟢" if (liq or 0) >= 0 else "🔴"
+        wr   = wins / trades * 100 if trades else 0
+        sg   = "🟢" if (liq or 0) >= 0 else "🔴"
         pf_g = wins / losses if losses else float("inf")
         pf_s = f"{pf_g:.2f}" if pf_g != float("inf") else "∞"
-        lines.append(
-            f"\n  {'🔵' if 'v5' in str(amb).lower() else '🟠'} <b>{esc(str(amb)[:16])}</b>\n"
-            f"     Trades: <b>{trades:,}</b>  WR: <b>{wr:.1f}%</b>  PF: <b>{pf_s}</b>\n"
-            f"     Bruto: <b>{(bruto or 0):+.4f}</b>  Gás: <b>{(gas or 0):.4f}</b>\n"
-            f"     {sg} Líquido: <b>{(liq or 0):+.4f} USD</b>"
-        )
+        lpt  = (liq or 0) / trades if trades else 0
+        eico = "🔵" if "v5" in str(amb).lower() else "🟠"
+        lines += [
+            "",
+            f"{eico} <b>{esc(str(amb))}</b>",
+            f"  ├─ 📊 Trades:  <b>{trades:,}</b>  (WR: <b>{wr:.1f}%</b>  PF: <b>{pf_s}</b>)",
+            f"  ├─ 💰 Bruto:   <b>{(bruto or 0):+.2f}</b>  ⛽ Gás: <b>{(gas or 0):.2f}</b>",
+            f"  └─ {sg} Líquido: <b>{(liq or 0):+.2f} USD</b>  (<b>{lpt:+.4f}/trade</b>)",
+        ]
 
     if daily:
-        lines.append("\n\n📅 <b>ÚLTIMOS 7 CICLOS (21h→21h)</b>")
-        for dia_ciclo, liq, trades in daily:
-            ic = "🟢" if (liq or 0) >= 0 else "🔴"
-            lines.append(f"  {ic} {dia_ciclo} (21h→): <b>{(liq or 0):+.4f}</b>  ({trades} trades)")
+        lines += ["", sep, "", "📅 <b>ÚLTIMOS 7 CICLOS</b>"]
+        for dia_ciclo, liq_d, trades_d in daily:
+            ic  = "🟢" if (liq_d or 0) >= 0 else "🔴"
+            dt  = str(dia_ciclo)[5:]  # MM-DD → mas queremos DD/MM
+            try:
+                dt = f"{str(dia_ciclo)[8:10]}/{str(dia_ciclo)[5:7]}"
+            except Exception:
+                pass
+            lines.append(f"  {ic} {dt}  <b>{(liq_d or 0):+.2f} USD</b>  ({trades_d:,}t)")
 
     return "\n".join(lines)
 
