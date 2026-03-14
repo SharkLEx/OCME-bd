@@ -26,6 +26,7 @@ from webdex_db import (
     _ciclo_21h_since, _ciclo_21h_label,
 )
 from webdex_chain import web3_for_rpc, get_contracts
+from telebot import types as _tg_types
 from webdex_bot_core import bot, send_html, esc, barra_progresso
 
 # ==============================================================================
@@ -568,14 +569,10 @@ def _myfxbook_adm_data(periodo: str = "ciclo") -> dict:
     with DB_LOCK:
         _c = conn.cursor()
 
-        # Por ambiente
+        # Por ambiente (nomes raw: bd_v5, AG_C_bd)
         env_rows = _c.execute("""
             SELECT
-              CASE
-                WHEN LOWER(COALESCE(ambiente,'')) IN ('bd_v5','beta_v5','beta v5') THEN 'Beta V5'
-                WHEN LOWER(COALESCE(ambiente,'')) IN ('ag_c_bd','agcbd','agc_bd') THEN 'AG C bd'
-                ELSE 'Outros'
-              END AS amb,
+              COALESCE(ambiente, 'UNKNOWN') AS amb,
               COUNT(*)           AS trades,
               SUM(valor)         AS bruto,
               SUM(gas_usd)       AS gas,
@@ -584,8 +581,10 @@ def _myfxbook_adm_data(periodo: str = "ciclo") -> dict:
               COUNT(DISTINCT sub_conta)              AS subs
             FROM operacoes
             WHERE tipo='Trade' AND data_hora>=?
-            GROUP BY amb ORDER BY liq DESC
+            GROUP BY amb
         """, (since,)).fetchall()
+        # bd_v5 sempre primeiro
+        env_rows = sorted(env_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1, -float(r[4] or 0)))
 
         # Serie diaria (ultimos 30 dias, com filtro de data para performance)
         since_30d = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
@@ -624,8 +623,8 @@ def _myfxbook_adm_data(periodo: str = "ciclo") -> dict:
         ).fetchone()
         if _stat and float(_stat[0] or 0) > 0:
             capital_total = float(_stat[0])
-            cap_by_env["Beta V5"] = float(_stat[1] or 0)
-            cap_by_env["AG C bd"] = float(_stat[2] or 0)
+            cap_by_env["bd_v5"]   = float(_stat[1] or 0)
+            cap_by_env["AG_C_bd"] = float(_stat[2] or 0)
     except Exception:
         pass
     # Fallback: soma capital_cache de todos os usuários
@@ -844,94 +843,89 @@ def _myfxbook_adm_report(periodo: str = "ciclo") -> str:
     if not d.get("ok"):
         return "📊 <b>mybdBook ADM</b>\n\n⚠️ Sem dados."
 
+    sep      = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     pf_str   = f"{d['pf']:.2f}" if d['pf'] != float("inf") else "∞"
     roi_icon = "🟢" if d["roi"] >= 0 else "🔴"
     liq_icon = "🟢" if d["total_liq"] >= 0 else "🔴"
     bar      = barra_progresso(d["total_wins"], d["total_trades"])
+    lpt_g    = d["total_liq"] / d["total_trades"] if d["total_trades"] else 0
+
+    lines = [
+        "📊 <b>mybdBook ADM — WEbdEX</b>",
+        f"🗓️ <i>{esc(d['label'])}</i>",
+        sep,
+        "",
+        "🌐 <b>CONSOLIDADO GLOBAL</b>",
+        f"  ├─ 👥 Usuários: <b>{d['total_users']}</b>  🧮 Subcontas: <b>{d['total_subs']:,}</b>",
+        f"  ├─ 📊 Trades:   <b>{d['total_trades']:,}</b>  (WR: <b>{d['winrate']:.1f}%</b>  PF: <b>{pf_str}</b>)",
+        f"  ├─ 💰 Bruto:    <b>{d['total_bruto']:+.2f} USD</b>  ⛽ Gás: <b>{d['total_gas']:.2f} USD</b>",
+        f"  └─ {liq_icon} Líquido: <b>{d['total_liq']:+.2f} USD</b>  (<b>{lpt_g:+.4f}/trade</b>)",
+    ]
+
+    # Capital
+    lines += ["", sep, "", "💼 <b>CAPITAL &amp; ROI</b>"]
+    if d["capital"] > 0:
+        cap_by_env_sorted = sorted(d["cap_by_env"].items(), key=lambda kv: (0 if "v5" in kv[0].lower() else 1))
+        cap_items = [f"  ├─ 💰 Capital Total: <b>${d['capital']:,.2f} USD</b>"]
+        for i, (env_k, cap_v) in enumerate(cap_by_env_sorted):
+            ic = "🔵" if "v5" in env_k.lower() else "🟠"
+            pfx = "  └─" if i == len(cap_by_env_sorted) - 1 else "  ├─"
+            cap_items.append(f"     {pfx} {ic} <b>{esc(env_k)}</b>: <b>${cap_v:,.2f}</b>")
+        lines += cap_items
+        lines.append(f"  └─ {roi_icon} ROI Período: <b>{d['roi']:+.3f}%</b>")
+    else:
+        lines += [
+            f"  ├─ 💰 Capital Total: <b>—</b>  <i>(chame mybdBook para atualizar)</i>",
+            f"  └─ {roi_icon} ROI Período: <b>{d['roi']:+.3f}%</b>",
+        ]
+
+    # Estatísticas
+    lines += [
+        "", sep, "",
+        "📐 <b>ESTATÍSTICAS</b>",
+        f"  ├─ 🎯 WinRate: <b>{d['winrate']:.1f}%</b>  {bar}",
+        f"  ├─ 📏 Profit Factor: <b>{pf_str}</b>",
+        f"  └─ 📉 Max Drawdown: <b>{d['mdd']:.4f} USD</b>",
+    ]
+
+    # Por ambiente
+    if d["envs"]:
+        lines += ["", sep]
+        for amb, trades, bruto, gas, liq, wins, subs in d["envs"]:
+            wr  = wins / trades * 100 if trades else 0
+            ic  = "🔵" if "v5" in str(amb).lower() else "🟠"
+            sg  = "🟢" if float(liq or 0) >= 0 else "🔴"
+            lpt = float(liq or 0) / trades if trades else 0
+            lines += [
+                "",
+                f"{ic} <b>{esc(str(amb))}</b>",
+                f"  ├─ 🧮 Subcontas: <b>{int(subs or 0):,}</b>  📊 Trades: <b>{int(trades or 0):,}</b>  WR: <b>{wr:.1f}%</b>",
+                f"  ├─ 💰 Bruto: <b>{float(bruto or 0):+.2f}</b>  ⛽ Gás: <b>{float(gas or 0):.2f}</b>",
+                f"  └─ {sg} Líquido: <b>{float(liq or 0):+.2f} USD</b>  (<b>{lpt:+.4f}/trade</b>)",
+            ]
 
     # Série diária (últimos 7)
     daily7 = d["daily"][:7]
-    daily_line = ""
-    for dia, liq, tr in daily7:
-        ic = "🟢" if float(liq or 0) >= 0 else "🔴"
-        daily_line += f"  {ic} {dia}: <b>{float(liq or 0):+.4f}</b> ({tr} trades)\n"
+    if daily7:
+        lines += ["", sep, "", "📅 <b>ÚLTIMOS 7 DIAS</b>"]
+        for dia, liq_d, tr in daily7:
+            ic = "🟢" if float(liq_d or 0) >= 0 else "🔴"
+            lines.append(f"  {ic} {dia}  <b>{float(liq_d or 0):+.2f} USD</b>  ({int(tr or 0):,}t)")
 
-    # Capital por ambiente
-    cap_lines = ""
-    for env_k, cap_v in d["cap_by_env"].items():
-        ic = "🔷" if "bd_v5" in env_k.lower() or "beta" in env_k.lower() else ("🔶" if "ag" in env_k.lower() else "⚫")
-        cap_lines += f"  {ic} {esc(env_k[:12])}: <b>{cap_v:,.2f} USD</b>\n"
-
-    # Por ambiente operacional
-    env_lines = ""
-    for amb, trades, bruto, gas, liq, wins, subs in d["envs"]:
-        wr  = wins/trades*100 if trades else 0
-        ic  = "🔷" if "beta" in str(amb).lower() or "v5" in str(amb).lower() else ("🔶" if "ag" in str(amb).lower() else "⚫")
-        sg  = "🟢" if float(liq or 0) >= 0 else "🔴"
-        env_lines += (
-            f"  {ic} <b>{esc(str(amb))}</b>\n"
-            f"     {sg} Líq: <b>{float(liq or 0):+.4f}</b> | WR: <b>{wr:.1f}%</b> | "
-            f"Trades: <b>{int(trades or 0):,}</b> | Subs: <b>{int(subs or 0)}</b>\n"
-        )
-
-    msg  = f"📊 <b>mybdBook ADM — WEbdEX PROTOCOL</b>\n"
-    msg += f"🗓️ <i>{esc(d['label'])}</i>\n"
-    msg += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-
-    msg += f"🏛️ <b>PROTOCOLO GLOBAL</b>\n"
-    msg += f"  👥 Usuários:      <b>{d['total_users']}</b>\n"
-    msg += f"  🧮 Subcontas:     <b>{d['total_subs']}</b>\n"
-    msg += f"  📊 Trades:        <b>{d['total_trades']:,}</b>\n\n"
-
-    msg += f"💼 <b>CAPITAL & ROI</b>\n"
-    msg += f"  💰 Capital Total: <b>{d['capital']:,.2f} USD</b>\n"
-    if cap_lines:
-        msg += cap_lines
-    elif d.get("capital", 0) <= 0:
-        msg += f"  ℹ️ <i>Capital: rode ADM PRO para atualizar o cache</i>\n"
-    msg += f"  {roi_icon} ROI Período:  <b>{d['roi']:+.3f}%</b>\n\n"
-
-    msg += f"📈 <b>RESULTADO GLOBAL</b>\n"
-    msg += f"  {liq_icon} Líquido:     <b>{d['total_liq']:+.4f} USD</b>\n"
-    msg += f"  💰 Bruto:        <b>{d['total_bruto']:+.4f} USD</b>\n"
-    msg += f"  ⛽ Gás Total:    <b>{d['total_gas']:.4f} USD</b>\n\n"
-
-    msg += f"📐 <b>ESTATÍSTICAS</b>\n"
-    msg += f"  🎯 WinRate:      <b>{d['winrate']:.1f}%</b>\n"
-    msg += f"  {bar}\n"
-    msg += f"  📏 Profit Factor:<b>{pf_str}</b>\n"
-    msg += f"  📉 Max Drawdown: <b>{d['mdd']:.4f} USD</b>\n\n"
-
-    # OCME integrado no relatorio ADM (usa _ocme_block reutilizavel)
-    try:
-        from monitor_db.queries import get_protocol_kpis
-        from monitor_core.vigia import _ocme_block
-        _kpis_adm = get_protocol_kpis(period_to_hours(periodo))
-        if _kpis_adm and _kpis_adm[0]:
-            _cnt, _vol, _fees, _gas, _usubs = _kpis_adm
-            msg += _ocme_block(_cnt, _vol, _fees, _gas, _usubs,
-                               hours=period_to_hours(periodo),
-                               periodo_label=d.get("label", ""))
-    except Exception:
-        pass
-
-    if env_lines:
-        msg += f"🌐 <b>POR AMBIENTE</b>\n" + env_lines + "\n"
-
-    if daily_line:
-        msg += f"📅 <b>ÚCLTIMOS 7 DIAS</b>\n" + daily_line
-
-    # Sparkline dos últimos 30 dias
-    daily_all = d.get("daily", [])
+    # Sparkline / gráfico ASCII dos últimos 30 dias
+    daily_all     = d.get("daily", [])
     daily_liq_vals = [float(r[1] or 0) for r in reversed(daily_all[:30])]
     if len(daily_liq_vals) >= 3:
-        spark = _sparkline(daily_liq_vals, width=20)
-        # Gráfico ASCII da progressão diária
         grafico = _ascii_chart(daily_liq_vals, width=18, height=4, label="← 30 dias →")
-        msg += f"\n📈 <b>PROGRESSÃO 30 DIAS (Líquido/dia)</b>\n{grafico}\n"
-        msg += f"  Sparkline: {spark}\n"
+        spark   = _sparkline(daily_liq_vals, width=20)
+        lines  += [
+            "", sep, "",
+            "📈 <b>PROGRESSÃO 30 DIAS (Líquido/dia)</b>",
+            grafico,
+            f"  Spark: {spark}",
+        ]
 
-    return msg
+    return "\n".join(lines)
 
 
 def _myfxbook_ai_comment(data: dict, mode: str = "user") -> str:
@@ -1074,25 +1068,44 @@ def _handle_myfxbook_user_chart(m, u: dict):
         send_html(m.chat.id, "⚠️ Não foi possível gerar o gráfico. Sem snapshots de capital suficientes.")
 
 
+def _mybdbook_adm_kb(periodo: str = "ciclo") -> _tg_types.InlineKeyboardMarkup:
+    periodos = [("Ciclo", "ciclo"), ("24h", "24h"), ("7d", "7d"), ("30d", "30d"), ("All", "all")]
+    kb = _tg_types.InlineKeyboardMarkup()
+    row = []
+    for label_p, p in periodos:
+        mark = f"✅ {label_p}" if p == periodo else label_p
+        row.append(_tg_types.InlineKeyboardButton(mark, callback_data=f"mybdadm_{p}"))
+    kb.row(*row)
+    kb.row(_tg_types.InlineKeyboardButton("✅ Fechar", callback_data="mybdadm_close"))
+    return kb
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("mybdadm_"))
+def _mybdbook_adm_callback(c):
+    from webdex_handlers.admin import _is_admin
+    if not _is_admin(c.from_user.id):
+        return bot.answer_callback_query(c.id, "⛔ Acesso negado.")
+    if c.data == "mybdadm_close":
+        bot.delete_message(c.message.chat.id, c.message.message_id)
+        return bot.answer_callback_query(c.id)
+    periodo = c.data.replace("mybdadm_", "")
+    bot.answer_callback_query(c.id, f"Carregando {periodo.upper()}...")
+    try:
+        txt = _myfxbook_adm_report(periodo)
+        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_mybdbook_adm_kb(periodo))
+    except Exception as e:
+        logger.exception(e)
+
+
 def _handle_myfxbook_adm(m):
     """Entry point: relatório mybdBook ADM. Chamado de admin.py."""
     bot.send_chat_action(m.chat.id, "typing")
     periodo = "ciclo"
-    try:
-        # Tenta extrair período da mensagem (ex: "30d", "7d")
-        parts = (m.text or "").split()
-        for p in parts:
-            p_l = p.lower().strip()
-            if p_l in ("ciclo", "24h", "7d", "30d", "90d"):
-                periodo = p_l
-                break
-    except Exception:
-        pass
-
     report = _myfxbook_adm_report(periodo)
-    send_html(m.chat.id, report)
+    bot.send_message(m.chat.id, report, parse_mode="HTML", reply_markup=_mybdbook_adm_kb(periodo))
 
-    # IA comment ADM
+    # IA comment ADM em background
     def _ai_bg():
         try:
             d = _myfxbook_adm_data(periodo)
