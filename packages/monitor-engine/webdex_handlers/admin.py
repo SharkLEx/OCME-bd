@@ -1454,270 +1454,294 @@ def adm_mybdbook_adm(m):
 # ==============================================================================
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "📸 Progressão do Capital")
 def adm_progressao_capital(m):
-    """Dashboard de Progressão do Capital — visão PROTOCOLO.
+    """Dashboard de Progressão do Capital — duas visões integradas.
 
-    Fonte primária: protocol_ops (todos os traders on-chain, desde deploy).
-    Fonte secundária: fl_snapshots (TVL/liquidez dos pools).
-    Sem chamadas on-chain ao vivo — tudo via DB, resposta imediata.
+    Seção A — CAPITAL DOS USUÁRIOS (user_capital_snapshots):
+        Compara último snapshot vs anterior de cada usuário do bot.
+        Mostra: capital atual, capital antes, delta USD, delta %.
+        Fonte: user_capital_snapshots (inserido cada vez que mybdBook é chamado).
+        Fallback: capital_cache (valor mais recente sem histórico).
+
+    Seção B — P&L DE TRADING DO PROTOCOLO (protocol_ops):
+        Todos os traders on-chain desde deploy, sem filtro de bot.
+        Mostra: trades, wallets, P&L total, taxa de acerto, top traders.
+
+    Seção C — LIQUIDEZ (fl_snapshots):
+        TVL atual vs snapshot anterior por ambiente.
+
+    Zero chamadas on-chain. 100% DB. Resposta imediata.
     """
     if not _is_admin(m.chat.id):
         return bot.reply_to(m, "⛔ Acesso negado.")
     bot.send_chat_action(m.chat.id, "typing")
-    bot.send_message(m.chat.id, "⏳ Carregando dados do protocolo...", parse_mode="HTML")
+    bot.send_message(m.chat.id, "⏳ Carregando progressão do capital...", parse_mode="HTML")
 
-    now_ts  = time.time()
-    now_dt  = datetime.now()
-    sep     = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    now_dt = datetime.now()
+    sep    = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    # ── Helper: mini barra ASCII ─────────────────────────────────────────────
-    def _bar(val: float, max_val: float, width: int = 10) -> str:
-        if max_val <= 0:
-            return "▒" * width
-        filled = round((val / max_val) * width)
-        filled = max(0, min(width, filled))
-        return "█" * filled + "░" * (width - filled)
+    # ─────────────────────────────────────────────────────────────────────────
+    # SEÇÃO A: CAPITAL DOS USUÁRIOS (user_capital_snapshots)
+    # Lógica: para cada (chat_id, env) pega os 2 snapshots mais recentes
+    # e calcula delta = atual - anterior.
+    # ─────────────────────────────────────────────────────────────────────────
 
-    # ── 1. OVERVIEW GLOBAL (protocol_ops — todos os traders) ─────────────────
+    # 1a. Busca todos os snapshots históricos por chat_id/env (máx 2 por user)
+    user_prog: list = []   # lista de dicts com dados de progressão por usuário
+    try:
+        with DB_LOCK:
+            # Pega os 2 mais recentes por (chat_id, env), ordenados por ts DESC
+            _snap_all = conn.execute("""
+                SELECT s.chat_id, s.env, s.total_usd, s.ts,
+                       u.username
+                FROM user_capital_snapshots s
+                LEFT JOIN users u ON u.chat_id = s.chat_id
+                WHERE s.total_usd > 0.5
+                ORDER BY s.chat_id, s.env, s.ts DESC
+            """).fetchall()
+
+        # Agrupa por (chat_id, env) → lista de (total_usd, ts)
+        _by_user: dict = {}
+        for _cid, _env, _usd, _ts, _uname in _snap_all:
+            key = (int(_cid), str(_env or "AG_C_bd"))
+            _by_user.setdefault(key, []).append((float(_usd or 0), str(_ts or "")))
+
+        for (cid, env), snaps in _by_user.items():
+            curr_usd, curr_ts = snaps[0]
+            prev_usd, prev_ts = snaps[1] if len(snaps) >= 2 else (None, None)
+            delta_usd = (curr_usd - prev_usd) if prev_usd is not None else None
+            delta_pct = ((delta_usd / prev_usd) * 100) if (prev_usd and prev_usd > 0 and delta_usd is not None) else None
+            # username de qualquer snapshot
+            uname = None
+            for row in _snap_all:
+                if int(row[0]) == cid:
+                    uname = row[4]
+                    break
+            user_prog.append({
+                "chat_id":  cid,
+                "env":      env,
+                "curr":     curr_usd,
+                "curr_ts":  curr_ts[:16],
+                "prev":     prev_usd,
+                "prev_ts":  prev_ts[:16] if prev_ts else None,
+                "delta":    delta_usd,
+                "delta_pct": delta_pct,
+                "uname":    uname,
+            })
+
+        # Ordena por delta_usd DESC (maiores progressões primeiro), None no fim
+        user_prog.sort(key=lambda x: x["delta"] if x["delta"] is not None else -999999, reverse=True)
+
+    except Exception as _e:
+        logger.debug("[progressao_capital] user_capital_snapshots: %s", _e)
+
+    # 1b. Fallback: usuários que ainda não têm user_capital_snapshots (só capital_cache)
+    try:
+        with DB_LOCK:
+            _cc_rows = conn.execute("""
+                SELECT cc.chat_id, COALESCE(cc.env,'AG_C_bd'), cc.total_usd, cc.updated_ts,
+                       u.username
+                FROM capital_cache cc
+                LEFT JOIN users u ON u.chat_id = cc.chat_id
+                WHERE cc.total_usd > 0.5
+            """).fetchall()
+        _already_in_prog = {(r["chat_id"], r["env"]) for r in user_prog}
+        for _cid2, _env2, _usd2, _uts2, _uname2 in _cc_rows:
+            key2 = (int(_cid2), str(_env2))
+            if key2 not in _already_in_prog:
+                user_prog.append({
+                    "chat_id":   int(_cid2),
+                    "env":       str(_env2),
+                    "curr":      float(_usd2 or 0),
+                    "curr_ts":   datetime.fromtimestamp(float(_uts2)).strftime("%Y-%m-%d %H:%M") if _uts2 else "?",
+                    "prev":      None,
+                    "prev_ts":   None,
+                    "delta":     None,
+                    "delta_pct": None,
+                    "uname":     _uname2,
+                    "_from_cache": True,
+                })
+    except Exception as _e2:
+        logger.debug("[progressao_capital] capital_cache fallback: %s", _e2)
+
+    # Totais consolidados (apenas usuários com comparação)
+    users_with_prog  = [u for u in user_prog if u["delta"] is not None]
+    users_only_curr  = [u for u in user_prog if u["delta"] is None]
+    total_curr_all   = sum(u["curr"] for u in user_prog)
+    total_prev_all   = sum(u["prev"] for u in users_with_prog if u["prev"])
+    total_curr_prog  = sum(u["curr"] for u in users_with_prog)
+    total_delta_all  = sum(u["delta"] for u in users_with_prog)
+    total_delta_pct  = (total_delta_all / total_prev_all * 100) if total_prev_all > 0 else 0.0
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SEÇÃO B: P&L DE TRADING DO PROTOCOLO (protocol_ops)
+    # ─────────────────────────────────────────────────────────────────────────
     try:
         with DB_LOCK:
             _ov = conn.execute("""
-                SELECT
-                    COUNT(*)                                            AS total_trades,
-                    COUNT(DISTINCT wallet)                             AS total_wallets,
-                    ROUND(SUM(profit), 4)                              AS total_profit,
-                    ROUND(SUM(fee_bd), 4)                              AS total_fee_bd,
-                    ROUND(SUM(gas_pol), 6)                             AS total_gas_pol,
-                    COUNT(CASE WHEN profit > 0 THEN 1 END)             AS wins,
-                    COUNT(CASE WHEN profit < 0 THEN 1 END)             AS losses,
-                    MIN(ts)                                            AS first_op,
-                    MAX(ts)                                            AS last_op
+                SELECT COUNT(*), COUNT(DISTINCT wallet),
+                       ROUND(SUM(profit),4), ROUND(SUM(fee_bd),4),
+                       COUNT(CASE WHEN profit > 0 THEN 1 END),
+                       COUNT(CASE WHEN profit < 0 THEN 1 END),
+                       MIN(ts), MAX(ts)
                 FROM protocol_ops
                 WHERE wallet != '' AND env != 'UNKNOWN'
             """).fetchone()
-        total_trades  = int(_ov[0] or 0)
-        total_wallets = int(_ov[1] or 0)
-        total_profit  = float(_ov[2] or 0)
-        total_fee_bd  = float(_ov[3] or 0)
-        total_gas_pol = float(_ov[4] or 0)
-        wins          = int(_ov[5] or 0)
-        losses        = int(_ov[6] or 0)
-        first_op      = str(_ov[7] or "")[:10]
-        last_op       = str(_ov[8] or "")[:16]
-    except Exception as _e:
-        logger.debug("[progressao_capital] overview: %s", _e)
-        total_trades = total_wallets = wins = losses = 0
-        total_profit = total_fee_bd = total_gas_pol = 0.0
-        first_op = last_op = ""
+        _top10 = conn.execute("""
+            SELECT wallet, env,
+                   COUNT(*) AS trades,
+                   ROUND(SUM(profit),4) AS profit,
+                   COUNT(CASE WHEN profit > 0 THEN 1 END) AS wins
+            FROM protocol_ops
+            WHERE wallet != '' AND env != 'UNKNOWN'
+            GROUP BY wallet, env
+            ORDER BY profit DESC LIMIT 5
+        """).fetchall()
+        proto_trades  = int(_ov[0] or 0)
+        proto_wallets = int(_ov[1] or 0)
+        proto_profit  = float(_ov[2] or 0)
+        proto_fee     = float(_ov[3] or 0)
+        proto_wins    = int(_ov[4] or 0)
+        proto_losses  = int(_ov[5] or 0)
+        proto_first   = str(_ov[6] or "")[:10]
+        proto_last    = str(_ov[7] or "")[:16]
+    except Exception as _e3:
+        logger.debug("[progressao_capital] protocol_ops: %s", _e3)
+        proto_trades = proto_wallets = proto_wins = proto_losses = 0
+        proto_profit = proto_fee = 0.0
+        proto_first = proto_last = ""
+        _top10 = []
 
-    win_rate   = (wins / total_trades * 100) if total_trades > 0 else 0.0
-    profit_ico = "📈" if total_profit >= 0 else "📉"
+    proto_wr  = (proto_wins / proto_trades * 100) if proto_trades > 0 else 0.0
 
-    # ── 2. BREAKDOWN POR AMBIENTE ─────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # SEÇÃO C: LIQUIDEZ (fl_snapshots atual vs anterior)
+    # ─────────────────────────────────────────────────────────────────────────
+    pool_data: dict = {}  # env → {curr, prev, delta}
     try:
         with DB_LOCK:
-            _env_rows = conn.execute("""
-                SELECT
-                    env,
-                    COUNT(*)                                        AS trades,
-                    COUNT(DISTINCT wallet)                         AS wallets,
-                    ROUND(SUM(profit), 4)                          AS profit,
-                    ROUND(SUM(fee_bd), 4)                          AS fee_bd,
-                    COUNT(CASE WHEN profit > 0 THEN 1 END)         AS wins,
-                    MAX(ts)                                        AS last_op
-                FROM protocol_ops
-                WHERE wallet != '' AND env != 'UNKNOWN'
-                GROUP BY env
-                ORDER BY trades DESC
+            _fl_all = conn.execute("""
+                SELECT env, total_usd, ts
+                FROM fl_snapshots
+                WHERE total_usd > 0
+                ORDER BY env, ts DESC
             """).fetchall()
-    except Exception:
-        _env_rows = []
-
-    # ── 3. TOP TRADERS POR LUCRO ──────────────────────────────────────────────
-    try:
-        with DB_LOCK:
-            _top_traders = conn.execute("""
-                SELECT
-                    wallet,
-                    env,
-                    COUNT(*)                            AS trades,
-                    ROUND(SUM(profit), 4)               AS profit,
-                    COUNT(CASE WHEN profit > 0 THEN 1 END) AS wins
-                FROM protocol_ops
-                WHERE wallet != '' AND env != 'UNKNOWN'
-                GROUP BY wallet, env
-                ORDER BY profit DESC
-                LIMIT 10
-            """).fetchall()
-    except Exception:
-        _top_traders = []
-
-    # ── 4. P&L POR PERÍODOS (24h / 7d / 30d / total) ────────────────────────
-    _periods = [
-        ("24h",  now_dt - timedelta(hours=24)),
-        ("7d",   now_dt - timedelta(days=7)),
-        ("30d",  now_dt - timedelta(days=30)),
-    ]
-    period_stats: list = []
-    for _lbl, _since_dt in _periods:
-        _since_str = _since_dt.strftime("%Y-%m-%dT%H:%M:%S")
-        try:
-            with DB_LOCK:
-                _pr = conn.execute("""
-                    SELECT COUNT(*), ROUND(SUM(profit),4),
-                           COUNT(CASE WHEN profit > 0 THEN 1 END)
-                    FROM protocol_ops
-                    WHERE ts >= ? AND wallet != '' AND env != 'UNKNOWN'
-                """, (_since_str,)).fetchone()
-            period_stats.append((_lbl, int(_pr[0] or 0), float(_pr[1] or 0), int(_pr[2] or 0)))
-        except Exception:
-            period_stats.append((_lbl, 0, 0.0, 0))
-
-    # ── 5. VOLUME DIÁRIO (últimos 7 dias) ────────────────────────────────────
-    daily_vol: list = []
-    try:
-        _since_7d = (now_dt - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%S")
-        with DB_LOCK:
-            _dv_rows = conn.execute("""
-                SELECT DATE(ts) AS dia, COUNT(*) AS ops, ROUND(SUM(profit),4) AS pnl
-                FROM protocol_ops
-                WHERE ts >= ? AND wallet != '' AND env != 'UNKNOWN'
-                GROUP BY DATE(ts)
-                ORDER BY dia DESC
-                LIMIT 8
-            """, (_since_7d,)).fetchall()
-        daily_vol = list(reversed(_dv_rows))  # cronológico
-    except Exception:
-        daily_vol = []
-
-    # ── 6. LIQUIDEZ DO PROTOCOLO (fl_snapshots mais recente por env) ─────────
-    pool_per_env: dict = {}
-    try:
-        with DB_LOCK:
-            _snap_rows = conn.execute("""
-                SELECT s.env, s.liq_usdt, s.lp_usdt_supply, s.total_usd, s.ts
-                FROM fl_snapshots s
-                INNER JOIN (
-                    SELECT env, MAX(ts) AS max_ts FROM fl_snapshots GROUP BY env
-                ) latest ON s.env = latest.env AND s.ts = latest.max_ts
-            """).fetchall()
-        for _r in _snap_rows:
-            pool_per_env[_r[0]] = {
-                "liq_usdt":  float(_r[1] or 0),
-                "lp_supply": float(_r[2] or 0),
-                "total_usd": float(_r[3] or 0),
-                "ts":        str(_r[4] or "")[:16],
+        _fl_by_env: dict = {}
+        for _fe, _fv, _ft in _fl_all:
+            _fl_by_env.setdefault(_fe, []).append((float(_fv or 0), str(_ft or "")[:16]))
+        for _env_k, _snaps in _fl_by_env.items():
+            _c_tvl, _c_ts = _snaps[0]
+            _p_tvl, _p_ts = _snaps[1] if len(_snaps) >= 2 else (None, None)
+            pool_data[_env_k] = {
+                "curr": _c_tvl, "curr_ts": _c_ts,
+                "prev": _p_tvl, "prev_ts": _p_ts,
+                "delta": (_c_tvl - _p_tvl) if _p_tvl is not None else None,
             }
-    except Exception as _e:
-        logger.debug("[progressao_capital] fl_snapshots: %s", _e)
+    except Exception as _e4:
+        logger.debug("[progressao_capital] fl_snapshots: %s", _e4)
 
-    total_tvl = sum(v["total_usd"] for v in pool_per_env.values())
+    total_tvl_curr = sum(v["curr"] for v in pool_data.values())
+    total_tvl_prev = sum(v["prev"] for v in pool_data.values() if v["prev"] is not None)
+    total_tvl_delta = total_tvl_curr - total_tvl_prev if total_tvl_prev > 0 else None
 
-    # ── MONTA MENSAGEM ────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
+    # MONTA MENSAGEM
+    # ─────────────────────────────────────────────────────────────────────────
     lines = [
-        "📸 <b>PROGRESSÃO DO CAPITAL — PROTOCOLO WEbdEX</b>",
-        f"🕒 <i>{now_dt.strftime('%Y-%m-%d %H:%M')}  ·  source: protocol_ops on-chain</i>",
+        "📸 <b>PROGRESSÃO DO CAPITAL — WEbdEX</b>",
+        f"🕒 <i>{now_dt.strftime('%Y-%m-%d %H:%M')}</i>",
         sep,
-        "",
-        "🌐 <b>OVERVIEW DO PROTOCOLO</b>",
-        f"   📊 Total Operações:  <b>{total_trades:,}</b>",
-        f"   👥 Traders únicos:   <b>{total_wallets:,}</b>",
-        f"   {profit_ico} P&amp;L Total:       <b>{total_profit:+,.4f} USDT</b>",
-        f"   🏆 Taxa de Acerto:   <b>{win_rate:.1f}%</b>  ({wins:,}✅ / {losses:,}❌)",
-        f"   💎 Fees BD coletadas:<b>{total_fee_bd:,.4f}</b>",
-        f"   ⛽ Gas consumido:    <b>{total_gas_pol:.4f} POL</b>",
-        f"   🗓️ Desde:            <i>{first_op}</i>",
-        f"   🕒 Última op:        <i>{last_op}</i>",
     ]
 
-    # Breakdown por ambiente
-    if _env_rows:
-        lines += ["", sep, "", "🔀 <b>POR AMBIENTE</b>"]
-        for _er in _env_rows:
-            _env_n, _e_t, _e_w, _e_p, _e_f, _e_w2, _e_last = _er
-            _e_wr  = (_e_w2 / _e_t * 100) if _e_t > 0 else 0.0
-            _e_ico = "🔵" if "v5" in str(_env_n).lower() else "🟠"
-            _p_ico = "📈" if float(_e_p or 0) >= 0 else "📉"
-            lines += [
-                "",
-                f"  {_e_ico} <b>{esc(str(_env_n))}</b>",
-                f"     📊 Trades:  <b>{int(_e_t or 0):,}</b>  |  👥 Wallets: <b>{int(_e_w or 0):,}</b>",
-                f"     {_p_ico} P&amp;L:    <b>{float(_e_p or 0):+,.4f}</b>  |  🏆 Acerto: <b>{_e_wr:.1f}%</b>",
-                f"     💎 Fees BD: <b>{float(_e_f or 0):,.4f}</b>",
-                f"     🕒 Última:  <i>{str(_e_last or '')[:16]}</i>",
-            ]
+    # ── A. CAPITAL DOS USUÁRIOS ────────────────────────────────────────────
+    lines += ["", "💼 <b>CAPITAL DOS USUÁRIOS (bot)</b>"]
 
-    # Top traders
-    if _top_traders:
-        lines += ["", sep, "", "🏆 <b>TOP TRADERS POR P&amp;L</b>"]
-        for _pos, _tr in enumerate(_top_traders[:10], 1):
-            _tw, _te, _tt, _tp, _tw2 = _tr
-            _wr_t = (_tw2 / _tt * 100) if _tt > 0 else 0.0
-            _p_ic = "📈" if float(_tp or 0) >= 0 else "📉"
-            _e_ic = "🔵" if "v5" in str(_te).lower() else "🟠"
-            _wshort = f"{str(_tw)[:6]}...{str(_tw)[-4:]}" if len(str(_tw)) > 12 else str(_tw)
-            lines.append(
-                f"  {_medal(_pos)} {_e_ic} <code>{esc(_wshort)}</code>  "
-                f"{_p_ic} <b>{float(_tp or 0):+,.4f}</b>  "
-                f"({int(_tt or 0):,} trades · {_wr_t:.0f}%✅)"
-            )
-
-    # P&L por período
-    lines += ["", sep, "", "📈 <b>P&amp;L POR PERÍODO</b>"]
-    lines.append(f"  {'All':>4}  {'trades':>8}  {'P&L':>12}  {'acerto':>7}")
-    # Linha "All"
-    all_wr = (wins / total_trades * 100) if total_trades > 0 else 0.0
-    p_ico  = "📈" if total_profit >= 0 else "📉"
-    lines.append(
-        f"  {'All':>4}  {total_trades:>8,}  {p_ico}{total_profit:>+10.4f}  {all_wr:>6.1f}%"
-    )
-    for _lbl, _cnt, _pnl, _wins_p in reversed(period_stats):
-        _wr_p = (_wins_p / _cnt * 100) if _cnt > 0 else 0.0
-        _pic  = "📈" if _pnl >= 0 else "📉"
-        lines.append(
-            f"  {_lbl:>4}  {_cnt:>8,}  {_pic}{_pnl:>+10.4f}  {_wr_p:>6.1f}%"
-        )
-
-    # Volume diário com barra ASCII
-    if daily_vol:
-        lines += ["", sep, "", "📊 <b>VOLUME DIÁRIO (últimos 7 dias)</b>"]
-        _max_ops = max(int(r[1] or 0) for r in daily_vol) or 1
-        for _dia, _ops, _pnl in daily_vol:
-            _bar_str = _bar(float(_ops), float(_max_ops), 8)
-            _day_lbl = str(_dia)[5:]  # MM-DD
-            _pnl_ic  = "+" if float(_pnl or 0) >= 0 else ""
-            lines.append(
-                f"  <code>{_day_lbl}</code> {_bar_str} <b>{int(_ops):,}</b>"
-                f"  P&amp;L:{_pnl_ic}{float(_pnl or 0):.2f}"
-            )
-
-    # Liquidez dos pools
-    lines += ["", sep, "", "🏦 <b>LIQUIDEZ DO PROTOCOLO (fl_snapshots)</b>"]
-    if pool_per_env:
-        for _env_k in sorted(pool_per_env.keys()):
-            _snap   = pool_per_env[_env_k]
-            _ico    = "🔵" if "v5" in str(_env_k).lower() else "🟠"
-            _liq    = _snap["liq_usdt"]
-            _lps    = _snap["lp_supply"]
-            _tvl    = _snap["total_usd"]
-            _snp_ts = _snap["ts"]
-            lines += [
-                f"  {_ico} <b>{esc(_env_k)}</b>",
-                f"     💵 USDT no SubAccounts: <b>${_liq:,.2f}</b>",
-                f"     🟣 LP-USDT supply:      <b>{_lps:,.2f}</b>",
-                f"     📊 TVL:                 <b>${_tvl:,.2f}</b>",
-                f"     🕒 Snapshot:            <i>{esc(_snp_ts)}</i>",
-            ]
+    if user_prog:
+        # Totais consolidados
+        d_ico = "📈" if total_delta_all >= 0 else "📉"
         lines += [
-            "",
-            f"   📊 TVL Total protocolo: <b>${total_tvl:,.2f}</b>",
+            f"   👥 Usuários rastreados: <b>{len(user_prog)}</b>  ({len(users_with_prog)} c/ histórico)",
+            f"   💵 Capital total atual: <b>${total_curr_all:,.2f}</b>",
+        ]
+        if users_with_prog:
+            lines += [
+                f"   💵 Capital total antes: <b>${total_prev_all:,.2f}</b>",
+                f"   {d_ico} Progressão total:   <b>{total_delta_all:+,.2f} USD</b>  ({total_delta_pct:+.2f}%)",
+            ]
+        lines.append("")
+
+        # Por usuário (máx 15)
+        for _i, _u in enumerate(user_prog[:15]):
+            _env_ico = "🔵" if "v5" in str(_u["env"]).lower() else "🟠"
+            _label   = f"@{_u['uname']}" if _u.get("uname") else f"ID:{str(_u['chat_id'])[-4:]}"
+            lines.append(f"  {_env_ico} <b>{esc(_label)}</b>  <i>{esc(str(_u['env']))}</i>")
+            lines.append(f"     💵 Agora:  <b>${_u['curr']:,.2f}</b>  <i>[{_u['curr_ts']}]</i>")
+
+            if _u["prev"] is not None:
+                _d_ico = "📈" if _u["delta"] >= 0 else "📉"
+                lines.append(f"     💵 Antes:  ${_u['prev']:,.2f}  <i>[{_u['prev_ts']}]</i>")
+                lines.append(
+                    f"     {_d_ico} Progressão: <b>{_u['delta']:+,.2f} USD</b>"
+                    f"  (<b>{_u['delta_pct']:+.2f}%</b>)"
+                )
+            else:
+                lines.append("     <i>(sem snapshot anterior — chame mybdBook novamente para comparar)</i>")
+            if _i < len(user_prog[:15]) - 1:
+                lines.append("")
+    else:
+        lines.append("  <i>(nenhum snapshot de capital — usuários precisam chamar mybdBook ao menos 1x)</i>")
+
+    # ── B. P&L DE TRADING DO PROTOCOLO ───────────────────────────────────
+    lines += ["", sep, "", "🌐 <b>P&amp;L DE TRADING — PROTOCOLO (on-chain)</b>"]
+    if proto_trades > 0:
+        _p_ico = "📈" if proto_profit >= 0 else "📉"
+        lines += [
+            f"   📊 Total trades:    <b>{proto_trades:,}</b>",
+            f"   👥 Traders únicos:  <b>{proto_wallets:,}</b>",
+            f"   {_p_ico} P&amp;L total:     <b>{proto_profit:+,.4f} USDT</b>",
+            f"   🏆 Taxa de acerto:  <b>{proto_wr:.1f}%</b>  ({proto_wins:,}✅ / {proto_losses:,}❌)",
+            f"   💎 Fees BD:         <b>{proto_fee:,.4f}</b>",
+            f"   🗓️ Período:          <i>{proto_first} → {proto_last}</i>",
+        ]
+        if _top10:
+            lines += ["", "   🏆 <b>Top 5 Traders por P&amp;L:</b>"]
+            for _pos, (_tw, _te, _tt, _tp, _tw2) in enumerate(_top10, 1):
+                _wr_t = (_tw2 / _tt * 100) if _tt > 0 else 0.0
+                _p_ic = "📈" if float(_tp or 0) >= 0 else "📉"
+                _e_ic = "🔵" if "v5" in str(_te).lower() else "🟠"
+                _ws   = f"{str(_tw)[:6]}…{str(_tw)[-4:]}" if len(str(_tw)) > 12 else str(_tw)
+                lines.append(
+                    f"   {_medal(_pos)} {_e_ic} <code>{esc(_ws)}</code>  "
+                    f"{_p_ic} <b>{float(_tp or 0):+,.4f}</b>  ({int(_tt):,}t · {_wr_t:.0f}%✅)"
+                )
+    else:
+        lines.append("  <i>(protocol_ops vazio — backfill em andamento)</i>")
+
+    # ── C. LIQUIDEZ ────────────────────────────────────────────────────────
+    lines += ["", sep, "", "🏦 <b>LIQUIDEZ DO PROTOCOLO (fl_snapshots)</b>"]
+    if pool_data:
+        for _ek in sorted(pool_data.keys()):
+            _pd  = pool_data[_ek]
+            _ico = "🔵" if "v5" in str(_ek).lower() else "🟠"
+            lines.append(f"  {_ico} <b>{esc(_ek)}</b>")
+            lines.append(f"     📊 TVL agora: <b>${_pd['curr']:,.2f}</b>  <i>[{_pd['curr_ts']}]</i>")
+            if _pd["prev"] is not None:
+                _td_ico = "📈" if _pd["delta"] >= 0 else "📉"
+                lines.append(f"     📊 TVL antes: ${_pd['prev']:,.2f}  <i>[{_pd['prev_ts']}]</i>")
+                lines.append(f"     {_td_ico} Delta TVL:  <b>{_pd['delta']:+,.2f}</b>")
+        lines.append("")
+        tvl_d_str = f"{total_tvl_delta:+,.2f}" if total_tvl_delta is not None else "—"
+        tvl_d_ico = ("📈" if total_tvl_delta and total_tvl_delta >= 0 else "📉") if total_tvl_delta is not None else "📊"
+        lines += [
+            f"   📊 TVL Total: <b>${total_tvl_curr:,.2f}</b>",
+            f"   {tvl_d_ico} Delta TVL: <b>{tvl_d_str}</b>",
         ]
     else:
-        lines.append("  <i>(aguardando fl_snapshot_worker — roda a cada 30min)</i>")
+        lines.append("  <i>(aguardando fl_snapshot_worker)</i>")
 
     lines += [
         "",
-        "<i>💡 Dados de protocol_ops: TODOS os traders on-chain desde deploy do contrato.</i>",
-        "<i>📸 fl_snapshots: pool de liquidez atualizado pelo worker a cada 30min.</i>",
+        "<i>💡 Progressão de capital = comparação entre snapshots do mybdBook por usuário.</i>",
+        "<i>   Quanto mais vezes o usuário chama mybdBook, mais precisa fica a curva.</i>",
     ]
 
     try:
