@@ -1457,98 +1457,69 @@ def adm_progressao_capital(m):
     if not _is_admin(m.chat.id):
         return bot.reply_to(m, "⛔ Acesso negado.")
     bot.send_chat_action(m.chat.id, "typing")
-    bot.send_message(m.chat.id, "⏳ Consultando SubAccounts on-chain + pools LP...", parse_mode="HTML")
+    bot.send_message(m.chat.id, "⏳ Consultando capital_cache + fl_snapshots...", parse_mode="HTML")
 
     now_ts   = time.time()
     now_dt   = datetime.now()
     hoje_str = now_dt.strftime("%Y-%m-%d")
 
-    # ── 1. Capital on-chain ao vivo via SubAccounts ──────────────────────────
-    import concurrent.futures as _cf
-    from webdex_config import CONTRACTS, ADDR_USDT0
-    from webdex_chain import get_contracts, web3_for_rpc, chain_pol_price
+    # ── 1. Capital do cache (workers atualizam a cada ~30min via RPC) ─────────
+    # Substituí queries on-chain ao vivo (lentas/timeout com 12+ users)
+    # pelo capital_cache que os workers já mantêm atualizado em background.
+    import json as _json
+    from webdex_config import CONTRACTS
+    from webdex_chain import chain_pol_price
 
     pol_price = chain_pol_price() or 0.50
 
-    # Wallets ativas com capital > 0
     with DB_LOCK:
-        wallets = conn.execute(
-            "SELECT DISTINCT chat_id, wallet, COALESCE(env,'AG_C_bd'), rpc "
-            "FROM users WHERE wallet<>'' AND wallet IS NOT NULL AND active=1"
+        cache_rows = conn.execute(
+            "SELECT chat_id, COALESCE(env,'AG_C_bd'), total_usd, breakdown_json, updated_ts "
+            "FROM capital_cache WHERE total_usd > 0.5 ORDER BY updated_ts DESC"
         ).fetchall()
 
-    def _fetch_onchain(row):
-        chat_id, wallet, env, rpc = row
-        try:
-            w3  = web3_for_rpc(rpc or "", timeout=10)
-            c   = get_contracts(env, w3)
-            mgr = w3.to_checksum_address(c["addr"]["MANAGER"])
-            usr = w3.to_checksum_address(wallet)
-            subs = c["sub"].functions.getSubAccounts(mgr, usr).call()[:30]
-            usdt0_total = 0.0
-            sub_caps: dict = {}
-            for s in subs:
-                sid = s[0]
-                sub_total = 0.0
-                try:
-                    strats = c["sub"].functions.getStrategies(mgr, usr, sid).call()[:15]
-                    for st in strats:
-                        try:
-                            bals = c["sub"].functions.getBalances(mgr, usr, sid, st).call()
-                            for b in bals:
-                                if str(b[1]).lower() == ADDR_USDT0.lower():
-                                    sub_total += int(b[0]) / (10 ** int(b[2]))
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-                usdt0_total += sub_total
-                if sub_total > 0:
-                    sub_caps[str(sid)] = sub_total
-            return int(chat_id), wallet.lower(), env, usdt0_total, sub_caps
-        except Exception:
-            return int(chat_id), (wallet or "").lower(), env, 0.0, {}
-
-    onchain_results = []
-    if wallets:
-        with _cf.ThreadPoolExecutor(max_workers=5) as ex:
-            futs = {ex.submit(_fetch_onchain, row): row for row in wallets}
-            for fut in _cf.as_completed(futs, timeout=20):
-                try:
-                    onchain_results.append(fut.result())
-                except Exception:
-                    pass
-
-    # Agrupa por ambiente
-    env_totals: dict = {}    # env -> total_usd
-    env_wallets: dict = {}   # env -> count
-    env_sub_caps: dict = {}  # env -> list of (sub_id, val)
+    # Deduplica por (chat_id, env) — pega registro mais recente
+    _seen: set = set()
+    env_totals:   dict = {}
+    env_wallets:  dict = {}
+    env_sub_caps: dict = {}
+    env_cache_ts: dict = {}
     grand_total = 0.0
-    for cid, wlt, env, total, sub_caps in onchain_results:
-        if total <= 0:
+
+    for cid, env, total, bdj, uts in cache_rows:
+        key = (int(cid), env)
+        if key in _seen:
             continue
-        env_totals[env] = env_totals.get(env, 0.0) + total
+        _seen.add(key)
+        env_totals[env]  = env_totals.get(env, 0.0) + float(total or 0)
         env_wallets[env] = env_wallets.get(env, 0) + 1
-        env_sub_caps.setdefault(env, []).extend(sub_caps.items())
-        grand_total += total
+        grand_total     += float(total or 0)
+        # Breakdown como sub-cap (usa chaves do breakdown_json quando disponível)
+        try:
+            bd = _json.loads(bdj or "{}")
+            for sym, val in bd.items():
+                if float(val) > 0:
+                    env_sub_caps.setdefault(env, []).append((f"{sym}@{str(cid)[-4:]}", float(val)))
+        except Exception:
+            pass
+        # Timestamp mais recente do cache para esse ambiente
+        if env not in env_cache_ts or float(uts) > env_cache_ts[env]:
+            env_cache_ts[env] = float(uts)
 
-    # ── 2. Salva snapshot on-chain no capital_cache ──────────────────────────
-    for cid, wlt, env, total, _ in onchain_results:
-        if total > 0.5:
-            with DB_LOCK:
-                conn.execute(
-                    "INSERT OR REPLACE INTO capital_cache (chat_id, env, total_usd, breakdown_json, updated_ts) "
-                    "VALUES (?,?,?,?,?)",
-                    (cid, env, total, '{}', now_ts)
-                )
-            conn.commit()
+    # Idade do cache por ambiente
+    def _cache_age(env: str) -> str:
+        ts = env_cache_ts.get(env)
+        if not ts:
+            return "sem cache"
+        mins = int((now_ts - ts) / 60)
+        return f"{mins}min atrás" if mins < 60 else f"{mins//60}h atrás"
 
-    # ── 3. Snapshot anterior (capital_cache 24h atrás) para delta ────────────
+    # ── 2. Snapshot anterior para delta (cache > 1h de diferença) ────────────
     with DB_LOCK:
         prev_rows = conn.execute(
             "SELECT COALESCE(env,'?'), SUM(total_usd) FROM capital_cache "
-            "WHERE updated_ts < ? GROUP BY COALESCE(env,'?')",
-            (now_ts - 3600,)   # snapshots com > 1h de diferença
+            "WHERE updated_ts < ? AND total_usd > 0.5 GROUP BY COALESCE(env,'?')",
+            (now_ts - 3600,)
         ).fetchall()
     prev_totals = {r[0]: float(r[1] or 0) for r in prev_rows}
     prev_grand  = sum(prev_totals.values())
@@ -1628,7 +1599,7 @@ def adm_progressao_capital(m):
         d     = cap - prev
         d_ic  = "📈" if d >= 0 else "📉"
         icon  = "🔵" if "v5" in env_k.lower() else "🟠"
-        src   = "📋 cache 24h" if env_k in _env_from_cache else "⛓️ on-chain"
+        src   = f"📋 cache {_cache_age(env_k)}"
 
         # Top subcontas desse ambiente (só disponível para on-chain)
         subs_env = sorted(env_sub_caps.get(env_k, []), key=lambda x: x[1], reverse=True)[:3]
