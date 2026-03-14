@@ -678,13 +678,12 @@ def adm_analise_subaccounts(m):
 
             # 4. Capital vivo — capital_cache por ambiente (100% DB, zero RPC)
             cap_cache = cur.execute("""
-                SELECT COALESCE(u.env, 'AG_C_bd') AS env,
+                SELECT COALESCE(cc.env, 'AG_C_bd') AS env,
                        COUNT(*) AS users,
                        ROUND(SUM(cc.total_usd), 2) AS total
                 FROM capital_cache cc
-                LEFT JOIN users u ON u.chat_id = cc.chat_id
                 WHERE cc.total_usd > 0.5
-                GROUP BY env
+                GROUP BY cc.env
             """).fetchall()
 
         # ── totais globais ─────────────────────────────────────────────────
@@ -939,8 +938,11 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
                 ROUND(SUM(gas_pol), 6)                                 AS gas_pol_total
             FROM protocol_ops
             WHERE ts >= ?
-            GROUP BY env ORDER BY lucro_total DESC
+            GROUP BY env
         """, (since,)).fetchall()
+
+        # bd_v5 sempre primeiro
+        proto_rows = sorted(proto_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1, -float(r[3] or 0)))
 
         # Totais globais
         p_trades  = sum(int(r[1] or 0)   for r in proto_rows)
@@ -1009,73 +1011,86 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
 
+    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
     if proto_count == 0:
-        lines.append("\n⏳ <i>Backfill on-chain em andamento (worker ativo)...</i>")
-        lines.append("💡 <i>Dados disponíveis em ~30min após a primeira sincronização.</i>")
+        lines += ["", "⏳ <i>Backfill on-chain em andamento (worker ativo)...</i>",
+                  "💡 <i>Dados disponíveis em ~30min após a primeira sincronização.</i>"]
     else:
-        # ── Bloco 1: Lucro total dos traders ──────────────────────────────────
-        lines.append(
-            f"\n📈 <b>LUCRO DOS TRADERS (Protocolo Completo)</b>\n"
-            f"  {sg_lucro} Lucro Líquido: <b>{s_lucro}${p_lucro:,.2f} USD</b>\n"
-            f"  💰 Ganhos:   <b>+${p_ganhos:,.2f}</b>  |  📉 Perdas: <b>${p_perdas:,.2f}</b>\n"
-            f"  📊 Trades: <b>{p_trades:,}</b>  |  👥 Traders: <b>{p_traders:,}</b>  |  WR: <b>{p_wr:.1f}%</b>"
-        )
+        # ── Bloco 1: Consolidado global ────────────────────────────────────────
+        lpt_p = p_lucro / p_trades if p_trades else 0
+        lines += [
+            "",
+            "🌐 <b>CONSOLIDADO GLOBAL</b>",
+            f"  ├─ 📊 Trades: <b>{p_trades:,}</b>  👥 Traders: <b>{p_traders:,}</b>  WR: <b>{p_wr:.1f}%</b>",
+            f"  ├─ 💰 Ganhos: <b>+${p_ganhos:,.2f}</b>  📉 Perdas: <b>${p_perdas:,.2f}</b>",
+            f"  └─ {sg_lucro} Líquido: <b>{s_lucro}${p_lucro:,.2f} USD</b>  (<b>{lpt_p:+.4f}/trade</b>)",
+            "",
+            sep,
+        ]
+
+        # ── Por ambiente ───────────────────────────────────────────────────────
         for env, trades, traders, lucro, ganhos, perdas, wins, bd_tot, gas_pol in proto_rows:
             ic  = "🔵" if "v5" in str(env).lower() else "🟠"
             sg  = "🟢" if (lucro or 0) >= 0 else "🔴"
             s   = "+" if (lucro or 0) >= 0 else ""
             wr  = wins / trades * 100 if trades else 0.0
-            lines.append(
-                f"\n  {ic} <b>{esc(str(env))}</b>\n"
-                f"     {sg} Lucro: <b>{s}${(lucro or 0):,.2f}</b>  "
-                f"Trades: <b>{trades:,}</b>  WR: <b>{wr:.1f}%</b>\n"
-                f"     👥 Traders: <b>{traders}</b>  |  Gás: <b>{(gas_pol or 0):,.2f} POL</b>"
-            )
+            lpt = (lucro or 0) / trades if trades else 0
+            lines += [
+                "",
+                f"{ic} <b>{esc(str(env))}</b>",
+                f"  ├─ 📊 Trades: <b>{trades:,}</b>  👥 Traders: <b>{traders:,}</b>  WR: <b>{wr:.1f}%</b>",
+                f"  ├─ 💰 Ganhos: <b>+${(ganhos or 0):,.2f}</b>  📉 Perdas: <b>${(perdas or 0):,.2f}</b>",
+                f"  └─ {sg} Líquido: <b>{s}${(lucro or 0):,.2f} USD</b>  (<b>{lpt:+.4f}/trade</b>)",
+            ]
 
         # ── Bloco 2: Gás consumido ─────────────────────────────────────────────
-        lines.append(
-            f"\n\n⛽ <b>GÁS CONSUMIDO (Transações)</b>\n"
-            f"  🔴 Total POL:  <b>{p_gas_pol:,.4f} POL</b>  (~<b>${p_gas_usd:,.2f}</b>)\n"
-            f"  📊 Média/trade: <b>{(p_gas_pol/p_trades):,.6f} POL</b>" if p_trades else
-            f"\n\n⛽ <b>GÁS CONSUMIDO</b>  <i>sem dados</i>"
-        )
+        # ── Bloco 2: Gás consumido ─────────────────────────────────────────────
+        lines += ["", sep, "", "⛽ <b>GÁS CONSUMIDO (Transações)</b>"]
+        if p_trades:
+            lines += [
+                f"  ├─ 🔴 Total POL: <b>{p_gas_pol:,.4f} POL</b>  (~<b>${p_gas_usd:,.2f}</b>)",
+                f"  └─ 📊 Média/trade: <b>{(p_gas_pol/p_trades):,.6f} POL</b>",
+            ]
+        else:
+            lines.append("  <i>sem dados</i>")
 
         # ── Bloco 3: BD/Passe coletado ─────────────────────────────────────────
-        lines.append(
-            f"\n\n🎟️ <b>BD/PASSE COLETADO (Fee Protocolo)</b>\n"
-            f"  💎 Período:    <b>{p_bd:,.4f} BD</b>\n"
-            f"  🏦 Acumulado:  <b>{bd_alltime:,.4f} BD</b>  <i>(all-time)</i>"
-        )
+        lines += [
+            "", sep, "",
+            "🎟️ <b>BD/PASSE COLETADO (Fee Protocolo)</b>",
+            f"  ├─ 💎 Período:   <b>{p_bd:,.4f} BD</b>",
+            f"  └─ 🏦 Acumulado: <b>{bd_alltime:,.4f} BD</b>  <i>(all-time)</i>",
+        ]
 
         # ── Bloco 4: TVL delta ─────────────────────────────────────────────────
         if tvl_data:
             s_tvl = "+" if tvl_total_delta >= 0 else ""
-            lines.append(
-                f"\n\n🏦 <b>TVL DO PROTOCOLO</b>\n"
-                f"  {sg_tvl} Delta: <b>{s_tvl}${tvl_total_delta:,.2f}</b>  ({s_tvl}{tvl_total_pct:.2f}%)\n"
-                f"  📊 Início: <b>${tvl_total_inicio:,.2f}</b>  →  Atual: <b>${tvl_total_fim:,.2f}</b>"
-            )
-            for env, v in tvl_data.items():
+            tvl_sorted = sorted(tvl_data.items(), key=lambda kv: (0 if "v5" in kv[0].lower() else 1))
+            lines += [
+                "", sep, "",
+                "🏦 <b>TVL DO PROTOCOLO</b>",
+                f"  ├─ {sg_tvl} Delta: <b>{s_tvl}${tvl_total_delta:,.2f}</b>  ({s_tvl}{tvl_total_pct:.2f}%)",
+                f"  └─ 📊 Início: <b>${tvl_total_inicio:,.2f}</b>  →  Atual: <b>${tvl_total_fim:,.2f}</b>",
+            ]
+            for env, v in tvl_sorted:
                 ic = "🔵" if "v5" in env.lower() else "🟠"
                 s  = "+" if v["delta"] >= 0 else ""
-                lines.append(
-                    f"\n  {ic} <b>{esc(env)}</b>  "
-                    f"<b>${v['fim']:,.2f}</b>  ({s}${v['delta']:,.2f})"
-                )
+                lines.append(f"       {ic} <b>{esc(env)}</b>: <b>${v['fim']:,.2f}</b>  ({s}${v['delta']:,.2f})")
 
         # ── Bloco 5: Top 5 traders ─────────────────────────────────────────────
         if top_traders:
-            lines.append("\n\n🏆 <b>TOP 5 TRADERS (período)</b>")
+            lines += ["", sep, "", "🏆 <b>TOP 5 TRADERS (período)</b>"]
             for i, (wallet, lucro, trades, bd_pago, gas) in enumerate(top_traders, 1):
-                short_w = f"{wallet[:6]}...{wallet[-4:]}" if len(str(wallet)) > 10 else str(wallet)
+                short_w = f"{wallet[:6]}…{wallet[-4:]}" if len(str(wallet)) > 10 else str(wallet)
                 sg = "🟢" if (lucro or 0) >= 0 else "🔴"
                 s  = "+" if (lucro or 0) >= 0 else ""
-                lines.append(
-                    f"  {i}. <code>{short_w}</code>\n"
-                    f"     {sg} <b>{s}${(lucro or 0):,.2f}</b>  |  {trades} trades  |  💎 {(bd_pago or 0):.3f} BD"
-                )
+                lines += [
+                    f"  {_medal(i)} <code>{esc(short_w)}</code>",
+                    f"       {sg} <b>{s}${(lucro or 0):,.2f}</b>  ·  {trades:,}t  ·  💎 {(bd_pago or 0):.3f} BD",
+                ]
 
-    lines.append(f"\n\n<i>🔍 Fonte: on-chain ({proto_count:,} ops indexadas)</i>")
+    lines += ["", f"<i>🔍 Fonte: on-chain ({proto_count:,} ops indexadas)</i>"]
     return "\n".join(lines)
 
 
