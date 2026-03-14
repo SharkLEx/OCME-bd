@@ -200,6 +200,12 @@ _ensure_col(cursor, "users", "last_seen_ts", "REAL")
 _ensure_col(cursor, "users", "username", "TEXT")
 _ensure_col(cursor, "users", "capital_hint", "REAL")
 
+# Colunas adicionadas em versões posteriores — garantir em DBs antigos
+_ensure_col(cursor, "protocol_ops",  "gas_pol",   "REAL DEFAULT 0.0")
+_ensure_col(cursor, "fl_snapshots",  "liq_usdt",  "REAL DEFAULT 0")
+_ensure_col(cursor, "fl_snapshots",  "liq_loop",  "REAL DEFAULT 0")
+_ensure_col(cursor, "fl_snapshots",  "pol_price", "REAL DEFAULT 0")
+
 def _ensure_operacoes_columns(_conn):
   try:
     _cur = _conn.cursor()
