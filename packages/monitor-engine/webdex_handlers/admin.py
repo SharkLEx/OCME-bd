@@ -471,69 +471,135 @@ def adm_pro_handler(m):
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "📊 Relatório Institucional")
 def adm_relatorio_institucional(m):
     if not _is_admin(m.chat.id):
-        return send_support(m.chat.id, "⛔ Acesso restrito.", reply_markup=_get_main_kb()())
+        return bot.reply_to(m, "⛔ Acesso negado.")
     bot.send_chat_action(m.chat.id, "typing")
+
+    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
     try:
-        from webdex_db import _ensure_institutional_table
-        _ensure_institutional_table()
-        users = list(_iter_linked_users())
-        total_users = len(users)
-        per_user_caps = []
-        env_cap = {}
-        for u in users:
-            try:
-                total, breakdown = _compute_user_capital(u)
-                t = float(total or 0.0)
-                per_user_caps.append(t)
-                env = (u.get("env") or "default").strip() or "default"
-                env_cap[env] = env_cap.get(env, 0.0) + t
-            except Exception:
-                continue
-        total_capital = float(sum(per_user_caps) if per_user_caps else 0.0)
-        top3_percent = 0.0
-        if total_capital > 0 and per_user_caps:
-            top3 = sum(sorted(per_user_caps, reverse=True)[:3])
-            top3_percent = (top3 / total_capital) * 100.0
+        with DB_LOCK:
+            cur = conn.cursor()
+
+            # 1. Usuários bot por ambiente
+            bot_users = cur.execute("""
+                SELECT COALESCE(env, 'AG_C_bd') AS env,
+                       COUNT(*) AS total,
+                       COUNT(CASE WHEN active=1 THEN 1 END) AS ativos
+                FROM users
+                GROUP BY env
+            """).fetchall()
+            bot_users = sorted(bot_users, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
+
+            total_bot_users  = sum(int(r[1] or 0) for r in bot_users)
+            total_bot_ativos = sum(int(r[2] or 0) for r in bot_users)
+
+            # 2. Capital por ambiente — capital_cache (100% DB, zero RPC)
+            cap_rows = cur.execute("""
+                SELECT COALESCE(cc.env, 'AG_C_bd') AS env,
+                       COUNT(*) AS users_com_cap,
+                       ROUND(SUM(cc.total_usd), 2) AS capital
+                FROM capital_cache cc
+                WHERE cc.total_usd > 0.5
+                GROUP BY cc.env
+            """).fetchall()
+            cap_rows = sorted(cap_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
+
+            cap_map = {r[0]: {"users": int(r[1]), "capital": float(r[2] or 0)} for r in cap_rows}
+            total_capital = sum(v["capital"] for v in cap_map.values())
+
+            # Concentração Top 3 (capital_cache individual)
+            all_caps = [float(r[0] or 0) for r in cur.execute(
+                "SELECT total_usd FROM capital_cache WHERE total_usd > 0.5 ORDER BY total_usd DESC"
+            ).fetchall()]
+            top3_pct = (sum(all_caps[:3]) / total_capital * 100) if total_capital > 0 and all_caps else 0.0
+
+            # 3. On-chain por ambiente — protocol_ops
+            proto_rows = cur.execute("""
+                SELECT COALESCE(env, 'UNKNOWN') AS env,
+                       COUNT(DISTINCT wallet)                          AS wallets,
+                       COUNT(*)                                        AS trades,
+                       ROUND(SUM(profit), 2)                          AS lucro,
+                       COUNT(CASE WHEN profit > 0 THEN 1 END)         AS wins,
+                       ROUND(SUM(fee_bd), 4)                          AS bd
+                FROM protocol_ops
+                WHERE wallet != '' AND env != 'UNKNOWN'
+                GROUP BY env
+            """).fetchall()
+            proto_rows = sorted(proto_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
+
+            proto_map = {
+                r[0]: {"wallets": int(r[1] or 0), "trades": int(r[2] or 0),
+                        "lucro": float(r[3] or 0), "wins": int(r[4] or 0), "bd": float(r[5] or 0)}
+                for r in proto_rows
+            }
+            total_wallets = sum(v["wallets"] for v in proto_map.values())
+            total_trades  = sum(v["trades"]  for v in proto_map.values())
+            total_lucro   = sum(v["lucro"]   for v in proto_map.values())
+            total_wins    = sum(v["wins"]    for v in proto_map.values())
+            total_bd      = sum(v["bd"]      for v in proto_map.values())
+            wr_global     = total_wins / total_trades * 100 if total_trades else 0.0
+            cobertura     = (total_bot_ativos / total_wallets * 100) if total_wallets > 0 else 0.0
+            sg_lucro      = "🟢" if total_lucro >= 0 else "🔴"
+
+        # ── HEADER ──────────────────────────────────────────────────────────
         lines = [
-            "🏛️ <b>RELATÓRIO INSTITUCIONAL WEbdEX</b>",
-            f"👥 <b>Usuários:</b> {total_users}",
-            f"💰 <b>Capital Total:</b> ${total_capital:,.2f} (on-chain)",
-            f"🏆 <b>Concentração Top 3:</b> {top3_percent:.1f}%",
+            "🏛️ <b>RELATÓRIO INSTITUCIONAL — WEbdEX</b>",
+            f"🕒 <i>{datetime.now().strftime('%d/%m/%Y %H:%M')}</i>",
+            sep,
+            "",
+            "🌐 <b>CONSOLIDADO GLOBAL</b>",
+            f"  ├─ 👥 Bot: <b>{total_bot_ativos}</b> ativos / <b>{total_bot_users}</b> total",
+            f"  ├─ 🔗 On-chain: <b>{total_wallets:,}</b> traders  ·  <b>{total_trades:,}</b> trades",
+            f"  ├─ 📡 Cobertura bot: <b>{cobertura:.1f}%</b>  ({total_bot_ativos}/{total_wallets})",
+            f"  ├─ 💰 Capital (cache): <b>${total_capital:,.2f}</b>  🏆 Top3: <b>{top3_pct:.1f}%</b>",
+            f"  ├─ {sg_lucro} Lucro on-chain: <b>{total_lucro:+,.2f} USD</b>  WR: <b>{wr_global:.1f}%</b>",
+            f"  └─ 💎 BD coletado: <b>{total_bd:.4f}</b> tokens  <i>(all-time)</i>",
         ]
 
-        # Cobertura do protocolo via protocol_ops
-        try:
-            with DB_LOCK:
-                _cov_wallets = cursor.execute(
-                    "SELECT COUNT(DISTINCT wallet) FROM protocol_ops"
-                ).fetchone()[0]
-                _cov_trades = cursor.execute(
-                    "SELECT COUNT(*) FROM protocol_ops"
-                ).fetchone()[0]
-                _cov_bd = cursor.execute(
-                    "SELECT ROUND(SUM(fee_bd),4) FROM protocol_ops"
-                ).fetchone()[0] or 0.0
-                _cov_profit = cursor.execute(
-                    "SELECT ROUND(SUM(profit),4) FROM protocol_ops"
-                ).fetchone()[0] or 0.0
-            _coverage = (total_users / _cov_wallets * 100) if _cov_wallets > 0 else 0.0
-            lines += [
-                "",
-                "🔗 <b>Cobertura do Protocolo (on-chain)</b>",
-                f"  👤 Traders on-chain: <b>{_cov_wallets:,}</b>",
-                f"  🤖 No bot (OCME):    <b>{total_users}</b>",
-                f"  📊 Cobertura:        <b>{_coverage:.1f}%</b>",
-                f"  📈 Trades indexados: <b>{_cov_trades:,}</b>",
-                f"  💵 Lucro total:      <b>{_cov_profit:+.4f}</b>",
-                f"  💎 BD coletado:      <b>{_cov_bd:.4f}</b> tokens",
-            ]
-        except Exception as _ce:
-            logger.debug("[relatorio_institucional coverage] %s", _ce)
+        # ── POR AMBIENTE ─────────────────────────────────────────────────────
+        all_envs = sorted(
+            set(list(proto_map.keys()) + [r[0] for r in bot_users]),
+            key=lambda e: (0 if "v5" in e.lower() else 1, e)
+        )
+
+        for env in all_envs:
+            eico  = "🔵" if "v5" in env.lower() else "🟠"
+            p     = proto_map.get(env, {})
+            b     = cap_map.get(env, {})
+            bu    = next((r for r in bot_users if r[0] == env), None)
+
+            wr_e  = p.get("wins", 0) / p.get("trades", 1) * 100 if p.get("trades") else 0
+            sg_e  = "🟢" if p.get("lucro", 0) >= 0 else "🔴"
+
+            lines += ["", sep, "", f"{eico} <b>{esc(env)}</b>"]
+
+            # Bot
+            if bu:
+                lines += [
+                    f"  ├─ 👥 Bot: <b>{int(bu[2] or 0)}</b> ativos / <b>{int(bu[1] or 0)}</b> total",
+                ]
+            if b.get("capital", 0) > 0:
+                lines.append(
+                    f"  ├─ 💰 Capital (cache): <b>${b['capital']:,.2f}</b>  ({b['users']} users)"
+                )
+
+            # On-chain
+            if p:
+                lines += [
+                    f"  ├─ 🔗 Traders: <b>{p['wallets']:,}</b>  📊 Trades: <b>{p['trades']:,}</b>  WR: <b>{wr_e:.1f}%</b>",
+                    f"  ├─ {sg_e} Lucro: <b>{p['lucro']:+,.2f} USD</b>",
+                    f"  └─ 💎 BD: <b>{p['bd']:.4f}</b> tokens",
+                ]
+            else:
+                lines.append("  └─ <i>(sem dados on-chain)</i>")
+
+        lines += ["", sep, f"", f"<i>🔍 Fonte: 100% DB · zero RPC · {datetime.now().strftime('%H:%M')}</i>"]
 
         _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
+
     except Exception as e:
         logger.exception(e)
-        send_support(m.chat.id, "⚠️ Erro ao gerar relatório institucional.", reply_markup=adm_kb())
+        bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
 
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "⏳ Inatividade PRO")
 def inatividade_pro(m):
