@@ -984,11 +984,49 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
 
     pol_price = chain_pol_price()
 
+    _bf_data: dict = {}
+    _monthly_by_env: dict = {}
+
     with DB_LOCK:
         cur = conn.cursor()
 
         # Conta total de registros em protocol_ops para saber se backfill rodou
         proto_count = cur.execute("SELECT COUNT(*) FROM protocol_ops").fetchone()[0] or 0
+
+        # ── Backfill progress (só usado na aba All) ────────────────────────────
+        if periodo == "all":
+            from webdex_config import CONTRACTS_DEPLOY_BLOCK
+            _curr_blk = int(get_config("last_block", "0") or "0")
+            for _ek in ("bd_v5", "AG_C_bd"):
+                _synced = int(get_config(f"proto_sync_block_{_ek}", "0") or "0")
+                _deploy = CONTRACTS_DEPLOY_BLOCK.get(_ek, 0)
+                _total  = max(1, _curr_blk - _deploy)
+                _done   = max(0, _synced - _deploy)
+                _pct    = min(100.0, _done / _total * 100)
+                _genesis = get_config(f"proto_genesis_done_{_ek}", "0") or "0"
+                _bf_data[_ek] = {
+                    "synced": _synced, "deploy": _deploy,
+                    "curr": _curr_blk, "pct": _pct,
+                    "complete": _genesis == "1",
+                }
+
+            # Breakdown mensal por ambiente
+            _monthly = cur.execute("""
+                SELECT env,
+                       strftime('%Y-%m', ts)                             AS mes,
+                       COUNT(*)                                          AS trades,
+                       COUNT(DISTINCT wallet)                            AS wallets,
+                       ROUND(SUM(profit), 2)                            AS lucro,
+                       COUNT(CASE WHEN profit > 0 THEN 1 END)           AS wins,
+                       ROUND(SUM(fee_bd), 4)                            AS bd
+                FROM protocol_ops
+                WHERE wallet != '' AND env != 'UNKNOWN'
+                GROUP BY env, mes
+                ORDER BY env, mes
+            """).fetchall()
+            # agrupa por env
+            for _r in _monthly:
+                _monthly_by_env.setdefault(str(_r[0]), []).append(_r[1:])  # (mes, trades, wallets, lucro, wins, bd)
 
         # ── protocol_ops: TODOS os traders (on-chain completo) ─────────────────
         proto_rows = cur.execute("""
@@ -1155,6 +1193,52 @@ def _lucro_protocolo_text(periodo: str = "ciclo") -> str:
                     f"  {_medal(i)} <code>{esc(short_w)}</code>",
                     f"       {sg} <b>{s}${(lucro or 0):,.2f}</b>  ·  {trades:,}t  ·  💎 {(bd_pago or 0):.3f} BD",
                 ]
+
+        # ── Bloco 6: All-time — backfill + histórico mensal ───────────────────
+        if periodo == "all" and _bf_data:
+            lines += ["", sep, "", "📡 <b>BACKFILL STATUS (on-chain)</b>"]
+            all_complete = True
+            for _ek in ("bd_v5", "AG_C_bd"):
+                _b = _bf_data.get(_ek, {})
+                if not _b:
+                    continue
+                _ic = "🔵" if "v5" in _ek.lower() else "🟠"
+                if _b.get("complete"):
+                    lines.append(f"  {_ic} <b>{esc(_ek)}</b>: ✅ <b>100%</b> completo")
+                else:
+                    all_complete = False
+                    lines.append(
+                        f"  {_ic} <b>{esc(_ek)}</b>: ⏳ <b>{_b.get('pct', 0):.1f}%</b>"
+                        f"  (bloco {_b.get('synced', 0):,} / {_b.get('curr', 0):,})"
+                    )
+            if not all_complete:
+                lines.append("  <i>💡 Dados históricos serão completados ao final do backfill</i>")
+
+            if _monthly_by_env:
+                lines += ["", sep, "", "📅 <b>HISTÓRICO MENSAL (OpenPosition events)</b>"]
+                for _env in sorted(_monthly_by_env, key=lambda e: (0 if "v5" in e.lower() else 1, e)):
+                    _ic = "🔵" if "v5" in _env.lower() else "🟠"
+                    lines += ["", f"{_ic} <b>{esc(_env)}</b>"]
+                    _env_months = _monthly_by_env[_env]
+                    _env_total_lucro = sum(float(r[3] or 0) for r in _env_months)
+                    _env_total_trades = sum(int(r[1] or 0) for r in _env_months)
+                    _env_total_wins = sum(int(r[4] or 0) for r in _env_months)
+                    _env_total_bd = sum(float(r[5] or 0) for r in _env_months)
+                    for _mes, _t, _w, _liq, _wins, _bd in _env_months:
+                        _wr = _wins / _t * 100 if _t else 0
+                        _sg = "🟢" if (_liq or 0) >= 0 else "🔴"
+                        _s  = "+" if (_liq or 0) >= 0 else ""
+                        lines.append(
+                            f"  {_sg} <b>{_mes}</b>  <b>{_s}${(_liq or 0):,.2f}</b>"
+                            f"  ·  {_t:,}t  ·  WR {_wr:.0f}%  ·  💎 {(_bd or 0):.2f}"
+                        )
+                    _env_wr = _env_total_wins / _env_total_trades * 100 if _env_total_trades else 0
+                    _env_sg = "🟢" if _env_total_lucro >= 0 else "🔴"
+                    _env_s  = "+" if _env_total_lucro >= 0 else ""
+                    lines.append(
+                        f"  ─── Total  {_env_sg} <b>{_env_s}${_env_total_lucro:,.2f}</b>"
+                        f"  ·  {_env_total_trades:,}t  ·  WR {_env_wr:.0f}%  ·  💎 {_env_total_bd:.2f}"
+                    )
 
     lines += ["", f"<i>🔍 Fonte: on-chain ({proto_count:,} ops indexadas)</i>"]
     return "\n".join(lines)
