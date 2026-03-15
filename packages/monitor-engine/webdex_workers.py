@@ -9,17 +9,22 @@ import time, threading
 from datetime import datetime, timedelta
 from typing import Any, Dict
 
+# Lock compartilhado: impede que capital_snapshot e user_capital_refresh
+# rodem simultaneamente (dobrariam RPC calls e poderiam sobrescrever uns aos outros)
+_capital_lock = threading.Lock()
+
 from webdex_config import logger, Web3, CONTRACTS, ADDR_USDT0, ADDR_LPLPUSD, ADDR_LPUSDT0
 from webdex_db import (
     DB_LOCK, conn, cursor, get_config, set_config, now_br, get_user,
     LIMITE_GWEI, LIMITE_GAS_BAIXO_POL, LIMITE_INATIV_MIN,
-    reload_limites, period_to_hours,
+    reload_limites, period_to_hours, _ciclo_21h_since,
 )
 from webdex_chain import (
     web3, CONTRACTS_A, CONTRACTS_B, get_active_wallet_map,
     obter_preco_pol, _chain_cache_worker,
 )
 from webdex_bot_core import send_html, _notif_worker, send_logo_photo
+from webdex_discord_sync import notify_ciclo_report
 
 # ==============================================================================
 # 🛡️ SENTINELA
@@ -43,7 +48,14 @@ def sentinela():
                         raw = c_mgr.functions.gasBalance().call({"from": Web3.to_checksum_address(m["wallet"])})
                         gas = float(web3.from_wei(raw, "ether"))
                         if gas < LIMITE_GAS_BAIXO_POL:
-                            send_html(cid, f"⛽ <b>GÁS BAIXO:</b> <code>{gas:.4f} POL</code>")
+                            w_short = m["wallet"][:6] + "..." + m["wallet"][-4:]
+                            send_html(cid, (
+                                f"⛽ <b>GÁS BAIXO</b>\n"
+                                f"━━━━━━━━━━━━━━━━━━━━\n"
+                                f"💰 Saldo: <code>{gas:.4f} POL</code>\n"
+                                f"🔑 Carteira: <code>{w_short}</code>\n\n"
+                                f"<i>Recarregue POL para continuar operando.</i>"
+                            ))
                     except Exception as e:
                         logger.debug(f"[sentinela] gasBalance falhou cid={cid}: {e}")
                 last = time.time()
@@ -69,7 +81,7 @@ def agendador_21h():
                     u = get_user(cid)
                     if not u or not u.get("wallet"):
                         continue
-                    dt_lim = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+                    dt_lim = _ciclo_21h_since()  # corte 21h BR (não meia-noite)
                     with DB_LOCK:
                         cursor.execute("""
                             SELECT SUM(o.valor), SUM(o.gas_usd)
@@ -110,9 +122,18 @@ def agendador_21h():
                         send_html(cid, msg)
                         send_logo_photo(cid, "🌙 <b>WEbdEX</b> — bom descanso, até amanhã! 🚀")
                     set_config(f"last_rep_{cid}", hoje)
+                # Sync ciclo para Discord uma vez por noite (após processar todos)
+                if rows:
+                    notify_ciclo_report(
+                        summary=(
+                            f"🌙 **Ciclo 21h encerrado — {hoje}**\n\n"
+                            f"Relatórios enviados para os participantes do protocolo.\n"
+                            f"Use `/status` para ver o resumo do TVL e operações."
+                        )
+                    )
                 time.sleep(70)
-        except Exception:
-            pass
+        except Exception as _ae:
+            logger.warning("[agendador_21h] erro no ciclo: %s", _ae)
         time.sleep(30)
 
 # ==============================================================================
@@ -131,11 +152,12 @@ _CAPITAL_TOKENS = {
 _ABI_ERC20_BASIC = '[{"inputs":[],"name":"totalSupply","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"type":"uint256"}],"stateMutability":"view","type":"function"}]'
 _USDT0_LOWER = ADDR_USDT0.lower()
 
-_lp_price_cache: dict = {}  # lp_addr_lower → price_per_unit (usdt per 1 lp_unit)
+_lp_price_cache: dict = {}       # lp_addr_lower → price (limpo todo ciclo)
+_lp_price_last_known: dict = {}  # lp_addr_lower → último preço válido (persiste entre ciclos)
 
 def _fetch_lp_price_per_unit(w3, lp_addr: str, lp_dec: int) -> float:
     """Busca preço por unidade LP token via DexScreener (sem API key).
-    Cacheado por sessão para evitar chamadas repetidas.
+    Cacheado por sessão. Fallback: último preço válido conhecido (não usa 1.0).
     """
     key = lp_addr.lower()
     if key in _lp_price_cache:
@@ -152,12 +174,17 @@ def _fetch_lp_price_per_unit(w3, lp_addr: str, lp_dec: int) -> float:
             price = float(best.get("priceUsd") or 0)
             if price > 0:
                 _lp_price_cache[key] = price
+                _lp_price_last_known[key] = price  # salva como último preço válido
                 logger.info("💱 LP price (DexScreener): %s = $%.6f/unit", lp_addr[:10], price)
                 return price
     except Exception as _e:
         logger.warning("⚠️ LP price DexScreener falhou %s: %s", lp_addr[:10], _e)
-    _lp_price_cache[key] = 0.0
-    return 0.0
+    # Fallback: usa último preço válido conhecido (não usa 1.0 que seria errado)
+    fallback = _lp_price_last_known.get(key, 0.0)
+    if fallback > 0:
+        logger.info("💱 LP price fallback (último conhecido): %s = $%.6f/unit", lp_addr[:10], fallback)
+    _lp_price_cache[key] = fallback
+    return fallback
 
 
 def _val_balance(w3, st_addr: str, addr_raw: str, bal_raw: int) -> tuple[float, str]:
@@ -176,7 +203,11 @@ def _val_balance(w3, st_addr: str, addr_raw: str, bal_raw: int) -> tuple[float, 
     price = _fetch_lp_price_per_unit(w3, addr_raw, tok["dec"])
     if price > 0:
         return lp_units * price, tok["sym"]
-    # Fallback se getReserves falhar
+    # Fallback: usa último preço conhecido ou estimativa (factor=1.0)
+    # Nunca retorna 0 — evita que capital_cache deixe de ser escrito
+    last = _lp_price_last_known.get(addr_raw.lower())
+    if last and last > 0:
+        return lp_units * last, tok["sym"]
     return lp_units * tok["factor"], tok["sym"]
 
 
@@ -252,6 +283,14 @@ def _capital_snapshot_worker():
                             )
                             conn.commit()
                         logger.info("✅ capital_cache: chat_id=%s env=%s total_usd=%.2f breakdown=%s", chat_id, env or "AG_C_bd", total_usd, breakdown)
+                        # Salva snapshot histórico para gráfico de Progressão de Capital
+                        try:
+                            from webdex_handlers.reports import _mybdbook_save_snapshot
+                            _usdt0 = float(breakdown.get("USDT", breakdown.get("USDT0", 0.0)))
+                            _lp    = float(breakdown.get("LP-USD", breakdown.get("LP-V5", 0.0)))
+                            _mybdbook_save_snapshot(int(chat_id), wallet, env or "AG_C_bd", _usdt0, _lp, total_usd)
+                        except Exception as _snap_e:
+                            logger.debug("capital_snapshot save_snapshot: %s", _snap_e)
                     else:
                         logger.warning("⚠️ capital_cache baixo/zero: chat_id=%s env=%s total_usd=%.4f", chat_id, env or "AG_C_bd", total_usd)
                 except Exception as _usr_e:
@@ -466,8 +505,11 @@ def _fl_snapshot_worker():
                     try:
                         lp_usdt_price = _fetch_lp_price_per_unit(w3, lp_usdt_addr, 6)
                         lp_loop_price = _fetch_lp_price_per_unit(w3, lp_loop_addr, 9)
-                    except Exception:
-                        lp_usdt_price = lp_loop_price = 1.0
+                    except Exception as _lpe:
+                        logger.warning("[fl_snap] LP price fetch falhou: %s", _lpe)
+                        # usa último preço válido ou 0.0 (não usa 1.0)
+                        lp_usdt_price = _lp_price_last_known.get((lp_usdt_addr or "").lower(), 0.0)
+                        lp_loop_price = _lp_price_last_known.get((lp_loop_addr or "").lower(), 0.0)
 
                     total_usd = (
                         liq_usdt +
@@ -535,7 +577,8 @@ def _user_capital_refresh_worker():
                             )
                             conn.commit()
                     _CAP_FAIL_COUNT = 0
-                except Exception:
+                except Exception as _cap_e:
+                    logger.debug("[capital_refresh] falhou chat_id=%s: %s", chat_id, _cap_e)
                     _CAP_FAIL_COUNT += 1
                     if _CAP_FAIL_COUNT >= _CAP_MAX_FAILS:
                         _CAP_SKIP_UNTIL = time.time() + 600
@@ -568,17 +611,22 @@ def _update_user_funnel(chat_id: int, wallet: str):
                 (str(chat_id), 'ativo', now_s, now_s, 1, 0, now_s)
             )
         conn.commit()
-    except Exception:
-        pass
+    except Exception as _ffe:
+        logger.debug("[update_user_funnel] erro chat_id=%s: %s", chat_id, _ffe)
 
 def _funnel_worker():
-    """Worker: atualiza inatividade do funil a cada 10min."""
+    """Worker: atualiza inatividade do funil a cada 10min.
+    - Marca ativos sem trades há 7d como 'inativo'
+    - Reativa inativos que voltaram a operar nas últimas 48h
+    """
     logger.info("📊 Funnel worker: Ativo...")
     while True:
         try:
             now_s = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            threshold_7d = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+            threshold_7d  = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+            threshold_48h = (datetime.now() - timedelta(hours=48)).strftime("%Y-%m-%d %H:%M:%S")
             with DB_LOCK:
+                # 1. Marca ativos sem trades há 7d como inativo
                 rows = conn.execute(
                     "SELECT chat_id, last_trade, stage FROM user_funnel WHERE stage='ativo'"
                 ).fetchall()
@@ -589,9 +637,32 @@ def _funnel_worker():
                             "UPDATE user_funnel SET stage='inativo', inactive_days=?, updated_at=? WHERE chat_id=?",
                             (days_inactive, now_s, str(chat_id))
                         )
+
+                # 2. Reativa inativos que voltaram a operar nas últimas 48h
+                inativos = conn.execute(
+                    "SELECT chat_id FROM user_funnel WHERE stage='inativo'"
+                ).fetchall()
+                for (cid_in,) in inativos:
+                    wal_row = conn.execute(
+                        "SELECT wallet FROM users WHERE chat_id=?", (str(cid_in),)
+                    ).fetchone()
+                    if not wal_row or not wal_row[0]:
+                        continue
+                    recent = cursor.execute("""
+                        SELECT COUNT(*), MAX(o.data_hora) FROM operacoes o
+                        JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                        WHERE LOWER(ow.wallet)=LOWER(?) AND o.tipo='Trade' AND o.data_hora >= ?
+                    """, (wal_row[0], threshold_48h)).fetchone()
+                    if recent and int(recent[0] or 0) > 0:
+                        conn.execute(
+                            "UPDATE user_funnel SET stage='ativo', last_trade=?, inactive_days=0, updated_at=? WHERE chat_id=?",
+                            (recent[1], now_s, str(cid_in))
+                        )
+                        logger.info("[funnel] reativado: chat_id=%s last_trade=%s", cid_in, recent[1])
+
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as _fe:
+            logger.debug("[funnel_worker] erro: %s", _fe)
         time.sleep(10 * 60)
 
 # ==============================================================================
@@ -630,8 +701,8 @@ def _inactivity_auto_loop():
                             "address":   _W3.to_checksum_address(c_data["PAYMENTS"]),
                             "topics":    [TOPIC_OPENPOSITION],
                         })
-                    except Exception:
-                        pass
+                    except Exception as _rpc_e:
+                        logger.debug("[inactivity] getLogs falhou env=%s: %s", env_key, _rpc_e)
                 if not logs:
                     # Sem trades no período — alerta admins
                     set_config("inactivity_last_alert_ts", str(time.time()))
@@ -644,11 +715,11 @@ def _inactivity_auto_loop():
                         try:
                             from webdex_bot_core import send_html as _sh
                             _sh(int(aid), msg)
-                        except Exception:
-                            pass
-            except Exception:
-                pass
+                        except Exception as _send_e:
+                            logger.debug("[inactivity] send_html falhou aid=%s: %s", aid, _send_e)
+            except Exception as _inner_e:
+                logger.debug("[inactivity] erro verificação chain: %s", _inner_e)
             time.sleep(check_min * 60)
-        except Exception:
-            pass
+        except Exception as _outer_e:
+            logger.warning("[inactivity_auto_loop] erro: %s", _outer_e)
         time.sleep(check_min * 60 if 'check_min' in dir() else 600)
