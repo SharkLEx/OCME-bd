@@ -36,6 +36,11 @@ try:
 except ImportError:
     _animate = None  # type: ignore[assignment]
 
+try:
+    from webdex_creatomate import render_relatorio_21h as _render_21h
+except ImportError:
+    _render_21h = None  # type: ignore[assignment]
+
 # ==============================================================================
 # 🛡️ SENTINELA
 # ==============================================================================
@@ -158,6 +163,18 @@ def agendador_21h():
                         wins=_agg_wins,
                         gas=_agg_gas,
                     )
+                    # Vídeo branded Creatomate — #relatório-diário
+                    if _render_21h:
+                        try:
+                            _render_21h(
+                                pnl=_agg_liq,
+                                trades=_agg_trades,
+                                wins=_agg_wins,
+                                gas=_agg_gas,
+                                data=hoje,
+                            )
+                        except Exception as _ce:
+                            logger.error("[agendador_21h] Creatomate render falhou: %s", _ce)
                 time.sleep(70)
         except Exception as _ae:
             logger.warning("[agendador_21h] erro no ciclo: %s", _ae)
