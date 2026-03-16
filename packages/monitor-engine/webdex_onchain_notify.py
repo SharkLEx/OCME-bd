@@ -28,7 +28,12 @@ from webdex_chain import (
     _is_429_error,
 )
 from webdex_db import DB_LOCK, cursor, conn, get_config, set_config
-from webdex_discord_sync import _async_post, _WEBHOOK_OPERACOES
+from webdex_discord_sync import _async_post, _WEBHOOK_OPERACOES, _WEBHOOK_ONCHAIN
+
+try:
+    from webdex_discord_animate import animate_and_post as _animate
+except ImportError:
+    _animate = None  # type: ignore[assignment]
 
 # ─────────────────────────────────────────────────────────────
 # Endereços monitorados
@@ -241,6 +246,14 @@ def _check_new_wallets(from_b: int, to_b: int):
             _notify_new_wallet(user, tx_hash, profit_raw)
             _mark_wallet(user)
             logger.info("[onchain] Nova carteira: %s", _short(user))
+            # Animação bdZinho — nova carteira conectada
+            if _animate:
+                _animate(
+                    "new_holder", _WEBHOOK_OPERACOES,
+                    title="🏆 Nova Carteira — WEbdEX",
+                    description=f"Bem-vindo ao protocolo, [`{_short(user)}`]({_POLYGONSCAN_ADDR.format(user)})!",
+                    color=0xFFD700,
+                )
 
         except Exception as e:
             logger.warning("[onchain] Erro ao processar wallet log: %s", e)

@@ -103,13 +103,38 @@ def notify_milestone(title: str, description: str, env: str = "") -> None:
     }, url=_WEBHOOK_ONCHAIN)
 
 
-def notify_ciclo_report(summary: str, env: str = "") -> None:
+def notify_ciclo_report(
+    summary: str,
+    env: str = "",
+    liq: float = 0.0,
+    trades: int = 0,
+    wins: int = 0,
+    gas: float = 0.0,
+) -> None:
     """Resumo do ciclo 21h → #relatório-diário."""
+    if trades > 0:
+        emoji  = "🟢" if liq >= 0 else "🔴"
+        color  = _COLOR_TRADE_WIN if liq >= 0 else _COLOR_TRADE_LOS
+        wr_pct = (wins / trades * 100) if trades > 0 else 0.0
+        filled = round(wr_pct / 10)
+        wr_bar = "█" * filled + "░" * (10 - filled)
+        desc = (
+            f"{emoji} **P&L líquido:** `${liq:+.2f}`\n"
+            f"⛽ **Gás total:** `${gas:.2f}`\n"
+            f"📊 **Trades:** `{trades}` · **Wins:** `{wins}`\n"
+            f"🎯 **WinRate:** `{wr_pct:.0f}%`\n"
+            f"`{wr_bar}`"
+        )
+    else:
+        color = _COLOR_CICLO
+        desc  = _telegram_to_discord(summary)
+
     _async_post({
         "embeds": [{
-            "title": "📊 Relatório do Ciclo — WEbdEX",
-            "description": _telegram_to_discord(summary),
-            "color": _COLOR_CICLO,
+            "title": "🌙 Relatório do Ciclo 21h — WEbdEX",
+            "description": desc,
+            "color": color,
+            "thumbnail": {"url": "https://webdex.app/logo.png"},
             "footer": {"text": "WEbdEX Protocol · Ciclo 21h BR"},
         }]
     }, url=_WEBHOOK_RELATORIO)

@@ -24,7 +24,12 @@ from webdex_chain import (
     obter_preco_pol, _chain_cache_worker,
 )
 from webdex_bot_core import send_html, _notif_worker, send_logo_photo
-from webdex_discord_sync import notify_ciclo_report, notify_gm
+from webdex_discord_sync import notify_ciclo_report, notify_gm, _WEBHOOK_GM
+
+try:
+    from webdex_discord_animate import animate_and_post as _animate
+except ImportError:
+    _animate = None  # type: ignore[assignment]
 
 # ==============================================================================
 # 🛡️ SENTINELA
@@ -76,11 +81,20 @@ def agendador_21h():
                 gm_key = f"gm_sent_{now.strftime('%Y-%m-%d')}"
                 if get_config(gm_key, "") != "ok":
                     notify_gm(now.strftime('%Y-%m-%d'))
+                    if _animate:
+                        _animate(
+                            "gm", _WEBHOOK_GM,
+                            title="☀️ Bom dia, WEbdEX!",
+                            description="O protocolo está ativo. Que os ciclos sejam verdes! 🚀",
+                            color=0xE91E8C,
+                        )
                     set_config(gm_key, "ok")
             if now.hour >= 21:
                 hoje = now.strftime("%Y-%m-%d")
                 with DB_LOCK:
                     rows = cursor.execute("SELECT chat_id FROM users WHERE active=1").fetchall()
+                # Acumuladores para o relatório agregado Discord
+                _agg_liq = 0.0; _agg_gas = 0.0; _agg_trades = 0; _agg_wins = 0
                 for (cid,) in rows:
                     if get_config(f"last_rep_{cid}", "") == hoje:
                         continue
@@ -127,15 +141,17 @@ def agendador_21h():
                         )
                         send_html(cid, msg)
                         send_logo_photo(cid, "🌙 <b>WEbdEX</b> — bom descanso, até amanhã! 🚀")
+                        _agg_liq += liq; _agg_gas += gas_t
+                        _agg_trades += total_t; _agg_wins += wins
                     set_config(f"last_rep_{cid}", hoje)
-                # Sync ciclo para Discord uma vez por noite (após processar todos)
+                # Relatório agregado Discord — uma mensagem por noite
                 if rows:
                     notify_ciclo_report(
-                        summary=(
-                            f"🌙 **Ciclo 21h encerrado — {hoje}**\n\n"
-                            f"Relatórios enviados para os participantes do protocolo.\n"
-                            f"Use `/status` para ver o resumo do TVL e operações."
-                        )
+                        summary=f"🌙 Ciclo 21h encerrado — {hoje}",
+                        liq=_agg_liq,
+                        trades=_agg_trades,
+                        wins=_agg_wins,
+                        gas=_agg_gas,
                     )
                 time.sleep(70)
         except Exception as _ae:
