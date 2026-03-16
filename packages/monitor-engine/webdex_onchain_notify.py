@@ -55,8 +55,9 @@ _LOOP_DECIMALS = 9  # LP_LOOP token — conforme TOKEN_CONFIG (ADDR_LPLPUSD dec=
 # WEbdEX token (TOKENPASS) — a cereja do bolo
 _WEBDEX_TOKEN   = Web3.to_checksum_address(CONTRACTS["AG_C_bd"]["TOKENPASS"])
 _WEBDEX_DECIMALS = 9
-# Threshold para aparecer no feed curado do #webdex-on-chain: 100k WEbdEX
-_WEBDEX_ONCHAIN_THRESHOLD = 100_000 * (10 ** 9)
+# Threshold mínimo para animação bdZinho (evitar clips em dust transfers)
+# #webdex-on-chain notifica TODA movimentação — sem threshold de texto
+_WEBDEX_ANIMATE_THRESHOLD = 1_000 * (10 ** 9)   # 1k WEbdEX → dispara vídeo
 _WEBDEX_SUPPLY   = 369_369_369  # supply total on-chain
 _WEBDEX_SYMBOL   = "WEbdEX"
 
@@ -611,39 +612,49 @@ def _check_webdex_holders(from_b: int, to_b: int):
                 is_new_holder=is_new,
             )
 
-            # Feed curado → #webdex-on-chain
+            # ── Feed ao vivo → #webdex-on-chain (A CEREJA DO BOLO) ───────────
+            # TODA movimentação do token WEbdEX aparece aqui — sem threshold
+            tipo  = "MINT" if from_addr.lower() == ZERO else ("BURN" if to_addr.lower() == ZERO else "TRANSFER")
+            icone_tipo = "🌱" if tipo == "MINT" else ("🔥" if tipo == "BURN" else "💎")
+
             if is_new:
                 holder_count = _count_webdex_holders() + 1
                 notify_onchain_event(
-                    title=f"💎 NOVO HOLDER #{holder_count:,} — TOKEN WEbdEX",
+                    title=f"🎊 NOVO HOLDER #{holder_count:,} — TOKEN WEbdEX",
                     description=(
-                        f"**A FAMÍLIA WEbdEX CRESCEU! 🎊**\n"
+                        f"**A FAMÍLIA WEbdEX CRESCEU!** 🎉\n"
                         f"[`{_short(to_addr)}`]({_POLYGONSCAN_ADDR.format(to_addr)})\n"
-                        f"💰 Recebeu: `{amt_fmt} WEbdEX`"
+                        f"💰 Recebeu: `{amt_fmt} WEbdEX`\n"
+                        f"📤 De: `{_short(from_addr)}`"
                     ),
                     color=0xFFD700,
                     tx_hash=tx_hash,
                 )
                 inc_pulse_stat("new_holders")
-            elif amount >= _WEBDEX_ONCHAIN_THRESHOLD:
-                tipo  = "MINT" if from_addr.lower() == ZERO else ("BURN" if to_addr.lower() == ZERO else "TRANSFER")
-                icone = "🌱" if tipo == "MINT" else ("🔥" if tipo == "BURN" else "💎")
+            else:
+                # Toda transferência, MINT ou BURN — a cereja está sempre em movimento
+                poly_url = f"https://polygonscan.com/tx/{tx_hash}" if tx_hash else ""
+                link_line = f"\n[🔗 Polygonscan]({poly_url})" if poly_url else ""
                 notify_onchain_event(
-                    title=f"{icone} TOKEN WEbdEX EM MOVIMENTO",
+                    title=f"{icone_tipo} TOKEN WEbdEX — {tipo}",
                     description=(
-                        f"**{tipo}** · `{amt_fmt} WEbdEX`\n"
+                        f"`{amt_fmt} WEbdEX`\n"
                         f"📤 `{_short(from_addr)}`  ➜  📥 `{_short(to_addr)}`"
+                        f"{link_line}"
                     ),
-                    color=0xA855F7,
+                    color=0xA855F7 if tipo == "TRANSFER" else (0x00FF88 if tipo == "MINT" else 0xFF4444),
                     tx_hash=tx_hash,
                 )
                 inc_pulse_stat("webdex_moves")
 
-            # Animação bdZinho a cada movimentação
-            if _animate:
+            # Animação bdZinho — apenas para movimentações ≥ 1k WEbdEX ou novo holder
+            if _animate and (is_new or amount >= _WEBDEX_ANIMATE_THRESHOLD):
                 event_type = "new_holder" if is_new else "trade_win"
-                title = "💎 NOVO HOLDER WEbdEX!" if is_new else "💎 TOKEN WEbdEX EM MOVIMENTO!"
-                desc  = f"A família cresce! +{amt_fmt} WEbdEX na rede." if is_new else f"{amt_fmt} WEbdEX transferidos. O protocolo vive!"
+                title = "🎊 NOVO HOLDER WEbdEX!" if is_new else f"{icone_tipo} TOKEN WEbdEX EM MOVIMENTO!"
+                desc  = (
+                    f"A família cresce! +{amt_fmt} WEbdEX na rede." if is_new
+                    else f"{amt_fmt} WEbdEX em {tipo.lower()}. O protocolo vive! 🚀"
+                )
                 _animate(event_type, _WEBHOOK_CONQUISTAS if is_new else _WEBHOOK_TOKEN_BD, title, desc, 0xFFD700)
 
             # Se novo holder: notifica #conquistas também
