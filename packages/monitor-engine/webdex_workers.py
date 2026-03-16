@@ -71,7 +71,7 @@ def agendador_21h():
     while True:
         try:
             now = now_br()
-            if now.hour == 21 and now.minute == 0:
+            if now.hour >= 21:
                 hoje = now.strftime("%Y-%m-%d")
                 with DB_LOCK:
                     rows = cursor.execute("SELECT chat_id FROM users WHERE active=1").fetchall()
