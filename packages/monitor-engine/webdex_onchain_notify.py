@@ -416,12 +416,47 @@ def _mark_webdex_holder(addr: str):
 
 
 def _count_webdex_holders() -> int:
-    """Retorna total de holders WEbdEX conhecidos no DB."""
+    """Retorna total de endereços no DB (histórico — inclui saldo zero)."""
     with DB_LOCK:
         row = cursor.execute(
             "SELECT COUNT(*) FROM onchain_seen_webdex_holders"
         ).fetchone()
         return row[0] if row else 0
+
+
+_active_holders_cache: dict = {"count": 0, "ts": 0.0}
+_ACTIVE_CACHE_TTL = 7_200  # 2 horas — mesmo intervalo do relatório
+
+
+def _count_active_webdex_holders() -> int:
+    """Conta holders com saldo > 0 via balanceOf. Cacheado por 2h."""
+    import time as _t
+    now = _t.time()
+    if now - _active_holders_cache["ts"] < _ACTIVE_CACHE_TTL and _active_holders_cache["count"] > 0:
+        return _active_holders_cache["count"]
+
+    abi = [{"name": "balanceOf", "type": "function", "stateMutability": "view",
+            "inputs": [{"name": "account", "type": "address"}],
+            "outputs": [{"type": "uint256"}]}]
+    c = web3.eth.contract(address=_WEBDEX_TOKEN, abi=abi)
+
+    with DB_LOCK:
+        rows = cursor.execute(
+            "SELECT holder FROM onchain_seen_webdex_holders"
+        ).fetchall()
+
+    ativos = 0
+    for (addr,) in rows:
+        try:
+            if c.functions.balanceOf(web3.to_checksum_address(addr)).call() > 0:
+                ativos += 1
+        except Exception:
+            pass
+
+    _active_holders_cache["count"] = ativos
+    _active_holders_cache["ts"]    = now
+    logger.info("[onchain] Holders ativos WEbdEX: %d / %d no DB", ativos, len(rows))
+    return ativos
 
 
 def _backfill_webdex_holders():
@@ -572,7 +607,7 @@ def _webdex_periodic_report():
     _last_webdex_report = now
 
     try:
-        holder_count  = _count_webdex_holders()
+        holder_count  = _count_active_webdex_holders()
 
         # Circulação real = totalSupply - carteira de lock (deploy wallet)
         try:
@@ -627,7 +662,7 @@ def _webdex_periodic_report():
             "description": (
                 f"{ai_text}\n\n"
                 f"──────────────────────\n"
-                f"👥 Holders confirmados: **{holder_count:,}**\n"
+                f"👥 Holders ativos: **{holder_count:,}**\n"
                 f"💎 Em circulação: **{supply_fmt} {_WEBDEX_SYMBOL}**\n"
                 f"🔗 [Ver token no Polygonscan]({_POLYGONSCAN_ADDR.format(_WEBDEX_TOKEN)})"
             ),
