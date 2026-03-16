@@ -473,11 +473,11 @@ def _backfill_webdex_holders():
 
     ZERO    = "0x0000000000000000000000000000000000000000"
     BATCH   = 2000
-    LOOKBACK = 11_500_000
+    _DEPLOY_BLOCK = 47_993_248  # bloco do primeiro Transfer do token WEbdEX
 
     try:
         current = web3.eth.block_number
-        total_start = max(current - LOOKBACK, 0)
+        total_start = _DEPLOY_BLOCK
 
         # Retoma do último bloco processado (se houver)
         saved = get_config(_BACKFILL_PROGRESS_KEY)
