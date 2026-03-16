@@ -64,6 +64,14 @@ _PROMPTS: dict[str, str] = {
         "Cute cartoon mascot jumping for joy with fist pump, "
         "green sparkles and coins, victorious celebration"
     ),
+    "relatorio_win": (
+        "Cute cartoon mascot celebrating end of day, holding green profit chart, "
+        "confetti rain, victorious fist pump, moonlit night background"
+    ),
+    "relatorio_loss": (
+        "Cute cartoon mascot in thoughtful pose, looking at chart, "
+        "determined face, night sky background, resilient energy"
+    ),
 }
 
 
