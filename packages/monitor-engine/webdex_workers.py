@@ -24,7 +24,7 @@ from webdex_chain import (
     obter_preco_pol, _chain_cache_worker,
 )
 from webdex_bot_core import send_html, _notif_worker, send_logo_photo
-from webdex_discord_sync import notify_ciclo_report
+from webdex_discord_sync import notify_ciclo_report, notify_gm
 
 # ==============================================================================
 # 🛡️ SENTINELA
@@ -71,6 +71,12 @@ def agendador_21h():
     while True:
         try:
             now = now_br()
+            # ── Ritual GM 7h → #gm-wagmi ──────────────────────────
+            if now.hour >= 7:
+                gm_key = f"gm_sent_{now.strftime('%Y-%m-%d')}"
+                if get_config(gm_key, "") != "ok":
+                    notify_gm(now.strftime('%Y-%m-%d'))
+                    set_config(gm_key, "ok")
             if now.hour >= 21:
                 hoje = now.strftime("%Y-%m-%d")
                 with DB_LOCK:

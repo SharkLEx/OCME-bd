@@ -21,7 +21,7 @@ import logging
 from webdex_config import logger, TOKENS_MAP, Web3
 from webdex_chain import rpc_pool, web3, _is_429_error
 from webdex_db import DB_LOCK, cursor, conn, get_config, set_config
-from webdex_discord_sync import _async_post
+from webdex_discord_sync import _async_post, _WEBHOOK_SWAPS
 
 # ─────────────────────────────────────────────────────────────
 # Contrato
@@ -149,7 +149,7 @@ def _notify_create(args: dict, tx_hash: str):
         ),
         "color": _COLOR_CREATE,
         "footer": {"text": "WEbdEX SwapBook · Polygon"},
-    }]})
+    }]}, url=_WEBHOOK_SWAPS)
 
 
 def _notify_execute(args: dict, tx_hash: str):
@@ -171,7 +171,7 @@ def _notify_execute(args: dict, tx_hash: str):
         ),
         "color": _COLOR_EXECUTE,
         "footer": {"text": "WEbdEX SwapBook · Polygon"},
-    }]})
+    }]}, url=_WEBHOOK_SWAPS)
 
 
 # ─────────────────────────────────────────────────────────────
