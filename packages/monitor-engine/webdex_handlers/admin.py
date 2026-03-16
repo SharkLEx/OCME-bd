@@ -831,68 +831,68 @@ def _subaccounts_text():
                 GROUP BY cc.env
             """).fetchall()
 
-        # ── totais globais ─────────────────────────────────────────────────
-        total_liq  = sum(float(r[3] or 0) for r in env_rows)
-        total_wins = sum(int(r[4] or 0) for r in env_rows)
-        total_loss = sum(int(r[5] or 0) for r in env_rows)
-        wr_g   = total_wins / total_trade * 100 if total_trade else 0
-        pf_g   = (total_wins / total_loss) if total_loss else float("inf")
-        pf_g_s = f"{pf_g:.2f}" if pf_g != float("inf") else "∞"
-        lpt_g  = total_liq / total_trade if total_trade else 0
-        sg_g   = "🟢" if total_liq >= 0 else "🔴"
+    # ── totais globais ─────────────────────────────────────────────────
+    total_liq  = sum(float(r[3] or 0) for r in env_rows)
+    total_wins = sum(int(r[4] or 0) for r in env_rows)
+    total_loss = sum(int(r[5] or 0) for r in env_rows)
+    wr_g   = total_wins / total_trade * 100 if total_trade else 0
+    pf_g   = (total_wins / total_loss) if total_loss else float("inf")
+    pf_g_s = f"{pf_g:.2f}" if pf_g != float("inf") else "∞"
+    lpt_g  = total_liq / total_trade if total_trade else 0
+    sg_g   = "🟢" if total_liq >= 0 else "🔴"
 
-        lines = [
-            "📊 <b>ANÁLISE SUBACCOUNTS — WEbdEX</b>",
-            f"🕒 <i>{datetime.now().strftime('%d/%m/%Y %H:%M')}</i>",
-            sep,
+    lines = [
+        "📊 <b>ANÁLISE SUBACCOUNTS — WEbdEX</b>",
+        f"🕒 <i>{datetime.now().strftime('%d/%m/%Y %H:%M')}</i>",
+        sep,
+        "",
+        "🌐 <b>CONSOLIDADO GLOBAL</b>",
+        f"  ├─ 🔑 Subcontas: <b>{total_subs:,}</b>  👥 Wallets: <b>{total_wlt:,}</b>",
+        f"  ├─ 📊 Trades:    <b>{total_trade:,}</b>  (WR: <b>{wr_g:.1f}%</b>  PF: <b>{pf_g_s}</b>)",
+        f"  └─ {sg_g} Líquido: <b>{total_liq:+.2f} USD</b>  (<b>{lpt_g:+.4f}/trade</b>)",
+        "",
+        sep,
+    ]
+
+    # ── por ambiente ───────────────────────────────────────────────────
+    for amb, n_subs, trades, liq, wins, losses, wallets in env_rows:
+        wr   = wins / trades * 100 if trades else 0
+        pf_v = (wins / losses) if losses else float("inf")
+        pf_s = f"{pf_v:.2f}" if pf_v != float("inf") else "∞"
+        sg   = "🟢" if (liq or 0) >= 0 else "🔴"
+        lpt  = (liq or 0) / trades if trades else 0
+        eico = "🔵" if "v5" in str(amb).lower() else "🟠"
+        lines += [
             "",
-            "🌐 <b>CONSOLIDADO GLOBAL</b>",
-            f"  ├─ 🔑 Subcontas: <b>{total_subs:,}</b>  👥 Wallets: <b>{total_wlt:,}</b>",
-            f"  ├─ 📊 Trades:    <b>{total_trade:,}</b>  (WR: <b>{wr_g:.1f}%</b>  PF: <b>{pf_g_s}</b>)",
-            f"  └─ {sg_g} Líquido: <b>{total_liq:+.2f} USD</b>  (<b>{lpt_g:+.4f}/trade</b>)",
-            "",
-            sep,
+            f"{eico} <b>{esc(str(amb))}</b>",
+            f"  ├─ 🔑 Subs: <b>{n_subs:,}</b>  👥 Wallets: <b>{wallets:,}</b>",
+            f"  ├─ 📊 Trades: <b>{trades:,}</b>  (WR: <b>{wr:.1f}%</b>  PF: <b>{pf_s}</b>)",
+            f"  └─ {sg} Líquido: <b>{(liq or 0):+.2f} USD</b>  (<b>{lpt:+.4f}/trade</b>)",
         ]
 
-        # ── por ambiente ───────────────────────────────────────────────────
-        for amb, n_subs, trades, liq, wins, losses, wallets in env_rows:
-            wr   = wins / trades * 100 if trades else 0
-            pf_v = (wins / losses) if losses else float("inf")
-            pf_s = f"{pf_v:.2f}" if pf_v != float("inf") else "∞"
-            sg   = "🟢" if (liq or 0) >= 0 else "🔴"
-            lpt  = (liq or 0) / trades if trades else 0
-            eico = "🔵" if "v5" in str(amb).lower() else "🟠"
-            lines += [
-                "",
-                f"{eico} <b>{esc(str(amb))}</b>",
-                f"  ├─ 🔑 Subs: <b>{n_subs:,}</b>  👥 Wallets: <b>{wallets:,}</b>",
-                f"  ├─ 📊 Trades: <b>{trades:,}</b>  (WR: <b>{wr:.1f}%</b>  PF: <b>{pf_s}</b>)",
-                f"  └─ {sg} Líquido: <b>{(liq or 0):+.2f} USD</b>  (<b>{lpt:+.4f}/trade</b>)",
-            ]
+    # ── top 10 subcontas ───────────────────────────────────────────────
+    lines += ["", sep, "", "🏆 <b>TOP 10 SUBCONTAS (Lucro all time)</b>"]
+    for i, (sub, amb, trades, liq, wins, losses) in enumerate(top_subs, 1):
+        sg   = "🟢" if (liq or 0) >= 0 else "🔴"
+        wr   = wins / trades * 100 if trades else 0
+        eico = "🔵" if "v5" in str(amb).lower() else "🟠"
+        sub_s = f"{str(sub or '')[:6]}…{str(sub or '')[-4:]}" if len(str(sub or "")) > 12 else str(sub or "—")
+        lines += [
+            f"  {_medal(i) or f'{i:02d}.'} {eico} <code>{esc(sub_s)}</code>",
+            f"       {sg} <b>{(liq or 0):+.2f} USD</b>  ({trades:,}t · WR: {wr:.0f}%)",
+        ]
 
-        # ── top 10 subcontas ───────────────────────────────────────────────
-        lines += ["", sep, "", "🏆 <b>TOP 10 SUBCONTAS (Lucro all time)</b>"]
-        for i, (sub, amb, trades, liq, wins, losses) in enumerate(top_subs, 1):
-            sg   = "🟢" if (liq or 0) >= 0 else "🔴"
-            wr   = wins / trades * 100 if trades else 0
-            eico = "🔵" if "v5" in str(amb).lower() else "🟠"
-            sub_s = f"{str(sub or '')[:6]}…{str(sub or '')[-4:]}" if len(str(sub or "")) > 12 else str(sub or "—")
-            lines += [
-                f"  {_medal(i) or f'{i:02d}.'} {eico} <code>{esc(sub_s)}</code>",
-                f"       {sg} <b>{(liq or 0):+.2f} USD</b>  ({trades:,}t · WR: {wr:.0f}%)",
-            ]
-
-        # ── capital vivo (capital_cache — 100% DB) ─────────────────────────
-        lines += ["", sep, "", "💼 <b>CAPITAL VIVO (mybdBook snapshots)</b>"]
-        if cap_cache:
-            cap_sorted = sorted(cap_cache, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
-            total_cap  = sum(float(r[2] or 0) for r in cap_sorted)
-            for env_c, users_c, total_c in cap_sorted:
-                eico = "🔵" if "v5" in str(env_c).lower() else "🟠"
-                lines.append(f"  {eico} <b>{esc(str(env_c))}</b>: <b>${total_c:,.2f}</b>  ({users_c} usuários)")
-            lines.append(f"  └─ 💼 Total: <b>${total_cap:,.2f}</b>")
-        else:
-            lines.append("  <i>(sem dados — usuários precisam chamar mybdBook ao menos 1x)</i>")
+    # ── capital vivo (capital_cache — 100% DB) ─────────────────────────
+    lines += ["", sep, "", "💼 <b>CAPITAL VIVO (mybdBook snapshots)</b>"]
+    if cap_cache:
+        cap_sorted = sorted(cap_cache, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
+        total_cap  = sum(float(r[2] or 0) for r in cap_sorted)
+        for env_c, users_c, total_c in cap_sorted:
+            eico = "🔵" if "v5" in str(env_c).lower() else "🟠"
+            lines.append(f"  {eico} <b>{esc(str(env_c))}</b>: <b>${total_c:,.2f}</b>  ({users_c} usuários)")
+        lines.append(f"  └─ 💼 Total: <b>${total_cap:,.2f}</b>")
+    else:
+        lines.append("  <i>(sem dados — usuários precisam chamar mybdBook ao menos 1x)</i>")
 
     return "\n".join(lines)
 
