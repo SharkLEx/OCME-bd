@@ -304,21 +304,40 @@ def _adm_pro_report(limit_users: int = 80) -> str:
 # ==============================================================================
 def limites_kb():
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.row("GWEI +100", "GWEI -100")
-    kb.row("Gás baixo +0.5", "Gás baixo -0.5")
-    kb.row("Inativ +10m", "Inativ -10m")
     kb.row("🔙 ADM")
+    return kb
+
+def _limites_inline_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("⚡ GWEI +100",   callback_data="lim_gwei_p"),
+        types.InlineKeyboardButton("⚡ GWEI -100",   callback_data="lim_gwei_m"),
+    )
+    kb.row(
+        types.InlineKeyboardButton("⛽ Gás +0.5",    callback_data="lim_gas_p"),
+        types.InlineKeyboardButton("⛽ Gás -0.5",    callback_data="lim_gas_m"),
+    )
+    kb.row(
+        types.InlineKeyboardButton("⏱️ Inativ +10m", callback_data="lim_inativ_p"),
+        types.InlineKeyboardButton("⏱️ Inativ -10m", callback_data="lim_inativ_m"),
+    )
+    kb.row(types.InlineKeyboardButton("✅ Fechar", callback_data="lim_close"))
     return kb
 
 def _limites_status_text():
     reload_limites()
-    return (
-        "⚙️ LIMITES (ADM)\n\n"
-        f"• LIMITE_GWEI: {LIMITE_GWEI:.0f} gwei\n"
-        f"• GÁS BAIXO: {LIMITE_GAS_BAIXO_POL:.2f} POL\n"
-        f"• INATIVIDADE: {LIMITE_INATIV_MIN:.0f} min\n\n"
-        "Ajuste pelos botões abaixo. Cada ajuste salva automaticamente."
-    )
+    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    lines = [
+        "⚙️ <b>LIMITES DO SISTEMA</b>",
+        sep,
+        "",
+        f"  ├─ ⚡ <b>GWEI máx:</b>       <b>{LIMITE_GWEI:.0f} gwei</b>",
+        f"  ├─ ⛽ <b>Gás baixo:</b>      <b>{LIMITE_GAS_BAIXO_POL:.2f} POL</b>",
+        f"  └─ ⏱️ <b>Inatividade:</b>    <b>{LIMITE_INATIV_MIN:.0f} min</b>",
+        "",
+        "<i>Ajuste com os botões abaixo. Salva automaticamente.</i>",
+    ]
+    return "\n".join(lines)
 
 def _adj_and_save(key: str, delta: float, min_v: float, max_v: float, fmt: str):
     reload_limites()
@@ -428,32 +447,43 @@ def _go_limites_menu(m):
     if not _is_admin(m.chat.id):
         bot.send_message(m.chat.id, "⛔ Acesso negado.", reply_markup=_get_main_kb()())
         return
-    bot.send_message(m.chat.id, _limites_status_text(), reply_markup=limites_kb())
+    bot.send_message(m.chat.id, "⚙️ Painel de Limites", reply_markup=limites_kb())
+    bot.send_message(m.chat.id, _limites_status_text(), parse_mode="HTML", reply_markup=_limites_inline_kb())
 
-@bot.message_handler(func=lambda m: m.text in ["GWEI +100", "GWEI -100", "Gás baixo +0.5", "Gás baixo -0.5", "Inativ +10m", "Inativ -10m"])
-def limites_actions(m):
-    if not _is_admin(m.chat.id):
-        return bot.reply_to(m, "⛔ Acesso negado.")
-    t = (m.text or "").strip()
+@bot.callback_query_handler(func=lambda c: c.data.startswith("lim_"))
+def _limites_callback(c):
+    if not _is_admin(c.from_user.id):
+        return bot.answer_callback_query(c.id, "⛔ Acesso negado.")
+    if c.data == "lim_close":
+        bot.delete_message(c.message.chat.id, c.message.message_id)
+        return bot.answer_callback_query(c.id)
     try:
-        if t == "GWEI +100":
-            msg = _adj_and_save("limite_gwei", +100, 10, 50000, "✅ LIMITE_GWEI ajustado: {:.0f} gwei")
-        elif t == "GWEI -100":
-            msg = _adj_and_save("limite_gwei", -100, 10, 50000, "✅ LIMITE_GWEI ajustado: {:.0f} gwei")
-        elif t == "Gás baixo +0.5":
-            msg = _adj_and_save("limite_gas_baixo_pol", +0.5, 0.1, 1000, "✅ GÁS BAIXO ajustado: {:.2f} POL")
-        elif t == "Gás baixo -0.5":
-            msg = _adj_and_save("limite_gas_baixo_pol", -0.5, 0.1, 1000, "✅ GÁS BAIXO ajustado: {:.2f} POL")
-        elif t == "Inativ +10m":
-            msg = _adj_and_save("limite_inativ_min", +10, 1, 100000, "✅ INATIVIDADE ajustada: {:.0f} min")
-        elif t == "Inativ -10m":
-            msg = _adj_and_save("limite_inativ_min", -10, 1, 100000, "✅ INATIVIDADE ajustada: {:.0f} min")
-        else:
-            msg = "✅ Ok."
+        if   c.data == "lim_gwei_p":    tip = _adj_and_save("limite_gwei",          +100, 10,    50000,  "⚡ GWEI: {:.0f}")
+        elif c.data == "lim_gwei_m":    tip = _adj_and_save("limite_gwei",          -100, 10,    50000,  "⚡ GWEI: {:.0f}")
+        elif c.data == "lim_gas_p":     tip = _adj_and_save("limite_gas_baixo_pol", +0.5, 0.1,  1000,   "⛽ Gás: {:.2f} POL")
+        elif c.data == "lim_gas_m":     tip = _adj_and_save("limite_gas_baixo_pol", -0.5, 0.1,  1000,   "⛽ Gás: {:.2f} POL")
+        elif c.data == "lim_inativ_p":  tip = _adj_and_save("limite_inativ_min",    +10,  1,    100000, "⏱️ Inativ: {:.0f} min")
+        elif c.data == "lim_inativ_m":  tip = _adj_and_save("limite_inativ_min",    -10,  1,    100000, "⏱️ Inativ: {:.0f} min")
+        else:                            tip = "✅"
+        bot.answer_callback_query(c.id, f"✅ {tip}")
     except Exception as e:
         logger.exception("Erro ajustando limites: %s", e)
-        msg = "⚠️ Erro ao ajustar limites."
-    bot.send_message(m.chat.id, msg + "\n\n" + _limites_status_text(), reply_markup=limites_kb())
+        bot.answer_callback_query(c.id, "⚠️ Erro ao ajustar.")
+    try:
+        bot.edit_message_text(
+            _limites_status_text(), c.message.chat.id, c.message.message_id,
+            parse_mode="HTML", reply_markup=_limites_inline_kb()
+        )
+    except Exception:
+        pass
+
+def _adm_pro_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="admpr_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="admpr_close"),
+    )
+    return kb
 
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "👥 ADM PRO")
 def adm_pro_handler(m):
@@ -462,144 +492,253 @@ def adm_pro_handler(m):
         return
     bot.send_chat_action(m.chat.id, "typing")
     try:
-        msg = _adm_pro_report()
-        _send_long(m.chat.id, msg, reply_markup=adm_kb())
+        _send_long(m.chat.id, _adm_pro_report(), reply_markup=_adm_pro_kb())
     except Exception as e:
         logger.exception(e)
         send_support(m.chat.id, "⚠️ Erro ao gerar relatório ADM PRO.", reply_markup=adm_kb())
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("admpr_"))
+def _adm_pro_callback(c):
+    if not _is_admin(c.from_user.id):
+        return bot.answer_callback_query(c.id, "⛔ Acesso negado.")
+    if c.data == "admpr_close":
+        bot.delete_message(c.message.chat.id, c.message.message_id)
+        return bot.answer_callback_query(c.id)
+    bot.answer_callback_query(c.id, "⏳ Atualizando...")
+    try:
+        bot.edit_message_text(
+            _adm_pro_report(), c.message.chat.id, c.message.message_id,
+            parse_mode="HTML", reply_markup=_adm_pro_kb()
+        )
+    except Exception as e:
+        logger.exception("[admpr] refresh error: %s", e)
+
+def _relatorio_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="relatorio_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="relatorio_close"),
+    )
+    return kb
+
+def _relatorio_build_text():
+    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    with DB_LOCK:
+        cur = conn.cursor()
+
+        # 1. Usuários bot por ambiente
+        bot_users = cur.execute("""
+            SELECT COALESCE(env, 'AG_C_bd') AS env,
+                   COUNT(*) AS total,
+                   COUNT(CASE WHEN active=1 THEN 1 END) AS ativos
+            FROM users
+            GROUP BY env
+        """).fetchall()
+        bot_users = sorted(bot_users, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
+
+        total_bot_users  = sum(int(r[1] or 0) for r in bot_users)
+        total_bot_ativos = sum(int(r[2] or 0) for r in bot_users)
+
+        # 2. Capital por ambiente — capital_cache (100% DB, zero RPC)
+        cap_rows = cur.execute("""
+            SELECT COALESCE(cc.env, 'AG_C_bd') AS env,
+                   COUNT(*) AS users_com_cap,
+                   ROUND(SUM(cc.total_usd), 2) AS capital
+            FROM capital_cache cc
+            WHERE cc.total_usd > 0.5
+            GROUP BY cc.env
+        """).fetchall()
+        cap_rows = sorted(cap_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
+
+        cap_map = {r[0]: {"users": int(r[1]), "capital": float(r[2] or 0)} for r in cap_rows}
+        total_capital = sum(v["capital"] for v in cap_map.values())
+
+        # Concentração Top 3 (capital_cache individual)
+        all_caps = [float(r[0] or 0) for r in cur.execute(
+            "SELECT total_usd FROM capital_cache WHERE total_usd > 0.5 ORDER BY total_usd DESC"
+        ).fetchall()]
+        top3_pct = (sum(all_caps[:3]) / total_capital * 100) if total_capital > 0 and all_caps else 0.0
+
+        # 3. On-chain por ambiente — protocol_ops
+        proto_rows = cur.execute("""
+            SELECT COALESCE(env, 'UNKNOWN') AS env,
+                   COUNT(DISTINCT wallet)                          AS wallets,
+                   COUNT(*)                                        AS trades,
+                   ROUND(SUM(profit), 2)                          AS lucro,
+                   COUNT(CASE WHEN profit > 0 THEN 1 END)         AS wins,
+                   ROUND(SUM(fee_bd), 4)                          AS bd
+            FROM protocol_ops
+            WHERE wallet != '' AND env != 'UNKNOWN'
+            GROUP BY env
+        """).fetchall()
+        proto_rows = sorted(proto_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
+
+        proto_map = {
+            r[0]: {"wallets": int(r[1] or 0), "trades": int(r[2] or 0),
+                    "lucro": float(r[3] or 0), "wins": int(r[4] or 0), "bd": float(r[5] or 0)}
+            for r in proto_rows
+        }
+        total_wallets = sum(v["wallets"] for v in proto_map.values())
+        total_trades  = sum(v["trades"]  for v in proto_map.values())
+        total_lucro   = sum(v["lucro"]   for v in proto_map.values())
+        total_wins    = sum(v["wins"]    for v in proto_map.values())
+        total_bd      = sum(v["bd"]      for v in proto_map.values())
+        wr_global     = total_wins / total_trades * 100 if total_trades else 0.0
+        cobertura     = (total_bot_ativos / total_wallets * 100) if total_wallets > 0 else 0.0
+        sg_lucro      = "🟢" if total_lucro >= 0 else "🔴"
+
+    # ── HEADER ──────────────────────────────────────────────────────────
+    lines = [
+        "🏛️ <b>RELATÓRIO INSTITUCIONAL — WEbdEX</b>",
+        f"🕒 <i>{datetime.now().strftime('%d/%m/%Y %H:%M')}</i>",
+        sep,
+        "",
+        "🌐 <b>CONSOLIDADO GLOBAL</b>",
+        f"  ├─ 👥 Bot: <b>{total_bot_ativos}</b> ativos / <b>{total_bot_users}</b> total",
+        f"  ├─ 🔗 On-chain: <b>{total_wallets:,}</b> traders  ·  <b>{total_trades:,}</b> trades",
+        f"  ├─ 📡 Cobertura bot: <b>{cobertura:.1f}%</b>  ({total_bot_ativos}/{total_wallets})",
+        f"  ├─ 💰 Capital (cache): <b>${total_capital:,.2f}</b>  🏆 Top3: <b>{top3_pct:.1f}%</b>",
+        f"  ├─ {sg_lucro} Lucro on-chain: <b>{total_lucro:+,.2f} USD</b>  WR: <b>{wr_global:.1f}%</b>",
+        f"  └─ 💎 BD coletado: <b>{total_bd:.4f}</b> tokens  <i>(all-time)</i>",
+    ]
+
+    # ── POR AMBIENTE ─────────────────────────────────────────────────────
+    all_envs = sorted(
+        set(list(proto_map.keys()) + [r[0] for r in bot_users]),
+        key=lambda e: (0 if "v5" in e.lower() else 1, e)
+    )
+
+    for env in all_envs:
+        eico = "🔵" if "v5" in env.lower() else "🟠"
+        p    = proto_map.get(env, {})
+        b    = cap_map.get(env, {})
+        bu   = next((r for r in bot_users if r[0] == env), None)
+
+        wr_e = p.get("wins", 0) / p.get("trades", 1) * 100 if p.get("trades") else 0
+        sg_e = "🟢" if p.get("lucro", 0) >= 0 else "🔴"
+
+        lines += ["", sep, "", f"{eico} <b>{esc(env)}</b>"]
+
+        if bu:
+            lines.append(f"  ├─ 👥 Bot: <b>{int(bu[2] or 0)}</b> ativos / <b>{int(bu[1] or 0)}</b> total")
+        if b.get("capital", 0) > 0:
+            lines.append(f"  ├─ 💰 Capital (cache): <b>${b['capital']:,.2f}</b>  ({b['users']} users)")
+
+        if p:
+            lines += [
+                f"  ├─ 🔗 Traders: <b>{p['wallets']:,}</b>  📊 Trades: <b>{p['trades']:,}</b>  WR: <b>{wr_e:.1f}%</b>",
+                f"  ├─ {sg_e} Lucro: <b>{p['lucro']:+,.2f} USD</b>",
+                f"  └─ 💎 BD: <b>{p['bd']:.4f}</b> tokens",
+            ]
+        else:
+            lines.append("  └─ <i>(sem dados on-chain)</i>")
+
+    lines += ["", sep, "", f"<i>🔍 Fonte: 100% DB · zero RPC · {datetime.now().strftime('%H:%M')}</i>"]
+    return "\n".join(lines)
 
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "📊 Relatório Institucional")
 def adm_relatorio_institucional(m):
     if not _is_admin(m.chat.id):
         return bot.reply_to(m, "⛔ Acesso negado.")
     bot.send_chat_action(m.chat.id, "typing")
-
-    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
     try:
-        with DB_LOCK:
-            cur = conn.cursor()
-
-            # 1. Usuários bot por ambiente
-            bot_users = cur.execute("""
-                SELECT COALESCE(env, 'AG_C_bd') AS env,
-                       COUNT(*) AS total,
-                       COUNT(CASE WHEN active=1 THEN 1 END) AS ativos
-                FROM users
-                GROUP BY env
-            """).fetchall()
-            bot_users = sorted(bot_users, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
-
-            total_bot_users  = sum(int(r[1] or 0) for r in bot_users)
-            total_bot_ativos = sum(int(r[2] or 0) for r in bot_users)
-
-            # 2. Capital por ambiente — capital_cache (100% DB, zero RPC)
-            cap_rows = cur.execute("""
-                SELECT COALESCE(cc.env, 'AG_C_bd') AS env,
-                       COUNT(*) AS users_com_cap,
-                       ROUND(SUM(cc.total_usd), 2) AS capital
-                FROM capital_cache cc
-                WHERE cc.total_usd > 0.5
-                GROUP BY cc.env
-            """).fetchall()
-            cap_rows = sorted(cap_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
-
-            cap_map = {r[0]: {"users": int(r[1]), "capital": float(r[2] or 0)} for r in cap_rows}
-            total_capital = sum(v["capital"] for v in cap_map.values())
-
-            # Concentração Top 3 (capital_cache individual)
-            all_caps = [float(r[0] or 0) for r in cur.execute(
-                "SELECT total_usd FROM capital_cache WHERE total_usd > 0.5 ORDER BY total_usd DESC"
-            ).fetchall()]
-            top3_pct = (sum(all_caps[:3]) / total_capital * 100) if total_capital > 0 and all_caps else 0.0
-
-            # 3. On-chain por ambiente — protocol_ops
-            proto_rows = cur.execute("""
-                SELECT COALESCE(env, 'UNKNOWN') AS env,
-                       COUNT(DISTINCT wallet)                          AS wallets,
-                       COUNT(*)                                        AS trades,
-                       ROUND(SUM(profit), 2)                          AS lucro,
-                       COUNT(CASE WHEN profit > 0 THEN 1 END)         AS wins,
-                       ROUND(SUM(fee_bd), 4)                          AS bd
-                FROM protocol_ops
-                WHERE wallet != '' AND env != 'UNKNOWN'
-                GROUP BY env
-            """).fetchall()
-            proto_rows = sorted(proto_rows, key=lambda r: (0 if "v5" in str(r[0]).lower() else 1))
-
-            proto_map = {
-                r[0]: {"wallets": int(r[1] or 0), "trades": int(r[2] or 0),
-                        "lucro": float(r[3] or 0), "wins": int(r[4] or 0), "bd": float(r[5] or 0)}
-                for r in proto_rows
-            }
-            total_wallets = sum(v["wallets"] for v in proto_map.values())
-            total_trades  = sum(v["trades"]  for v in proto_map.values())
-            total_lucro   = sum(v["lucro"]   for v in proto_map.values())
-            total_wins    = sum(v["wins"]    for v in proto_map.values())
-            total_bd      = sum(v["bd"]      for v in proto_map.values())
-            wr_global     = total_wins / total_trades * 100 if total_trades else 0.0
-            cobertura     = (total_bot_ativos / total_wallets * 100) if total_wallets > 0 else 0.0
-            sg_lucro      = "🟢" if total_lucro >= 0 else "🔴"
-
-        # ── HEADER ──────────────────────────────────────────────────────────
-        lines = [
-            "🏛️ <b>RELATÓRIO INSTITUCIONAL — WEbdEX</b>",
-            f"🕒 <i>{datetime.now().strftime('%d/%m/%Y %H:%M')}</i>",
-            sep,
-            "",
-            "🌐 <b>CONSOLIDADO GLOBAL</b>",
-            f"  ├─ 👥 Bot: <b>{total_bot_ativos}</b> ativos / <b>{total_bot_users}</b> total",
-            f"  ├─ 🔗 On-chain: <b>{total_wallets:,}</b> traders  ·  <b>{total_trades:,}</b> trades",
-            f"  ├─ 📡 Cobertura bot: <b>{cobertura:.1f}%</b>  ({total_bot_ativos}/{total_wallets})",
-            f"  ├─ 💰 Capital (cache): <b>${total_capital:,.2f}</b>  🏆 Top3: <b>{top3_pct:.1f}%</b>",
-            f"  ├─ {sg_lucro} Lucro on-chain: <b>{total_lucro:+,.2f} USD</b>  WR: <b>{wr_global:.1f}%</b>",
-            f"  └─ 💎 BD coletado: <b>{total_bd:.4f}</b> tokens  <i>(all-time)</i>",
-        ]
-
-        # ── POR AMBIENTE ─────────────────────────────────────────────────────
-        all_envs = sorted(
-            set(list(proto_map.keys()) + [r[0] for r in bot_users]),
-            key=lambda e: (0 if "v5" in e.lower() else 1, e)
-        )
-
-        for env in all_envs:
-            eico  = "🔵" if "v5" in env.lower() else "🟠"
-            p     = proto_map.get(env, {})
-            b     = cap_map.get(env, {})
-            bu    = next((r for r in bot_users if r[0] == env), None)
-
-            wr_e  = p.get("wins", 0) / p.get("trades", 1) * 100 if p.get("trades") else 0
-            sg_e  = "🟢" if p.get("lucro", 0) >= 0 else "🔴"
-
-            lines += ["", sep, "", f"{eico} <b>{esc(env)}</b>"]
-
-            # Bot
-            if bu:
-                lines += [
-                    f"  ├─ 👥 Bot: <b>{int(bu[2] or 0)}</b> ativos / <b>{int(bu[1] or 0)}</b> total",
-                ]
-            if b.get("capital", 0) > 0:
-                lines.append(
-                    f"  ├─ 💰 Capital (cache): <b>${b['capital']:,.2f}</b>  ({b['users']} users)"
-                )
-
-            # On-chain
-            if p:
-                lines += [
-                    f"  ├─ 🔗 Traders: <b>{p['wallets']:,}</b>  📊 Trades: <b>{p['trades']:,}</b>  WR: <b>{wr_e:.1f}%</b>",
-                    f"  ├─ {sg_e} Lucro: <b>{p['lucro']:+,.2f} USD</b>",
-                    f"  └─ 💎 BD: <b>{p['bd']:.4f}</b> tokens",
-                ]
-            else:
-                lines.append("  └─ <i>(sem dados on-chain)</i>")
-
-        lines += ["", sep, f"", f"<i>🔍 Fonte: 100% DB · zero RPC · {datetime.now().strftime('%H:%M')}</i>"]
-
-        _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
-
+        _send_long(m.chat.id, _relatorio_build_text(), reply_markup=_relatorio_kb())
     except Exception as e:
         logger.exception(e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("relatorio_"))
+def _relatorio_callback(c):
+    if not _is_admin(c.from_user.id):
+        return bot.answer_callback_query(c.id, "⛔ Acesso negado.")
+    if c.data == "relatorio_close":
+        bot.delete_message(c.message.chat.id, c.message.message_id)
+        return bot.answer_callback_query(c.id)
+    bot.answer_callback_query(c.id, "⏳ Atualizando...")
+    try:
+        bot.edit_message_text(
+            _relatorio_build_text(), c.message.chat.id, c.message.message_id,
+            parse_mode="HTML", reply_markup=_relatorio_kb()
+        )
+    except Exception as e:
+        logger.exception("[relatorio] refresh error: %s", e)
+
+def _inatividade_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="inativ_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="inativ_close"),
+    )
+    return kb
+
+def _inatividade_text():
+    sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    dt = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+
+    with DB_LOCK:
+        sub_rows = cursor.execute("""
+            SELECT o.sub_conta,
+                   COALESCE(o.ambiente,'?') AS amb,
+                   COUNT(*) AS trades,
+                   COUNT(CASE WHEN o.valor>0 THEN 1 END) AS wins,
+                   MIN(o.data_hora) AS first_t,
+                   MAX(o.data_hora) AS last_t,
+                   COALESCE(ow.wallet,'') AS wallet
+            FROM operacoes o
+            JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+            WHERE o.tipo='Trade' AND o.data_hora>=?
+            GROUP BY o.sub_conta, o.ambiente
+            ORDER BY trades DESC
+            LIMIT 30
+        """, (dt,)).fetchall()
+
+    if not sub_rows:
+        return "⏳ <b>INATIVIDADE PRO</b>\n\n⚠️ Nenhuma subconta com trade nas últimas 24h."
+
+    lines = [
+        "⏳ <b>INATIVIDADE PRO — Qualificação de Ciclos</b>",
+        sep,
+        f"🗓️ <i>Últimas 24h  ·  {len(sub_rows)} subcontas</i>",
+        "",
+    ]
+
+    qualif_counts = {"🔥 Muito Ativa": 0, "✅ Ativa": 0, "⚠️ Letárgica": 0, "🔴 Inativa": 0}
+
+    for sub, amb, trades, wins, first_t, last_t, wallet in sub_rows:
+        wr = wins / trades * 100 if trades > 0 else 0
+
+        times_data = load_trade_times_by_sub(wallet, hours=168, only_sub=str(sub))
+        if times_data and str(sub) in times_data:
+            times_list = times_data[str(sub)]
+            cs = ciclo_stats(times_list) if len(times_list) >= 3 else {}
+            smq = consist_score(cs.get("med", 0), cs.get("p95", 0)) if cs else 0
+            med_min = int(cs.get("med", 0).total_seconds() / 60) if cs and hasattr(cs.get("med", 0), "total_seconds") else 0
+        else:
+            smq = 0
+            med_min = 0
+
+        trades_per_h = trades / 24
+        if trades_per_h >= 5:      classif = "🔥 Muito Ativa"
+        elif trades_per_h >= 0.5:  classif = "✅ Ativa"
+        elif trades_per_h >= 0.1:  classif = "⚠️ Letárgica"
+        else:                       classif = "🔴 Inativa"
+        qualif_counts[classif] = qualif_counts.get(classif, 0) + 1
+
+        wr_emoji  = "🟢" if wr >= 60 else ("🟡" if wr >= 40 else "🔴")
+        sub_short = (str(sub)[:20] + "…") if len(str(sub)) > 20 else str(sub)
+        med_str   = f"  ·  ciclo ~{med_min}min" if med_min > 0 else ""
+        smq_str   = f"  ·  SMQ {smq:.0f}" if smq > 0 else ""
+        lines.append(
+            f"{classif}  <code>{esc(sub_short)}</code>\n"
+            f"   {wr_emoji} WR: <b>{wr:.0f}%</b>  |  Trades: <b>{trades}</b>{med_str}{smq_str}"
+        )
+        lines.append("")
+
+    lines += [sep, "<b>Distribuição:</b>"]
+    for classif, cnt in qualif_counts.items():
+        if cnt > 0:
+            lines.append(f"  {classif}: <b>{cnt}</b> subcontas")
+    return "\n".join(lines)
 
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "⏳ Inatividade PRO")
 def inatividade_pro(m):
@@ -607,102 +746,42 @@ def inatividade_pro(m):
         return send_support(m.chat.id, "⛔ Acesso restrito.", reply_markup=_get_main_kb()())
     bot.send_chat_action(m.chat.id, "typing")
     try:
-        hours = 24
-        dt = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
-
-        with DB_LOCK:
-            # Subcontas com atividade nos últimas 24h
-            sub_rows = cursor.execute("""
-                SELECT o.sub_conta,
-                       COALESCE(o.ambiente,'?') AS amb,
-                       COUNT(*) AS trades,
-                       COUNT(CASE WHEN o.valor>0 THEN 1 END) AS wins,
-                       MIN(o.data_hora) AS first_t,
-                       MAX(o.data_hora) AS last_t,
-                       COALESCE(ow.wallet,'') AS wallet
-                FROM operacoes o
-                JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
-                WHERE o.tipo='Trade' AND o.data_hora>=?
-                GROUP BY o.sub_conta, o.ambiente
-                ORDER BY trades DESC
-                LIMIT 30
-            """, (dt,)).fetchall()
-
-        if not sub_rows:
-            return send_support(m.chat.id,
-                "⏳ <b>INATIVIDADE PRO</b>\n\n⚠️ Nenhuma subconta com trade nas últimas 24h.",
-                reply_markup=adm_kb())
-
-        lines = [
-            "⏳ <b>INATIVIDADE PRO — Qualificação de Ciclos</b>",
-            f"━━━━━━━━━━━━━━━━━━━━",
-            f"🗓️ <i>Últimas 24h  ·  {len(sub_rows)} subcontas</i>",
-            "",
-        ]
-
-        qualif_counts = {"🔥 Muito Ativa": 0, "✅ Ativa": 0, "⚠️ Letárgica": 0, "🔴 Inativa": 0}
-
-        for sub, amb, trades, wins, first_t, last_t, wallet in sub_rows:
-            wr = wins / trades * 100 if trades > 0 else 0
-
-            # Calcular ciclo stats se tiver histórico suficiente
-            times_data = load_trade_times_by_sub(wallet, hours=168, only_sub=str(sub))  # 7d para ciclo
-            if times_data and str(sub) in times_data:
-                times_list = times_data[str(sub)]
-                cs = ciclo_stats(times_list) if len(times_list) >= 3 else {}
-                smq = consist_score(cs.get("med", 0), cs.get("p95", 0)) if cs else 0
-                med_min = int(cs.get("med", 0).total_seconds() / 60) if cs and hasattr(cs.get("med", 0), "total_seconds") else 0
-            else:
-                smq = 0
-                med_min = 0
-
-            # Classificação de atividade
-            trades_per_h = trades / 24
-            if trades_per_h >= 5:
-                classif = "🔥 Muito Ativa"
-            elif trades_per_h >= 0.5:
-                classif = "✅ Ativa"
-            elif trades_per_h >= 0.1:
-                classif = "⚠️ Letárgica"
-            else:
-                classif = "🔴 Inativa"
-            qualif_counts[classif] = qualif_counts.get(classif, 0) + 1
-
-            wr_emoji = "🟢" if wr >= 60 else ("🟡" if wr >= 40 else "🔴")
-            sub_short = (str(sub)[:20] + "…") if len(str(sub)) > 20 else str(sub)
-            med_str = f"  ·  ciclo ~{med_min}min" if med_min > 0 else ""
-            smq_str = f"  ·  SMQ {smq:.0f}" if smq > 0 else ""
-            lines.append(
-                f"{classif}  <code>{esc(sub_short)}</code>\n"
-                f"   {wr_emoji} WR: <b>{wr:.0f}%</b>  |  Trades: <b>{trades}</b>{med_str}{smq_str}"
-            )
-            lines.append("")
-
-        lines.append("━━━━━━━━━━━━━━━━━━━━")
-        lines.append("<b>Distribuição:</b>")
-        for classif, cnt in qualif_counts.items():
-            if cnt > 0:
-                lines.append(f"  {classif}: <b>{cnt}</b> subcontas")
-
-        _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
+        _send_long(m.chat.id, _inatividade_text(), reply_markup=_inatividade_kb())
     except Exception as e:
         logger.exception(e)
         send_support(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("inativ_"))
+def _inatividade_callback(c):
+    if not _is_admin(c.from_user.id):
+        return bot.answer_callback_query(c.id, "⛔ Acesso negado.")
+    if c.data == "inativ_close":
+        bot.delete_message(c.message.chat.id, c.message.message_id)
+        return bot.answer_callback_query(c.id)
+    bot.answer_callback_query(c.id, "⏳ Atualizando...")
+    try:
+        bot.edit_message_text(
+            _inatividade_text(), c.message.chat.id, c.message.message_id,
+            parse_mode="HTML", reply_markup=_inatividade_kb()
+        )
+    except Exception as e:
+        logger.exception("[inativ] refresh error: %s", e)
 
 
 # ==============================================================================
 # 📊 ANÁLISE SUBACCOUNTS — resumo on-chain de subcontas por ambiente
 # ==============================================================================
-@bot.message_handler(func=lambda m: (m.text or "").strip() == "📊 Análise SubAccounts")
-def adm_analise_subaccounts(m):
-    if not _is_admin(m.chat.id):
-        return bot.reply_to(m, "⛔ Acesso negado.")
-    bot.send_chat_action(m.chat.id, "typing")
+def _subaccounts_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="subac_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="subac_close"),
+    )
+    return kb
 
+def _subaccounts_text():
     sep = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-    try:
-        with DB_LOCK:
+    with DB_LOCK:
             cur = conn.cursor()
 
             # 1. Por ambiente — subconta, wallet, trades, liq, wins/losses
@@ -815,10 +894,34 @@ def adm_analise_subaccounts(m):
         else:
             lines.append("  <i>(sem dados — usuários precisam chamar mybdBook ao menos 1x)</i>")
 
-        _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
+    return "\n".join(lines)
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "📊 Análise SubAccounts")
+def adm_analise_subaccounts(m):
+    if not _is_admin(m.chat.id):
+        return bot.reply_to(m, "⛔ Acesso negado.")
+    bot.send_chat_action(m.chat.id, "typing")
+    try:
+        _send_long(m.chat.id, _subaccounts_text(), reply_markup=_subaccounts_kb())
     except Exception as e:
         logger.exception(e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("subac_"))
+def _subaccounts_callback(c):
+    if not _is_admin(c.from_user.id):
+        return bot.answer_callback_query(c.id, "⛔ Acesso negado.")
+    if c.data == "subac_close":
+        bot.delete_message(c.message.chat.id, c.message.message_id)
+        return bot.answer_callback_query(c.id)
+    bot.answer_callback_query(c.id, "⏳ Atualizando...")
+    try:
+        bot.edit_message_text(
+            _subaccounts_text(), c.message.chat.id, c.message.message_id,
+            parse_mode="HTML", reply_markup=_subaccounts_kb()
+        )
+    except Exception as e:
+        logger.exception("[subac] refresh error: %s", e)
 
 
 # ==============================================================================
@@ -1645,23 +1748,16 @@ def adm_mybdbook_adm(m):
 # ==============================================================================
 # 📸 PROGRESSÃO DO CAPITAL — snapshots históricos por ambiente
 # ==============================================================================
-@bot.message_handler(func=lambda m: (m.text or "").strip() == "📸 Progressão do Capital")
-def adm_progressao_capital(m):
-    """Dashboard de Progressão do Capital — layout Freqtrade-style por ambiente.
+def _prog_capital_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="prog_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="prog_close"),
+    )
+    return kb
 
-    Por cada ambiente (AG_C_bd / bd_v5):
-      🏦 TVL: Antes → Agora  +delta  +%
-      🌐 Traders on-chain: carteiras, trades, P&L, acerto, fees
-      💼 Usuários bot: capital antes → agora por user + tabela diária
-
-    Consolidado global ao final.
-    Zero RPC. 100% DB.
-    """
-    if not _is_admin(m.chat.id):
-        return bot.reply_to(m, "⛔ Acesso negado.")
-    bot.send_chat_action(m.chat.id, "typing")
-    bot.send_message(m.chat.id, "⏳ Carregando progressão do capital...", parse_mode="HTML")
-
+def _prog_capital_text():
+    """Gera o texto do dashboard Progressão do Capital. 100% DB, zero RPC."""
     now_dt = datetime.now()
     sep    = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
@@ -1874,7 +1970,7 @@ def adm_progressao_capital(m):
                     f"     Antes → Agora: <b>${_pd['prev_tvl']:,.2f}</b> → <b>${_pd['curr_tvl']:,.2f}</b>"
                 )
                 lines.append(
-                    f"     └─ {_dico(_td)} <b>{_td:>+,.2f} USD</b>  (<b>{_pd['delta_pct']:>+.2f}%</b>)"
+                    f"     └─ {_dico(_td)} <b>{_td:>+,.2f} USD</b>  (<b>{(_pd['delta_pct'] or 0.0):>+.2f}%</b>)"
                 )
             else:
                 lines.append(f"     Atual: <b>${_pd['curr_tvl']:,.2f}</b>  <i>[{_pd['curr_ts']}]</i>")
@@ -1926,7 +2022,7 @@ def adm_progressao_capital(m):
                     lines.append(
                         f"     • <b>{_lbl}</b>"
                         f"  ${_u['prev']:,.0f} → ${_u['curr']:,.0f}"
-                        f"  {_dico(_ud)} <b>{_ud:>+,.2f}</b> ({_u['delta_pct']:>+.2f}%)"
+                        f"  {_dico(_ud)} <b>{_ud:>+,.2f}</b> ({(_u['delta_pct'] or 0.0):>+.2f}%)"
                     )
                     lines.append(
                         f"       <i>{_u['prev_ts']} → {_u['curr_ts']}</i>"
@@ -2001,12 +2097,34 @@ def adm_progressao_capital(m):
         "",
         "<i>💡 TVL = fl_snapshots (worker ~30min) · Capital bot = mybdBook snapshots · On-chain = todos os traders desde deploy</i>",
     ]
+    return "\n".join(lines)
 
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "📸 Progressão do Capital")
+def adm_progressao_capital(m):
+    if not _is_admin(m.chat.id):
+        return bot.reply_to(m, "⛔ Acesso negado.")
+    bot.send_chat_action(m.chat.id, "typing")
     try:
-        _send_long(m.chat.id, "\n".join(lines), reply_markup=adm_kb())
+        _send_long(m.chat.id, _prog_capital_text(), reply_markup=_prog_capital_kb())
     except Exception as e:
         logger.exception(e)
         bot.send_message(m.chat.id, f"⚠️ Erro ao enviar: {e}", reply_markup=adm_kb())
+
+@bot.callback_query_handler(func=lambda c: c.data.startswith("prog_"))
+def _prog_capital_callback(c):
+    if not _is_admin(c.from_user.id):
+        return bot.answer_callback_query(c.id, "⛔ Acesso negado.")
+    if c.data == "prog_close":
+        bot.delete_message(c.message.chat.id, c.message.message_id)
+        return bot.answer_callback_query(c.id)
+    bot.answer_callback_query(c.id, "⏳ Atualizando...")
+    try:
+        bot.edit_message_text(
+            _prog_capital_text(), c.message.chat.id, c.message.message_id,
+            parse_mode="HTML", reply_markup=_prog_capital_kb()
+        )
+    except Exception as e:
+        logger.exception("[prog_capital] refresh error: %s", e)
 
 
 # ==============================================================================

@@ -260,8 +260,8 @@ def _sub_drawdown(sub: str) -> str:
                 trough = acc
         if peak == 0.0 and trough == 0.0:
             return ""
-        peak_s   = f"+${peak:.2f}"   if peak   >= 0 else f"-${abs(peak):.2f}"
-        trough_s = f"-${abs(trough):.2f}" if trough < 0 else f"+${trough:.2f}"
+        peak_s   = f"+${peak:.2f}"    if peak   >  0 else (f"-${abs(peak):.2f}" if peak < 0 else "$0.00")
+        trough_s = f"-${abs(trough):.2f}" if trough < 0 else "$0.00"
         return f"{trough_s}  →  pico {peak_s}"
     except Exception:
         return ""
@@ -369,7 +369,9 @@ def notificar(
 
         # ── EXECUÇÃO — formato rico WEbdEX (Fase 1) ────────────────────────
         tag   = env_tag or "AG"
-        strat = (strategy_name or "Standard").strip() or "Standard"
+        _strat_raw = (strategy_name or "Standard").strip() or "Standard"
+        strat = (_strat_raw[:8] + "…" + _strat_raw[-6:]) if len(_strat_raw) > 20 else _strat_raw
+        exec_icon = "🟢" if val >= 0 else "🔴"
 
         # ── RESULTADO ──────────────────────────────────────────────────────
         p_emoji  = _profit_emoji(val)
@@ -386,7 +388,8 @@ def notificar(
         pass_line = f"🎟️  Fee Protocolo: <code>{pass_fee_bd:.4f} BD</code>" if (pass_fee_bd and pass_fee_bd > 0) else ""
 
         # ── BLOCKCHAIN ─────────────────────────────────────────────────────
-        ago = "Confirmado agora"
+        hora_str = now_br().strftime("%H:%M")
+        ago = f"{hora_str}h · Confirmado agora"
         bloco_line = ""
         if bloco and bloco > 0:
             bloco_line = f"🔷  Polygon  ·  Bloco <code>{bloco:,}</code>\n"
@@ -395,13 +398,13 @@ def notificar(
                 delta = max(0, int(now_br().timestamp() - ts))
                 mins  = delta // 60
                 if mins < 1:
-                    ago = "Confirmado agora"
+                    ago = f"{hora_str}h · Confirmado agora"
                 elif mins < 60:
-                    ago = f"Confirmado há {mins} min"
+                    ago = f"{hora_str}h · Confirmado há {mins} min"
                 elif mins < 60 * 24:
-                    ago = f"Confirmado há {mins // 60}h"
+                    ago = f"{hora_str}h · Confirmado há {mins // 60}h"
                 else:
-                    ago = f"Confirmado há {mins // (60 * 24)}d"
+                    ago = f"{hora_str}h · Confirmado há {mins // (60 * 24)}d"
         else:
             bloco_line = "🔷  Polygon\n"
 
@@ -445,7 +448,7 @@ def notificar(
             f"⚡ <b>WEbdEX ENGINE</b>  ·  <code>{esc(tag)}</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"\n"
-            f"🔵  <b>EXECUÇÃO CONFIRMADA</b>  ·  #{trades_hj}\n"
+            f"{exec_icon}  <b>EXECUÇÃO CONFIRMADA</b>  ·  #{trades_hj}\n"
             f"👤  {code(sub)}\n"
             f"🔄  Estratégia: <b>{esc(strat)}</b>  ·  🪙 <b>{esc(token)}</b>\n"
             f"\n"

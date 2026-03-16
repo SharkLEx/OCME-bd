@@ -22,6 +22,11 @@ from webdex_workers import (
     _fl_snapshot_worker,
     _protocol_ops_sync_worker,
 )
+from webdex_anomaly import anomaly_worker
+from webdex_milestones import milestone_worker
+from webdex_swapbook_notify import swapbook_notify_worker
+from webdex_onchain_notify import onchain_notify_worker
+from webdex_network_notify import network_notify_worker
 
 # Importar handlers — registra os @bot.message_handler
 import webdex_handlers.admin   # noqa: F401
@@ -41,6 +46,11 @@ _THREAD_REGISTRY: dict[str, callable] = {
     "inactivity_auto_loop":    _inactivity_auto_loop,
     "fl_snapshot_worker":      _fl_snapshot_worker,
     "protocol_ops_sync":       _protocol_ops_sync_worker,
+    "anomaly_worker":          anomaly_worker,
+    "milestone_worker":        milestone_worker,
+    "swapbook_notify_worker":  swapbook_notify_worker,
+    "onchain_notify_worker":   onchain_notify_worker,
+    "network_notify_worker":   network_notify_worker,
 }
 
 

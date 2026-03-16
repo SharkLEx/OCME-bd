@@ -10,6 +10,11 @@ import json
 from datetime import datetime, timedelta
 from collections import deque
 
+# Rate limit IA: max mensagens por janela de tempo
+_ia_rate_limit: dict = {}
+_IA_RATE_MAX    = 10    # máx msgs por janela
+_IA_RATE_WINDOW = 3600  # janela em segundos (1h)
+
 import requests
 
 from webdex_config import (
@@ -19,6 +24,7 @@ from webdex_config import (
 from webdex_db import (
     DB_LOCK, conn, period_to_hours,
     _ciclo_21h_since, _ciclo_21h_label,
+    get_config, set_config,
 )
 from webdex_bot_core import is_admin
 
@@ -39,13 +45,30 @@ AI_MEMORY_MAX = 12
 # ==============================================================================
 _AI_MEMORY: dict = {}
 
+_MEM_CONFIG_PREFIX = "ai_mem_"
+
 
 def mem_add(chat_id, role: str, text: str):
     q = _AI_MEMORY.setdefault(chat_id, deque(maxlen=AI_MEMORY_MAX))
     q.append({"role": role, "content": text})
+    # Persiste no banco para sobreviver restarts
+    try:
+        set_config(f"{_MEM_CONFIG_PREFIX}{chat_id}", json.dumps(list(q)))
+    except Exception:
+        pass
 
 
 def mem_get(chat_id) -> list:
+    if chat_id not in _AI_MEMORY or not _AI_MEMORY[chat_id]:
+        # Tenta restaurar do banco (após restart)
+        try:
+            raw = get_config(f"{_MEM_CONFIG_PREFIX}{chat_id}", "")
+            if raw:
+                loaded = json.loads(raw)
+                q = deque(loaded, maxlen=AI_MEMORY_MAX)
+                _AI_MEMORY[chat_id] = q
+        except Exception:
+            pass
     return list(_AI_MEMORY.get(chat_id, []))
 
 
@@ -1496,6 +1519,15 @@ def preventive_hint(text: str) -> str:
 # ==============================================================================
 
 def handle_ai_message_extended(chat_id, text: str, extra_raw=None, mode: str = None) -> str:
+    # Rate limit: max _IA_RATE_MAX msgs por _IA_RATE_WINDOW segundos
+    _now = time.time()
+    _cid = int(chat_id)
+    _ts  = [t for t in _ia_rate_limit.get(_cid, []) if _now - t < _IA_RATE_WINDOW]
+    if len(_ts) >= _IA_RATE_MAX:
+        return "⏳ Você atingiu o limite de 10 perguntas por hora. Tente novamente em breve."
+    _ts.append(_now)
+    _ia_rate_limit[_cid] = _ts
+
     # Preventive layer
     hint = preventive_hint(text)
 
@@ -1528,3 +1560,69 @@ def handle_ai_message_extended(chat_id, text: str, extra_raw=None, mode: str = N
         response = hint + "\n\n" + response
 
     return response
+
+
+def ai_answer_ptbr(prompt: str) -> str:
+    """Wrapper simples: envia prompt em português e retorna a resposta."""
+    messages = [{"role": "user", "content": prompt}]
+    return call_openai(messages, model=AI_MODEL)
+
+
+# ==============================================================================
+# 🤖 IA AUDIT — Protocolo, Comunidade, Ciclo
+# ==============================================================================
+
+def _ai_protocolo_audit(trades: int, winrate: float, pnl: float, tvl: float) -> str:
+    """Gera análise IA do protocolo atual (para exibir no botão 🌐 Protocolo)."""
+    try:
+        prompt = (
+            f"Analise brevemente (2-3 linhas, sem markdown, em português) o estado do protocolo WEbdEX:\n"
+            f"- Trades no ciclo: {trades}\n"
+            f"- WinRate: {winrate:.1f}%\n"
+            f"- PnL: ${pnl:+.2f}\n"
+            f"- TVL total: ${tvl:,.0f}\n"
+            f"Seja objetivo. Indique se está saudável ou se há algo a observar."
+        )
+        resp = ai_answer_ptbr(prompt)
+        return (resp or "").strip()[:400]
+    except Exception as _e:
+        logger.debug("[ai_protocolo_audit] %s", _e)
+        return ""
+
+
+def _ai_comunidade_audit(ranking_top5: list, total_traders: int) -> str:
+    """Gera destaque IA do ranking da comunidade."""
+    try:
+        if not ranking_top5:
+            return ""
+        top = ranking_top5[0]
+        sc, wr, pf, liq, tot, ws, env = top
+        prompt = (
+            f"Analise brevemente (2-3 linhas, sem markdown, em português) o ranking WEbdEX:\n"
+            f"- Total de traders: {total_traders}\n"
+            f"- Top trader: WR={wr:.0f}%, PF={pf:.2f}, PnL=${liq:+.2f}, {tot} trades\n"
+            f"- Destaque algum padrão interessante do top 5 ou avise se há outliers negativos.\n"
+        )
+        resp = ai_answer_ptbr(prompt)
+        return (resp or "").strip()[:400]
+    except Exception as _e:
+        logger.debug("[ai_comunidade_audit] %s", _e)
+        return ""
+
+
+def _ai_interpret_cycle(med: float, p95: float, sd: float, score: float, wallet: str) -> str:
+    """Interpreta padrão de ciclo de uma subconta para o usuário."""
+    try:
+        prompt = (
+            f"Interprete brevemente (2-3 linhas, sem markdown, em português) o padrão de ciclo de trading:\n"
+            f"- Mediana entre trades: {med:.1f} min\n"
+            f"- P95: {p95:.1f} min\n"
+            f"- Desvio padrão: {sd:.1f} min\n"
+            f"- Score de consistência: {score:.0f}/100\n"
+            f"Diga se o ritmo é consistente, irregular ou se há algo preocupante."
+        )
+        resp = ai_answer_ptbr(prompt)
+        return (resp or "").strip()[:400]
+    except Exception as _e:
+        logger.debug("[ai_interpret_cycle] %s", _e)
+        return ""

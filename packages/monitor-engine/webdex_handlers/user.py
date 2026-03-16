@@ -13,7 +13,8 @@ import os, time, threading, hashlib
 import csv
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
-from statistics import median
+import math
+from statistics import median, stdev as _stdev
 import functools
 
 from telebot import types
@@ -330,18 +331,45 @@ def escolher_periodo(m):
 @require_auth
 def filtros_menu(m, u):
     hours = period_to_hours(u.get("periodo") or "24h")
-    subs = get_subs_in_period(u["wallet"], hours)
+    # Subcontas com contagem e PnL no período
+    sub_rows = []
+    try:
+        with DB_LOCK:
+            sub_rows = cursor.execute("""
+                SELECT o.sub_conta,
+                       COUNT(*) as cnt,
+                       SUM(CAST(o.valor AS REAL) - CAST(o.gas_usd AS REAL)) as liq
+                FROM operacoes o
+                JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                WHERE LOWER(ow.wallet)=? AND o.tipo='Trade'
+                  AND o.data_hora >= datetime('now', ? || ' hours')
+                GROUP BY o.sub_conta ORDER BY cnt DESC LIMIT 30
+            """, (u["wallet"].lower(), f"-{hours}")).fetchall()
+    except Exception:
+        sub_rows = []
 
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.row("Todas", "⬅️ Voltar")
-    for s in subs[:30]:
-        kb.row(s)
+    for sub, cnt, liq in sub_rows:
+        kb.row(str(sub))  # botão limpo — sem emoji para não quebrar o handler
 
     upsert_user(m.chat.id, pending="ASK_FILTER_SUB")
     curr = (u.get("sub_filter") or "").strip() or "Todas"
+
+    sub_lines = "\n".join(
+        f"  {'🟢' if (liq or 0) >= 0 else '🔴'} {esc(str(sub))}  "
+        f"({cnt} trades  |  {'+'if(liq or 0)>=0 else ''}${(liq or 0):.2f})"
+        for sub, cnt, liq in sub_rows
+    ) if sub_rows else "  <i>Sem trades no período</i>"
+
     send_support(
         m.chat.id,
-        f"🎛️ <b>FILTROS</b>\n\nSubconta atual: <b>{esc(curr)}</b>\n\nEscolha uma subconta ou <b>Todas</b>.",
+        f"🎛️ <b>FILTROS</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"Subconta atual: <b>{esc(curr)}</b>\n\n"
+        f"Subcontas disponíveis ({esc(u.get('periodo','24h'))}):\n"
+        f"{sub_lines}\n\n"
+        f"Escolha uma subconta ou <b>Todas</b>:",
         reply_markup=kb
     )
 
@@ -349,20 +377,60 @@ def filtros_menu(m, u):
 # ==============================================================================
 # 🩺 SAÚDE
 # ==============================================================================
-@bot.message_handler(func=lambda m: m.text == "🩺 Saúde")
-def health(m):
-    uptime_h = (time.time() - HEALTH["started_at"]) / 3600.0
-    last_ok = HEALTH.get("last_fetch_ok_ts") or 0
-    ago = int(time.time() - last_ok) if last_ok else -1
-    cd_until = int(HEALTH.get("cooldown_until") or 0)
-    cd_left = max(0, cd_until - int(time.time()))
-    lag = f"{ago}s" if ago >= 0 else "-"
-    sync_running = int(HEALTH.get("sync_running") or 0)
-    sync_last = str(HEALTH.get("sync_last") or "-")
 
-    tg_last = float(HEALTH.get("tg_last_ok_ts") or 0)
-    tg_ago = int(time.time() - tg_last) if tg_last else -1
-    # Fase 5: métricas de motor real
+def _health_score(uptime_h: float, lat_avg: float, cap_rate: float, rpc_errs: int):
+    """Calcula Health Score 0-100 com 4 dimensões."""
+    # Dimensão 1 — RPC Latência (25pts)
+    if   lat_avg < 300:  s_lat = 25
+    elif lat_avg < 500:  s_lat = 20
+    elif lat_avg < 1000: s_lat = 15
+    elif lat_avg < 1500: s_lat = 8
+    else:                s_lat = 0
+
+    # Dimensão 2 — Taxa de Captura (30pts)
+    if   cap_rate >= 99.5: s_cap = 30
+    elif cap_rate >= 99.0: s_cap = 25
+    elif cap_rate >= 97.0: s_cap = 18
+    elif cap_rate >= 95.0: s_cap = 10
+    else:                  s_cap = 0
+
+    # Dimensão 3 — Uptime (25pts)
+    if   uptime_h >= 24: s_up = 25
+    elif uptime_h >= 12: s_up = 22
+    elif uptime_h >= 6:  s_up = 18
+    elif uptime_h >= 1:  s_up = 12
+    else:                s_up = 5
+
+    # Dimensão 4 — Erros RPC (20pts)
+    if   rpc_errs == 0:  s_err = 20
+    elif rpc_errs <= 3:  s_err = 16
+    elif rpc_errs <= 10: s_err = 10
+    elif rpc_errs <= 20: s_err = 5
+    else:                s_err = 0
+
+    total = s_lat + s_cap + s_up + s_err
+    return total, s_lat, s_cap, s_up, s_err
+
+
+def _health_score_label(score: int) -> str:
+    if score >= 90: return "Excelente 🟢"
+    if score >= 75: return "Bom 🟢"
+    if score >= 60: return "Regular 🟡"
+    if score >= 40: return "Degradado 🟠"
+    return "Crítico 🔴"
+
+
+def _health_build_text():
+    uptime_h     = (time.time() - HEALTH["started_at"]) / 3600.0
+    last_ok      = HEALTH.get("last_fetch_ok_ts") or 0
+    ago          = int(time.time() - last_ok) if last_ok else -1
+    cd_until     = int(HEALTH.get("cooldown_until") or 0)
+    cd_left      = max(0, cd_until - int(time.time()))
+    lag          = f"{ago}s" if ago >= 0 else "-"
+    sync_running = int(HEALTH.get("sync_running") or 0)
+    sync_last    = str(HEALTH.get("sync_last") or "-")
+    tg_last      = float(HEALTH.get("tg_last_ok_ts") or 0)
+    tg_ago       = int(time.time() - tg_last) if tg_last else -1
     lat_ms       = float(HEALTH.get("rpc_latency_ms")  or 0)
     lat_avg      = float(HEALTH.get("rpc_latency_avg") or 0)
     rpc_errs     = int(HEALTH.get("rpc_errors_total")  or 0)
@@ -370,30 +438,65 @@ def health(m):
     blks_skip    = int(HEALTH.get("blocks_skipped")    or 0)
     cap_rate     = float(HEALTH.get("capture_rate")    or 100.0)
     evts_lost    = int(HEALTH.get("events_lost_est")   or 0)
-    lat_icon     = "🟢" if lat_avg < 500 else ("🟡" if lat_avg < 1500 else "🔴")
-    cap_icon     = "🟢" if cap_rate >= 99 else ("🟡" if cap_rate >= 95 else "🔴")
 
-    txt = (
-        f"🩺 <b>SAÚDE DO BOT</b>\n\n"
-        f"⏱️ Uptime: <b>{uptime_h:.2f}h</b>\n"
-        f"🧱 Último bloco: <b>{HEALTH.get('last_block_seen', 0):,}</b>\n"
-        f"📉 Lag: <b>{lag}</b> | TG OK: <b>{tg_ago}s</b>\n\n"
-        f"⛓️ <b>Motor On-Chain</b>\n"
-        f"  {lat_icon} Latência RPC: <b>{lat_ms:.0f}ms</b> (avg <b>{lat_avg:.0f}ms</b>)\n"
-        f"  {cap_icon} Taxa captura: <b>{cap_rate:.2f}%</b>\n"
-        f"  📦 Blocos proc.: <b>{blks_proc:,}</b> | Pulados: <b>{blks_skip:,}</b>\n"
-        f"  ⚠️ Eventos perdidos est.: <b>{evts_lost:,}</b>\n"
-        f"  ❌ Erros RPC: <b>{rpc_errs:,}</b>\n\n"
-        f"📊 <b>Capturas</b>\n"
-        f"  📦 Trades: <b>{HEALTH.get('logs_trade', 0):,}</b>\n"
-        f"  📦 Transfers: <b>{HEALTH.get('logs_transfer', 0):,}</b>\n\n"
-        f"🔁 Vigia loops: <b>{HEALTH.get('vigia_loops', 0):,}</b>\n"
-        f"⏳ Cooldown 429: <b>{cd_left}s</b>\n"
-        f"🔄 Sync: <b>{'▶️ rodando' if sync_running==1 else '✅ ocioso'}</b>\n"
-        f"🧭 Último sync: {code(sync_last)}\n"
-        f"⚠️ Último erro: {code(HEALTH.get('last_error','') or '-')}"
+    score, s_lat, s_cap, s_up, s_err = _health_score(uptime_h, lat_avg, cap_rate, rpc_errs)
+    score_label = _health_score_label(score)
+
+    lines = [
+        "🩺 <b>SAÚDE DO BOT — WEbdEX</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🏥 <b>Health Score: {score}/100</b> — {score_label}",
+        f"   ├─ RPC Latência:  <b>{s_lat}/25</b>  (avg {lat_avg:.0f}ms)",
+        f"   ├─ Captura:       <b>{s_cap}/30</b>  ({cap_rate:.1f}%)",
+        f"   ├─ Uptime:        <b>{s_up}/25</b>  ({uptime_h:.1f}h)",
+        f"   └─ Erros RPC:     <b>{s_err}/20</b>  ({rpc_errs} erros)",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🧱 Último bloco: <b>{HEALTH.get('last_block_seen', 0):,}</b>",
+        f"📉 Lag: <b>{lag}</b> | TG OK: <b>{tg_ago}s</b>",
+        f"📦 Blocos proc.: <b>{blks_proc:,}</b> | Pulados: <b>{blks_skip:,}</b>",
+        f"⚠️ Eventos perdidos est.: <b>{evts_lost:,}</b>",
+        "",
+        "📊 <b>Capturas</b>",
+        f"  📦 Trades: <b>{HEALTH.get('logs_trade', 0):,}</b>",
+        f"  📦 Transfers: <b>{HEALTH.get('logs_transfer', 0):,}</b>",
+        "",
+        f"🔁 Vigia loops: <b>{HEALTH.get('vigia_loops', 0):,}</b>",
+        f"⏳ Cooldown 429: <b>{cd_left}s</b>",
+        f"🔄 Sync: <b>{'▶️ rodando' if sync_running == 1 else '✅ ocioso'}</b>",
+        f"🧭 Último sync: {code(sync_last)}",
+        f"⚠️ Último erro: {code(HEALTH.get('last_error', '') or '-')}",
+    ]
+    return "\n".join(lines)
+
+
+def _health_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="health_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="health_close"),
     )
-    send_support(m.chat.id, txt, reply_markup=ajuda_kb())
+    return kb
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("health_"))
+def _health_callback(c):
+    bot.answer_callback_query(c.id)
+    if c.data == "health_close":
+        try:
+            bot.delete_message(c.message.chat.id, c.message.message_id)
+        except Exception:
+            pass
+        return
+    try:
+        bot.edit_message_text(_health_build_text(), c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_health_kb())
+    except Exception:
+        pass
+
+
+@bot.message_handler(func=lambda m: m.text == "🩺 Saúde")
+def health(m):
+    send_support(m.chat.id, _health_build_text(), reply_markup=_health_kb())
 
 
 # ==============================================================================
@@ -402,32 +505,53 @@ def health(m):
 @bot.message_handler(func=lambda m: m.text == "🔎 Wallet Info")
 @require_auth
 def wallet_info(m, u):
-    w3_user = web3_for_rpc(u.get("rpc"))
+    import json as _jwi
+    # Capital do worker (sem chamada on-chain que trava)
+    cap_total = 0.0
     try:
-        c = get_contracts(u["env"], w3_user)
+        with DB_LOCK:
+            _cc = cursor.execute(
+                "SELECT total_usd, breakdown_json FROM capital_cache WHERE chat_id=? LIMIT 1",
+                (m.chat.id,)
+            ).fetchone()
+        if _cc:
+            _ct  = float(_cc[0] or 0)
+            _bdj = _jwi.loads(_cc[1] or "{}")
+            _bdj_sum = sum(float(v) for v in _bdj.values() if float(v or 0) > 0)
+            cap_total = max(_ct, _bdj_sum)
+    except Exception:
+        pass
 
-        raw_gas = c["mgr"].functions.gasBalance().call({"from": Web3.to_checksum_address(u["wallet"])})
-        gas = float(w3_user.from_wei(raw_gas, "ether"))
-
+    # TokenPass (balanceOf é rápido — mantém)
+    passes_str = "—"
+    try:
+        _w3g = web3_for_rpc(u.get("rpc") or "")
+        c = get_contracts(u["env"], _w3g)
         raw_pass = c["pass"].functions.balanceOf(Web3.to_checksum_address(u["wallet"])).call()
-        passes = raw_pass / 10**9
+        passes_str = f"{raw_pass / 10**9:.0f}"
+    except Exception:
+        pass
 
-        sf = (u.get("sub_filter") or "").strip() or "Todas"
+    sf       = (u.get("sub_filter") or "").strip() or "Todas"
+    cap_line = (f"💰  Capital: <b>${cap_total:,.2f} USD</b>\n"
+                if cap_total > 0 else "")
 
-        msg = (
-            f"💎 <b>WEbdEX V5.6 — DASHBOARD</b>\n"
-            f"🧾 Ambiente: <b>{esc(u['env'])}</b>\n"
-            f"👛 Wallet: {code(u['wallet'][:10] + '...' + u['wallet'][-6:])}\n"
-            f"🎫 Passes: <b>{passes:.0f}</b>\n"
-            f"⛽ Manager: <b>{gas:.4f} POL</b>\n"
-            f"🗓️ Período atual: <b>{esc(u['periodo'])}</b>\n"
-            f"🎛️ Filtro Sub: <b>{esc(sf)}</b>\n"
-            f"✅ Monitoramento: <b>{'Ativo' if int(u['active'])==1 else 'Pausado'}</b>\n"
-            f"⏰ Relatório automático: <b>21:00</b>\n"
-        )
-        send_support(m.chat.id, msg, reply_markup=main_kb())
-    except Exception as e:
-        send_support(m.chat.id, f"⚠️ Erro ao ler wallet: {code(e)}", reply_markup=main_kb())
+    msg = (
+        f"💎 <b>WEbdEX V5.6 — DASHBOARD</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"🧾  Ambiente:  <b>{esc(u['env'])}</b>\n"
+        f"👛  Wallet:    {code(u['wallet'][:10] + '...' + u['wallet'][-6:])}\n"
+        f"🎫  Passes:    <b>{passes_str}</b>\n"
+        f"{cap_line}"
+        f"\n"
+        f"🗓️  Período:   <b>{esc(u['periodo'])}</b>\n"
+        f"🎛️  Filtro Sub: <b>{esc(sf)}</b>\n"
+        f"✅  Monitor:   <b>{'Ativo' if int(u.get('active', 1)) == 1 else 'Pausado'}</b>\n"
+        f"⏰  Relatório: <b>21:00</b>\n"
+        f"\n"
+        f"<i>⚡ WEbdEX · New Digital Economy</i>"
+    )
+    send_support(m.chat.id, msg, reply_markup=main_kb())
 
 
 # ==============================================================================
@@ -528,6 +652,28 @@ def _fmt_inf(v: float) -> str:
         return "-"
 
 
+def _sqn_label(sqn: float) -> str:
+    """Sistema de Qualidade de Van Tharp."""
+    if sqn >= 5.0:  return "Excepcional 🌟"
+    if sqn >= 3.0:  return "Excelente 🟢"
+    if sqn >= 2.5:  return "Bom 🟢"
+    if sqn >= 2.0:  return "Médio 🟡"
+    if sqn >= 1.6:  return "Abaixo da média 🟡"
+    return "Fraco 🔴"
+
+
+def _sharpe_icon(sharpe: float) -> str:
+    if sharpe >= 1.5: return "🟢"
+    if sharpe >= 0.5: return "🟡"
+    return "🔴"
+
+
+def _sortino_icon(sortino: float) -> str:
+    if sortino >= 2.0: return "🟢"
+    if sortino >= 1.0: return "🟡"
+    return "🔴"
+
+
 def _max_drawdown(equity: List[float]) -> float:
     if not equity:
         return 0.0
@@ -582,11 +728,9 @@ def _query_trades(wallet: str, hours: int, sub_filter: str = "") -> List[Tuple[A
 # ==============================================================================
 # 📈 DASHBOARD PRO (V5.6)
 # ==============================================================================
-@bot.message_handler(func=lambda m: (m.text or "").strip() and "Dashboard PRO" in (m.text or ""))
-@require_auth
-def dashboard(m, u):
-    bot.send_chat_action(m.chat.id, "typing")
 
+def _dashboard_build_text(u):
+    """Retorna (texto, nets) ou (None, None) se sem dados."""
     hours = period_to_hours(u.get("periodo") or "24h")
     dt = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
     extra_sql, extra_params = get_user_filter_clause(u)
@@ -602,10 +746,9 @@ def dashboard(m, u):
         rows = cursor.fetchall()
 
     if not rows:
-        return send_support(m.chat.id, "⚠️ Sem dados para o Dashboard PRO (com o filtro atual).", reply_markup=main_kb())
+        return None, None
 
-    # Acumuladores
-    nets = []  # (data_hora, sub, net, gas_usd)
+    nets = []
     gross_pos = 0.0
     gross_neg = 0.0
     gas_total = 0.0
@@ -621,7 +764,6 @@ def dashboard(m, u):
         if v < 0:
             gross_neg += v
 
-    # Equity / MDD / PF / streaks
     equity = []
     acc = 0.0
     gains = 0.0
@@ -647,12 +789,26 @@ def dashboard(m, u):
     pf = _profit_factor(gains, losses_abs)
     best_w, best_l = _streaks(net_series)
 
-    # Outliers
+    # Métricas quantitativas avançadas
+    std_net      = _stdev(net_series) if total >= 2 else 0.0
+    sharpe       = expectancy / std_net if std_net > 0 else 0.0
+    sqn          = math.sqrt(total) * sharpe if total >= 5 else 0.0
+    recovery     = liq / mdd if mdd > 0 else float("inf")
+
+    # Sortino: usa apenas desvio padrão do downside (só penaliza perdas)
+    downside_returns = [x for x in net_series if x < 0]
+    downside_dev     = _stdev(downside_returns) if len(downside_returns) >= 2 else 0.0
+    sortino          = expectancy / downside_dev if downside_dev > 0 else 0.0
+
+    # VaR 95% — perda máxima esperada em 95% dos trades
+    sorted_nets = sorted(net_series)
+    var_idx     = max(0, int(len(sorted_nets) * 0.05) - 1)
+    var_95      = sorted_nets[var_idx] if sorted_nets else 0.0
+
     top_gas = sorted(nets, key=lambda x: x[3], reverse=True)[:2]
     worst_net = sorted(nets, key=lambda x: x[2])[:2]
 
     def _hhmm(dh: str) -> str:
-        # "YYYY-MM-DD HH:MM:SS" -> "HH:MM"
         try:
             s = str(dh)
             return s[11:16] if len(s) >= 16 else s
@@ -662,24 +818,32 @@ def dashboard(m, u):
     sf = (u.get("sub_filter") or "").strip() or "Todas"
     per = (u.get("periodo") or "24h")
 
-    # Mensagem no estilo do preview pedido
     out = []
     out.append("📈 <b>DASHBOARD PRO — WEbdEX</b>")
     out.append(f"🗓️ <b>Período:</b> {esc(per)}")
     out.append(f"🎛️ <b>Filtro:</b> {esc(sf)}")
-    out.append("────────────────────")
+    out.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     out.append(f"🏅 <b>LÍQUIDO TOTAL:</b> <b>{liq:+.4f} USD</b>")
     out.append(f"💵 <b>Bruto (+):</b> <b>{gross_pos:+.4f} USD</b>")
     out.append(f"📉 <b>Bruto (−):</b> <b>{gross_neg:.4f} USD</b>")
     out.append(f"⛽ <b>Gás total:</b> <b>-{gas_total:.4f} USD</b>")
-    out.append("────────────────────")
+    out.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     out.append(f"🏆 <b>WinRate:</b> <b>{winrate:.1f}%</b>")
     out.append(f"📊 <b>Trades:</b> <b>{total}</b>")
     out.append(f"📐 <b>Expectancy:</b> <b>{expectancy:+.4f} USD / trade</b>")
     out.append(f"📉 <b>Max Drawdown:</b> <b>-{mdd:.4f} USD</b>")
     out.append(f"📈 <b>Profit Factor:</b> <b>{_fmt_inf(pf)}</b>")
     out.append(f"🔥 <b>Streaks:</b> W <b>{best_w}</b> | L <b>{best_l}</b>")
-    out.append("────────────────────")
+    out.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    if total >= 5:
+        rec_str = "♾️" if recovery == float("inf") else f"{recovery:.1f}x"
+        out.append("📊 <b>ANÁLISE QUANTITATIVA</b>")
+        out.append(f"🎯 <b>Sharpe Ratio:</b>    <b>{sharpe:.2f}</b> {_sharpe_icon(sharpe)}")
+        out.append(f"📐 <b>Sortino Ratio:</b>   <b>{sortino:.2f}</b> {_sortino_icon(sortino)}")
+        out.append(f"📉 <b>VaR 95%:</b>         <b>{var_95:+.4f} USD</b>")
+        out.append(f"♻️ <b>Recovery Factor:</b>  <b>{rec_str}</b>")
+        out.append(f"🔬 <b>SQN:</b>              <b>{sqn:.1f}</b> — {_sqn_label(sqn)}")
+        out.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     out.append("🧯 <b>Outliers (eventos fora do padrão)</b>")
     out.append("⛽ <b>Maiores custos de gás:</b>")
     for dh, sub, net, g in top_gas:
@@ -687,27 +851,71 @@ def dashboard(m, u):
     out.append("🔻 <b>Piores resultados líquidos:</b>")
     for dh, sub, net, g in worst_net:
         out.append(f"• {esc(sub)} — <b>{net:+.2f} USD</b> | gás <b>${g:.2f}</b> | {_hhmm(dh)}")
-    out.append("────────────────────")
+    out.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     out.append("🧱 <b>Network:</b> Polygon")
     out.append("🧠 <b>Análise automática WEbdEX</b>")
 
-    send_support(m.chat.id, "\n".join(out), reply_markup=main_kb())
+    return "\n".join(out), nets
 
-    # Envia gráficos informativos (Equity / Gás / Distribuição)
+
+def _dashboard_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="dash_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="dash_close"),
+    )
+    return kb
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("dash_"))
+def _dashboard_callback(c):
+    bot.answer_callback_query(c.id)
+    if c.data == "dash_close":
+        try:
+            bot.delete_message(c.message.chat.id, c.message.message_id)
+        except Exception:
+            pass
+        return
+    u = get_user(c.from_user.id) or {}
+    if not u.get("wallet"):
+        return
+    txt, _ = _dashboard_build_text(u)
+    if txt is None:
+        txt = "⚠️ Sem dados para o Dashboard PRO (com o filtro atual)."
     try:
-        if len(nets) >= 5:
-            _dash_send_graphs(m.chat.id, u, sf if sf else "Todas", per, nets)
+        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_dashboard_kb())
     except Exception:
         pass
 
 
-# ==============================================================================
-# 📌 Painel 24h (com filtro)
-# ==============================================================================
-@bot.message_handler(func=lambda m: m.text == "📌 Ciclo 21h")
+@bot.message_handler(func=lambda m: (m.text or "").strip() and "Dashboard PRO" in (m.text or ""))
 @require_auth
-def painel(m, u):
-    """Painel do Ciclo 21h — desde as 21:00 BRT de ontem até agora."""
+def dashboard(m, u):
+    bot.send_chat_action(m.chat.id, "typing")
+
+    txt, nets = _dashboard_build_text(u)
+    if txt is None:
+        return send_support(m.chat.id, "⚠️ Sem dados para o Dashboard PRO (com o filtro atual).", reply_markup=main_kb())
+
+    send_support(m.chat.id, txt, reply_markup=_dashboard_kb())
+
+    # Envia gráficos informativos (Equity / Gás / Distribuição)
+    sf  = (u.get("sub_filter") or "").strip() or "Todas"
+    per = (u.get("periodo") or "24h")
+    try:
+        if nets and len(nets) >= 5:
+            _dash_send_graphs(m.chat.id, u, sf, per, nets)
+    except Exception as _e:
+        logger.debug("[dashboard] graph send failed: %s", _e)
+
+
+# ==============================================================================
+# 📌 Ciclo 21h (com filtro)
+# ==============================================================================
+
+def _painel_build_text(u):
+    """Retorna texto do Ciclo 21h ou None se sem dados."""
     since = _ciclo_21h_since()
     label = _ciclo_21h_label()
     extra_sql, extra_params = get_user_filter_clause(u)
@@ -722,75 +930,83 @@ def painel(m, u):
         rows = cursor.fetchall()
 
     if not rows:
-        return send_support(m.chat.id,
-            f"⚠️ Sem dados no ciclo atual.\n🕘 Desde: <b>{since[11:16]} BRT</b>",
-            reply_markup=main_kb())
+        return None
 
     bruto = sum(float(r[0]) for r in rows)
     gas   = sum(float(r[1] or 0.0) for r in rows)
     liq   = bruto - gas
     wins  = sum(1 for r in rows if float(r[0]) > 0)
     total = len(rows)
-    wr    = wins/total*100 if total else 0.0
+    wr    = wins / total * 100 if total else 0.0
     subs  = len(set(r[2] for r in rows))
     bar   = barra_progresso(wins, total)
 
     icon = "🟢" if liq >= 0 else "🔴"
-    txt = (
-        f"📌 <b>CICLO 21H — WEbdEX</b>\n"
-        f"🕘 <i>{label}</i>\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"📊 Trades:     <b>{total:,}</b> | Subs: <b>{subs}</b>\n"
-        f"💰 Bruto:      <b>{bruto:+.4f} USD</b>\n"
-        f"⛽ Gás:        <b>{gas:.4f} USD</b>\n"
-        f"{icon} Líquido:    <b>{liq:+.4f} USD</b>\n\n"
-        f"🎯 WinRate:    <b>{wr:.1f}%</b>\n"
-        f"{bar}\n"
-        f"✅ Wins: <b>{wins}</b> | ❌ Losses: <b>{total-wins}</b>"
+    lines = [
+        "📌 <b>CICLO 21H — WEbdEX</b>",
+        f"🕘 <i>{label}</i>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"📊 Trades:     <b>{total:,}</b> | Subs: <b>{subs}</b>",
+        f"💰 Bruto:      <b>{bruto:+.4f} USD</b>",
+        f"⛽ Gás:        <b>{gas:.4f} USD</b>",
+        f"{icon} Líquido:    <b>{liq:+.4f} USD</b>",
+        "",
+        f"🎯 WinRate:    <b>{wr:.1f}%</b>",
+        bar,
+        f"✅ Wins: <b>{wins}</b> | ❌ Losses: <b>{total - wins}</b>",
+    ]
+    return "\n".join(lines)
+
+
+def _painel_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="painel_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="painel_close"),
     )
-    send_support(m.chat.id, txt, reply_markup=main_kb())
+    return kb
 
 
-# ==============================================================================
-# 📊 Consolidado (gráfico) (com filtro)
-# ==============================================================================
-@bot.message_handler(func=lambda m: m.text == "📊 Consolidado")
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("painel_"))
+def _painel_callback(c):
+    bot.answer_callback_query(c.id)
+    if c.data == "painel_close":
+        try:
+            bot.delete_message(c.message.chat.id, c.message.message_id)
+        except Exception:
+            pass
+        return
+    u = get_user(c.from_user.id) or {}
+    if not u.get("wallet"):
+        return
+    since = _ciclo_21h_since()
+    txt = _painel_build_text(u) or f"⚠️ Sem dados no ciclo atual.\n🕘 Desde: <b>{since[11:16]} BRT</b>"
+    try:
+        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_painel_kb())
+    except Exception:
+        pass
+
+
+@bot.message_handler(func=lambda m: m.text == "📌 Ciclo 21h")
 @require_auth
-def graph(m, u):
-    hours = period_to_hours(u["periodo"])
-    dt = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
-    extra_sql, extra_params = get_user_filter_clause(u)
-
-    with DB_LOCK:
-        cursor.execute(f"""
-            SELECT o.data_hora, o.tipo, o.sub_conta, o.bloco, o.valor, o.gas_usd, o.token
-            FROM operacoes o
-            JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
-            WHERE o.tipo='Trade' AND o.data_hora>=? AND ow.wallet=? {extra_sql}
-            ORDER BY o.data_hora ASC
-        """, (dt, u["wallet"], *extra_params))
-        rows = cursor.fetchall()
-
-    if not rows:
-        return send_support(m.chat.id, "⚠️ Sem dados (com o filtro atual).", reply_markup=main_kb())
-
-    img = gerar_grafico(rows)
-    if img:
-        sf = (u.get("sub_filter") or "").strip() or "Todas"
-        bot.send_photo(
-            m.chat.id,
-            img,
-            caption=f"📊 <b>DRE ({esc(u['periodo'])})</b>\n🎛️ Filtro: <b>{esc(sf)}</b>",
-            parse_mode="HTML"
-        )
+def painel(m, u):
+    """Painel do Ciclo 21h — desde as 21:00 BRT de ontem até agora."""
+    since = _ciclo_21h_since()
+    txt = _painel_build_text(u)
+    if txt is None:
+        return send_support(m.chat.id,
+            f"⚠️ Sem dados no ciclo atual.\n🕘 Desde: <b>{since[11:16]} BRT</b>",
+            reply_markup=main_kb())
+    send_support(m.chat.id, txt, reply_markup=_painel_kb())
 
 
 # ==============================================================================
 # 📊 Consolidado (24h) — com filtro
 # ==============================================================================
-@bot.message_handler(func=lambda m: m.text == "📊 Consolidado (24h)")
-@require_auth
-def consolidado_24h(m, u):
+
+def _consolidado_build_text(u):
+    """Retorna texto do Consolidado 24h ou None se sem dados."""
     dt = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     extra_sql, extra_params = get_user_filter_clause(u)
 
@@ -804,40 +1020,79 @@ def consolidado_24h(m, u):
         rows = cursor.fetchall()
 
     if not rows:
-        return send_support(m.chat.id, "⚠️ Sem dados nas últimas 24h (com o filtro atual).", reply_markup=main_kb())
+        return None
 
     faturamento = sum(float(v) for (v, g) in rows if float(v) > 0)
-    custos = sum(float(v) for (v, g) in rows if float(v) < 0)
-    gas = sum(float(g or 0.0) for (v, g) in rows)
-    liquido = faturamento + custos - gas
+    custos      = sum(float(v) for (v, g) in rows if float(v) < 0)
+    gas         = sum(float(g or 0.0) for (v, g) in rows)
+    liquido     = faturamento + custos - gas
 
-    wins = sum(1 for (v, g) in rows if float(v) > 0)
-    total = len(rows)
+    wins    = sum(1 for (v, g) in rows if float(v) > 0)
+    total   = len(rows)
     winrate = (wins / total) * 100 if total else 0.0
-    bar = barra_progresso(wins, total)
+    bar     = barra_progresso(wins, total)
 
     sf = (u.get("sub_filter") or "").strip() or "Todas"
 
-    msg = (
-        f"📊 <b>CONSOLIDADO (24h)</b>\n"
-        f"🎛️ Filtro: <b>{esc(sf)}</b>\n"
-        f"────────────────────────\n\n"
-        f"💵 Faturamento: <b>{faturamento:+.6f}</b>\n"
-        f"📉 Custos: <b>{custos:+.6f}</b>\n"
-        f"⛽ Gás: <b>-{gas:.6f}</b>\n"
-        f"🏅 <b>LÍQUIDO: {liquido:+.6f} USD</b>\n\n"
-        f"{bar}\n"
-        f"🏆 WinRate: <b>{winrate:.1f}%</b>  | trades: <b>{total}</b>"
+    lines = [
+        "📊 <b>CONSOLIDADO (24h) — WEbdEX</b>",
+        f"🎛️ Filtro: <b>{esc(sf)}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"💵 Faturamento: <b>{faturamento:+.6f}</b>",
+        f"📉 Custos: <b>{custos:+.6f}</b>",
+        f"⛽ Gás: <b>-{gas:.6f}</b>",
+        f"🏅 <b>LÍQUIDO: {liquido:+.6f} USD</b>",
+        "",
+        bar,
+        f"🏆 WinRate: <b>{winrate:.1f}%</b>  | trades: <b>{total}</b>",
+    ]
+    return "\n".join(lines)
+
+
+def _consolidado_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="consol_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="consol_close"),
     )
-    send_support(m.chat.id, msg, reply_markup=main_kb())
+    return kb
 
 
-# ==============================================================================
-# 🏆 Ranking Lucro (24h por sub_conta)
-# ==============================================================================
-@bot.message_handler(func=lambda m: m.text == "🏆 Ranking Lucro")
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("consol_"))
+def _consolidado_callback(c):
+    bot.answer_callback_query(c.id)
+    if c.data == "consol_close":
+        try:
+            bot.delete_message(c.message.chat.id, c.message.message_id)
+        except Exception:
+            pass
+        return
+    u = get_user(c.from_user.id) or {}
+    if not u.get("wallet"):
+        return
+    txt = _consolidado_build_text(u) or "⚠️ Sem dados nas últimas 24h (com o filtro atual)."
+    try:
+        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_consolidado_kb())
+    except Exception:
+        pass
+
+
+@bot.message_handler(func=lambda m: m.text == "📊 Consolidado (24h)")
 @require_auth
-def ranking_lucro(m, u):
+def consolidado_24h(m, u):
+    txt = _consolidado_build_text(u)
+    if txt is None:
+        return send_support(m.chat.id, "⚠️ Sem dados nas últimas 24h (com o filtro atual).", reply_markup=main_kb())
+    send_support(m.chat.id, txt, reply_markup=_consolidado_kb())
+
+
+# ==============================================================================
+# 🏆 Ranking Lucro (por sub_conta)
+# ==============================================================================
+
+def _ranking_lucro_build_text(u):
+    """Retorna texto do Ranking Lucro ou None se sem dados."""
     periodo = u.get("periodo") or "ciclo"
     dt      = _period_since(periodo)
     lbl     = _period_label(periodo)
@@ -854,9 +1109,7 @@ def ranking_lucro(m, u):
         rows = cursor.fetchall()
 
     if not rows:
-        return send_support(m.chat.id,
-            f"⚠️ Sem trades para ranquear.\n🗓️ Período: <b>{esc(lbl)}</b>",
-            reply_markup=main_kb())
+        return None
 
     rank = []
     for sub, s_val, s_gas, cnt in rows:
@@ -868,14 +1121,63 @@ def ranking_lucro(m, u):
     rank.sort(key=lambda x: x[0], reverse=True)
     top = rank[:15]
 
-    sf  = (u.get("sub_filter") or "").strip() or "Todas"
-    out = f"🏆 <b>RANKING LUCRO</b>\n🗓️ <i>{esc(lbl)}</i>\n🎛️ Filtro: <b>{esc(sf)}</b>\n\n"
+    sf   = (u.get("sub_filter") or "").strip() or "Todas"
+    lines = [
+        "🏆 <b>RANKING LUCRO — WEbdEX</b>",
+        f"🗓️ <i>{esc(lbl)}</i>",
+        f"🎛️ Filtro: <b>{esc(sf)}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
     for i, (liq, sub, cnt) in enumerate(top, start=1):
         med = _medal(i)
         dot = "🟢" if liq >= 0 else "🔴"
-        out += f"{med or f'{i:02d})'} {dot} {code(sub)} — <b>${liq:+.4f}</b> | trades {cnt}\n"
+        lines.append(f"{med or f'{i:02d})'} {dot} {code(sub)} — <b>${liq:+.4f}</b> | trades {cnt}")
 
-    send_support(m.chat.id, out, reply_markup=main_kb())
+    return "\n".join(lines)
+
+
+def _ranking_lucro_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="rnklucro_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="rnklucro_close"),
+    )
+    return kb
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("rnklucro_"))
+def _ranking_lucro_callback(c):
+    bot.answer_callback_query(c.id)
+    if c.data == "rnklucro_close":
+        try:
+            bot.delete_message(c.message.chat.id, c.message.message_id)
+        except Exception:
+            pass
+        return
+    u = get_user(c.from_user.id) or {}
+    if not u.get("wallet"):
+        return
+    periodo = u.get("periodo") or "ciclo"
+    lbl     = _period_label(periodo)
+    txt = _ranking_lucro_build_text(u) or f"⚠️ Sem trades para ranquear.\n🗓️ Período: <b>{esc(lbl)}</b>"
+    try:
+        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_ranking_lucro_kb())
+    except Exception:
+        pass
+
+
+@bot.message_handler(func=lambda m: m.text == "🏆 Ranking Lucro")
+@require_auth
+def ranking_lucro(m, u):
+    txt = _ranking_lucro_build_text(u)
+    if txt is None:
+        periodo = u.get("periodo") or "ciclo"
+        lbl     = _period_label(periodo)
+        return send_support(m.chat.id,
+            f"⚠️ Sem trades para ranquear.\n🗓️ Período: <b>{esc(lbl)}</b>",
+            reply_markup=main_kb())
+    send_support(m.chat.id, txt, reply_markup=_ranking_lucro_kb())
 
 
 # ==============================================================================
@@ -926,6 +1228,24 @@ def ciclo_subconta(m, u):
         lines.append(f"   últimos gaps: {code(last_gaps_txt)}")
 
     send_support(m.chat.id, "\n".join(lines), reply_markup=main_kb())
+
+    # IA interpreta o padrão de ciclo (async — não bloqueia)
+    if all_gaps_sorted and len(all_gaps_sorted) >= 5:
+        _g_med_c   = g_med if all_gaps_sorted else 0
+        _g_p95_c   = g_p95 if all_gaps_sorted else 0
+        _g_sd_c    = g_sd  if all_gaps_sorted else 0
+        _g_score_c = g_score if all_gaps_sorted else 0
+        _wallet_c  = u.get("wallet", "")
+        def _ai_ciclo_task():
+            try:
+                from webdex_ai import _ai_interpret_cycle
+                interp = _ai_interpret_cycle(_g_med_c, _g_p95_c, _g_sd_c, _g_score_c, _wallet_c)
+                if interp:
+                    send_html(m.chat.id,
+                        f"┈┈┈┈┈┈ IA ┈┈┈┈┈┈\n\n🤖 {interp}")
+            except Exception:
+                pass
+        threading.Thread(target=_ai_ciclo_task, daemon=True).start()
 
 
 # ==============================================================================
@@ -1152,52 +1472,285 @@ def analise_temporal(m, u):
         send_support(m.chat.id, "⚠️ Erro ao gerar análise.", reply_markup=main_kb())
 
 
+def _ops_build_text():
+    with DB_LOCK:
+        cursor.execute("SELECT data_hora, tipo, sub_conta, valor, token, bloco FROM operacoes ORDER BY bloco DESC LIMIT 12")
+        r = cursor.fetchall()
+    lines = ["📜 <b>ÚLTIMAS OPS (Global) — WEbdEX</b>", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"]
+    for dh, tp, sub, val, tk, bl in r:
+        lines.append(f"• {esc(tp)} | {code(sub)} | <b>{float(val):+.4f}</b> {esc(tk)} | bloco {code(bl)}")
+    return "\n".join(lines)
+
+
+def _ops_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="ops_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="ops_close"),
+    )
+    return kb
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("ops_"))
+def _ops_callback(c):
+    bot.answer_callback_query(c.id)
+    if c.data == "ops_close":
+        try:
+            bot.delete_message(c.message.chat.id, c.message.message_id)
+        except Exception:
+            pass
+        return
+    try:
+        bot.edit_message_text(_ops_build_text(), c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_ops_kb())
+    except Exception as e:
+        logger.warning("[ops_callback] %s", e)
+
+
 @bot.message_handler(func=lambda m: m.text == "📜 Ops")
 def ops(m):
     bot.send_chat_action(m.chat.id, "typing")
     try:
-        with DB_LOCK:
-            cursor.execute("SELECT data_hora, tipo, sub_conta, valor, token, bloco FROM operacoes ORDER BY bloco DESC LIMIT 12")
-            r = cursor.fetchall()
-        msg = "📜 <b>Últimas Ops (Global)</b>\n\n"
-        for dh, tp, sub, val, tk, bl in r:
-            msg += f"• {esc(tp)} | {code(sub)} | <b>{float(val):+.4f}</b> {esc(tk)} | bloco {code(bl)}\n"
-        send_support(m.chat.id, msg, reply_markup=main_kb())
+        send_support(m.chat.id, _ops_build_text(), reply_markup=_ops_kb())
     except Exception as e:
         logger.warning("[ops] %s", e)
         send_support(m.chat.id, "⚠️ Erro ao buscar ops.", reply_markup=main_kb())
+
+
+def _audit_build_text():
+    with DB_LOCK:
+        cursor.execute("""
+            SELECT gas_usd, valor, sub_conta
+            FROM operacoes
+            WHERE tipo='Trade'
+            ORDER BY data_hora DESC LIMIT 100
+        """)
+        d = cursor.fetchall()
+    if not d:
+        return None
+
+    tg      = sum(float(x[0] or 0.0) for x in d)
+    lb      = sum(float(x[1] or 0.0) for x in d if float(x[1] or 0.0) > 0)
+    net_tot = sum(float(x[1] or 0.0) - float(x[0] or 0.0) for x in d)
+    cnt     = len(d)
+    ef      = (lb / tg) if tg > 0 else 0.0
+    gtrade  = tg / cnt if cnt > 0 else 0.0
+    gas_pct = (tg / lb * 100) if lb > 0 else 0.0
+    gp_icon = "🟢" if gas_pct < 15 else ("🟡" if gas_pct < 30 else "🔴")
+
+    # Agrupamento por subconta
+    subs: dict = {}
+    for gas, val, sub in d:
+        gas = float(gas or 0.0)
+        val = float(val or 0.0)
+        sub = str(sub or "-")
+        if sub not in subs:
+            subs[sub] = {"gas": 0.0, "cnt": 0, "net": 0.0}
+        subs[sub]["gas"] += gas
+        subs[sub]["cnt"] += 1
+        subs[sub]["net"] += val - gas
+
+    sub_eff = [
+        (s, v["gas"] / v["cnt"], v["net"])
+        for s, v in subs.items() if v["cnt"] >= 3
+    ]
+    sub_eff.sort(key=lambda x: x[1])  # menor gas/trade = mais eficiente
+
+    lines = [
+        "⛽ <b>AUDITORIA GÁS — WEbdEX</b>",
+        "<i>Últimas 100 operações</i>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"💸 Gás total:    <b>${tg:.2f}</b>",
+        f"💵 Lucro bruto:  <b>${lb:.2f}</b>",
+        f"🏅 Líquido:      <b>${net_tot:+.2f}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"💡 Eficiência:   1 Gás = <b>${ef:.2f}</b> Lucro",
+        f"📊 Gas/Trade:    <b>${gtrade:.3f}</b> por op.",
+        f"{gp_icon} Gas % PnL:    <b>{gas_pct:.1f}%</b>",
+    ]
+
+    if sub_eff:
+        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        lines.append("🏆 <b>Ranking Eficiência (≥3 trades)</b>")
+        for i, (sub, gpt, net_sub) in enumerate(sub_eff[:3], start=1):
+            medal = ("🥇", "🥈", "🥉")[i - 1]
+            lines.append(f"{medal} {esc(sub)} — <b>${gpt:.3f}</b>/trade | net <b>${net_sub:+.2f}</b>")
+        if len(sub_eff) > 3:
+            worst = sub_eff[-1]
+            lines.append(f"🔴 Menos efic.: {esc(worst[0])} — <b>${worst[1]:.3f}</b>/trade")
+
+    return "\n".join(lines)
+
+
+def _audit_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="audit_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="audit_close"),
+    )
+    return kb
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("audit_"))
+def _audit_callback(c):
+    bot.answer_callback_query(c.id)
+    if c.data == "audit_close":
+        try:
+            bot.delete_message(c.message.chat.id, c.message.message_id)
+        except Exception:
+            pass
+        return
+    try:
+        txt = _audit_build_text() or "⚠️ Sem dados."
+        bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_audit_kb())
+    except Exception as e:
+        logger.warning("[audit_callback] %s", e)
 
 
 @bot.message_handler(func=lambda m: m.text == "⛽ Auditoria Gás")
 def audit(m):
     bot.send_chat_action(m.chat.id, "typing")
     try:
-        with DB_LOCK:
-            cursor.execute("SELECT gas_usd, valor FROM operacoes WHERE tipo='Trade' ORDER BY data_hora DESC LIMIT 100")
-            d = cursor.fetchall()
-        if not d:
+        txt = _audit_build_text()
+        if txt is None:
             return send_support(m.chat.id, "⚠️ Sem dados.", reply_markup=main_kb())
-        tg = sum(float(x[0] or 0.0) for x in d)
-        lb = sum(float(x[1] or 0.0) for x in d if float(x[1] or 0.0) > 0)
-        ef = (lb / tg) if tg > 0 else 0
-        send_support(
-            m.chat.id,
-            f"⛽ <b>AUDITORIA (100 Ops)</b>\n\n💸 Gás: <b>${tg:.2f}</b>\n💡 Eficiência: 1 Gás = <b>${ef:.2f} Lucro</b>",
-            reply_markup=main_kb()
-        )
+        send_support(m.chat.id, txt, reply_markup=_audit_kb())
     except Exception as e:
         logger.warning("[audit] %s", e)
         send_support(m.chat.id, "⚠️ Erro na auditoria.", reply_markup=main_kb())
 
 
-@bot.message_handler(func=lambda m: m.text == "🔔 Alertas")
-def alerts(m):
-    bot.send_chat_action(m.chat.id, "typing")
+def _alerts_build_text(u):
+    """Detecção de degradação + status da rede."""
+    wallet = u.get("wallet") or ""
+    extra_sql, extra_params = get_user_filter_clause(u)
+
+    dt_7d  = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    dt_30d = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S")
+
+    def _stats(since):
+        with DB_LOCK:
+            cursor.execute(f"""
+                SELECT o.valor, o.gas_usd
+                FROM operacoes o
+                JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                WHERE o.tipo='Trade' AND o.data_hora>=? AND ow.wallet=? {extra_sql}
+            """, (since, wallet, *extra_params))
+            rows = cursor.fetchall()
+        if not rows:
+            return None
+        total = len(rows)
+        wins  = sum(1 for v, g in rows if float(v or 0) > 0)
+        gas   = sum(float(g or 0) for v, g in rows)
+        wr    = wins / total * 100 if total else 0.0
+        gpt   = gas / total if total else 0.0
+        return {"wr": wr, "gpt": gpt, "total": total}
+
+    s7  = _stats(dt_7d)
+    s30 = _stats(dt_30d)
+
     try:
         gwei = web3.eth.gas_price / 10**9
     except Exception:
-        gwei = 0
-    send_support(m.chat.id, f"🔔 <b>STATUS REDE</b>\n\n🌍 Gas: <b>{gwei:.0f} Gwei</b>\n(Alertas individuais ativos)", reply_markup=main_kb())
+        gwei = 0.0
+
+    # Health Score rápido
+    uptime_h = (time.time() - HEALTH["started_at"]) / 3600.0
+    lat_avg  = float(HEALTH.get("rpc_latency_avg") or 0)
+    cap_rate = float(HEALTH.get("capture_rate") or 100.0)
+    rpc_errs = int(HEALTH.get("rpc_errors_total") or 0)
+    score, *_ = _health_score(uptime_h, lat_avg, cap_rate, rpc_errs)
+    score_label = _health_score_label(score)
+
+    lines = [
+        "🔔 <b>ALERTAS & DIAGNÓSTICO — WEbdEX</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+
+    # Bloco 1 — Rede
+    gwei_icon = "🟢" if gwei < 50 else ("🟡" if gwei < 150 else "🔴")
+    lines += [
+        "🌐 <b>Rede Polygon</b>",
+        f"  {gwei_icon} Gas: <b>{gwei:.0f} Gwei</b>",
+        f"  🏥 Motor: <b>{score}/100</b> — {score_label}",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+
+    # Bloco 2 — Tendências de performance
+    lines.append("📊 <b>Tendências de Performance</b>")
+
+    if s7 and s30 and s30["total"] >= 10:
+        wr_delta  = s7["wr"]  - s30["wr"]
+        gpt_delta = s7["gpt"] - s30["gpt"]
+
+        # Win Rate
+        wr_icon = "🟢" if wr_delta >= -5 else ("🟡" if wr_delta >= -10 else "🔴")
+        lines.append(
+            f"  {wr_icon} Win Rate: <b>{s7['wr']:.1f}%</b> (7d) vs <b>{s30['wr']:.1f}%</b> (30d) "
+            f"→ <b>{wr_delta:+.1f}pp</b>"
+        )
+        if wr_delta < -10:
+            lines.append("  ⚠️ <b>ALERTA:</b> Win rate caiu >10pp vs histórico!")
+
+        # Gas/Trade
+        gpt_icon = "🟢" if gpt_delta <= 0 else ("🟡" if gpt_delta < 0.02 else "🔴")
+        lines.append(
+            f"  {gpt_icon} Gas/Trade: <b>${s7['gpt']:.3f}</b> (7d) vs <b>${s30['gpt']:.3f}</b> (30d) "
+            f"→ <b>{gpt_delta:+.3f}</b>"
+        )
+        if gpt_delta > 0.02:
+            lines.append("  ⚠️ <b>ALERTA:</b> Custo de gás acelerando!")
+
+        lines.append(f"  📈 Trades: <b>{s7['total']}</b> (7d) | <b>{s30['total']}</b> (30d)")
+    elif s7:
+        lines.append(f"  📊 Win Rate 7d: <b>{s7['wr']:.1f}%</b> | Gas/Trade: <b>${s7['gpt']:.3f}</b>")
+        lines.append("  <i>Histórico 30d insuficiente para comparação (< 10 trades)</i>")
+    else:
+        lines.append("  <i>Sem dados suficientes no período.</i>")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    # Bloco 3 — Último erro do motor
+    last_err = HEALTH.get("last_error") or "-"
+    lines.append(f"⚠️ Último erro motor: {code(str(last_err))}")
+
+    return "\n".join(lines)
+
+
+def _alerts_kb():
+    kb = types.InlineKeyboardMarkup()
+    kb.row(
+        types.InlineKeyboardButton("🔄 Atualizar", callback_data="alerts_refresh"),
+        types.InlineKeyboardButton("✅ Fechar",    callback_data="alerts_close"),
+    )
+    return kb
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("alerts_"))
+def _alerts_callback(c):
+    bot.answer_callback_query(c.id)
+    if c.data == "alerts_close":
+        try:
+            bot.delete_message(c.message.chat.id, c.message.message_id)
+        except Exception:
+            pass
+        return
+    u = get_user(c.from_user.id) or {}
+    if not u.get("wallet"):
+        return
+    try:
+        bot.edit_message_text(_alerts_build_text(u), c.message.chat.id, c.message.message_id,
+                              parse_mode="HTML", reply_markup=_alerts_kb())
+    except Exception as e:
+        logger.warning("[alerts_callback] %s", e)
+
+
+@bot.message_handler(func=lambda m: m.text == "🔔 Alertas")
+@require_auth
+def alerts(m, u):
+    bot.send_chat_action(m.chat.id, "typing")
+    send_support(m.chat.id, _alerts_build_text(u), reply_markup=_alerts_kb())
 
 
 @bot.message_handler(func=lambda m: m.text == "📡 Status")
@@ -1268,7 +1821,7 @@ def ajuda(m):
 def _brain_style_prefix() -> str:
     return (
         "🧠 WEbdEX Brain — Governança & Auditoria Educativa\n"
-        "────────────────────────\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     )
 
 
@@ -1616,50 +2169,28 @@ def posicoes_abertas(m, u):
             (str(sub), float(saldo or 0), float(old_bal or 0), int(n_trades or 0), str(last_t or ""))
         )
 
-    # Busca capital on-chain por subconta (USDT0) com timeout
-    onchain_caps: dict = {}
-    onchain_label = "on-chain"
+    # Capital total do worker (capital_cache) — sem busca on-chain por subconta
+    # (busca on-chain por sub era bugada: sem seen_coins, sem LP, calculo errado)
+    import json as _jpos
+    cap_total_cache = 0.0
+    cap_breakdown_cache: dict = {}
     try:
-        import concurrent.futures
-        from webdex_chain import get_contracts, web3_for_rpc
-        from webdex_config import ADDR_USDT0
-
-        env_nm  = u.get("env") or "AG_C_bd"
-        rpc_url = u.get("rpc") or ""
-        w3_u    = web3_for_rpc(rpc_url, timeout=8)
-        c       = get_contracts(env_nm, w3_u)
-        mgr     = Web3.to_checksum_address(c["addr"]["MANAGER"])
-        usr     = Web3.to_checksum_address(wallet)
-        subs_oc = c["sub"].functions.getSubAccounts(mgr, usr).call()[:30]
-
-        def _fetch_sub_bal(s):
-            sid = s[0]
-            total_sub = 0.0
-            try:
-                strats = c["sub"].functions.getStrategies(mgr, usr, sid).call()[:15]
-                for st in strats:
-                    try:
-                        bals = c["sub"].functions.getBalances(mgr, usr, sid, st).call()
-                        for b in bals:
-                            if str(b[1]).lower() == ADDR_USDT0.lower():
-                                total_sub += int(b[0]) / (10 ** int(b[2]))
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-            return str(sid), total_sub
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as ex:
-            for sid_r, cap_r in ex.map(_fetch_sub_bal, subs_oc, timeout=12):
-                onchain_caps[sid_r.lower()] = cap_r
-        onchain_label = "USDT0 on-chain"
+        with DB_LOCK:
+            _cc = cursor.execute(
+                "SELECT total_usd, breakdown_json FROM capital_cache WHERE chat_id=? LIMIT 1",
+                (m.chat.id,)
+            ).fetchone()
+        if _cc:
+            _ct = float(_cc[0] or 0)
+            cap_breakdown_cache = __import__('json').loads(_cc[1] or "{}")
+            _bdj_sum = sum(float(v) for v in cap_breakdown_cache.values() if float(v or 0) > 0)
+            cap_total_cache = max(_ct, _bdj_sum)
     except Exception:
-        pass  # fallback silencioso — usa old_balance
+        pass
 
     out = [
         "📍 <b>POSIÇÕES POR SUBCONTA — WEbdEX</b>",
         f"🔗 Wallet: <code>{esc(wallet[:12])}…</code>",
-        f"🌐 {'On-chain ativo' if onchain_caps else 'Histórico (old_balance)'}",
         "━━━━━━━━━━━━━━━━━━━━",
     ]
 
@@ -1668,16 +2199,9 @@ def posicoes_abertas(m, u):
         amb_icon = "🔵" if "v5" in str(amb).lower() else "🟠"
         out.append(f"\n{amb_icon} <b>{esc(amb)}</b>")
         for sub, saldo, old_bal, n, last_t in subs:
-            # Tenta capital on-chain; fallback para old_balance
-            cap_real = onchain_caps.get(str(sub).lower(), None)
-            if cap_real is not None:
-                cap_val  = cap_real
-                cap_src  = f"<i>({onchain_label})</i>"
-                icon     = "🟢" if cap_real > 0 else "⚪"
-            else:
-                cap_val  = old_bal
-                cap_src  = "<i>(ref.)</i>"
-                icon     = "🟢" if old_bal > 0 else ("🔴" if old_bal < 0 else "⚪")
+            cap_val  = old_bal
+            cap_src  = "<i>(ref.)</i>"
+            icon     = "🟢" if old_bal > 0 else ("🔴" if old_bal < 0 else "⚪")
 
             mins = ""
             try:
@@ -1698,10 +2222,15 @@ def posicoes_abertas(m, u):
             total_saldo += cap_val
 
     out.append("\n━━━━━━━━━━━━━━━━━━━━")
-    src_total = "on-chain" if onchain_caps else "ref. histórica"
-    out.append(f"💼 <b>Capital total ({src_total}):</b> <b>${total_saldo:,.4f} USD</b>")
-    if not onchain_caps:
-        out.append("<i>💡 Para capital real (LP+USDT0), use mybdBook.</i>")
+    if cap_total_cache > 0:
+        _usdt_c = cap_breakdown_cache.get("USDT", cap_breakdown_cache.get("USDT0", 0.0))
+        _lp_c   = cap_breakdown_cache.get("LP-USD", cap_breakdown_cache.get("LP-V5", 0.0))
+        out.append(f"💼  <b>Capital total (worker):</b> <b>${cap_total_cache:,.2f} USD</b>")
+        if _usdt_c > 0 and _lp_c > 0:
+            out.append(f"     ├ USDT: <b>${_usdt_c:,.2f}</b>  LP-USD: <b>${_lp_c:,.2f}</b>")
+    else:
+        out.append(f"💼  Capital: <b>—</b> <i>(worker ainda carregando)</i>")
+    out.append("<i>⚡ WEbdEX · New Digital Economy</i>")
 
     send_support(m.chat.id, "\n".join(out), reply_markup=main_kb())
 
@@ -1901,9 +2430,13 @@ def comunidade(m):
     u = get_user(m.chat.id) or {}
     user_wallet_low = (u.get("wallet") or "").lower()
     user_pos = None
-    for idx, (sc, wr, pf, liq, tot, ws, env) in enumerate(ranking, 1):
-        # ws is truncated; compare via full wallet in rows list
-        pass
+    u_w_low = (get_user(m.chat.id) or {}).get("wallet", "")
+    u_w_low = (u_w_low or "").lower()
+    if u_w_low:
+        for idx, (sc, wr, pf, liq, tot, ws, env) in enumerate(ranking, 1):
+            if u_w_low[:6] in ws.lower() or u_w_low[-4:] in ws.lower():
+                user_pos = idx
+                break
 
     lines = [
         "🏛️ <b>COMUNIDADE WEbdEX</b>",
@@ -1921,6 +2454,21 @@ def comunidade(m):
             f"PF <b>{pf:.2f}</b>  ·  {sign} <b>${liq:+.2f}</b>  ·  {tot} trades"
         )
         lines.append("")
+
+    if user_pos:
+        lines.append("━━━━━━━━━━━━━━━━━━━━")
+        lines.append(f"📍 <b>Sua posição: #{user_pos}</b> de {len(ranking)} traders")
+
+    # IA audit da comunidade (async)
+    def _ai_com_task():
+        try:
+            from webdex_ai import _ai_comunidade_audit
+            audit = _ai_comunidade_audit(ranking[:5], len(ranking))
+            if audit:
+                send_html(m.chat.id, f"┈┈┈┈┈┈ IA ┈┈┈┈┈┈\n\n🤖 {audit}")
+        except Exception:
+            pass
+    threading.Thread(target=_ai_com_task, daemon=True).start()
 
     try:
         bot.send_message(m.chat.id, "\n".join(lines).rstrip(),
@@ -1996,6 +2544,31 @@ def protocolo(m):
         pass
     tvl_total = tvl_ag + tvl_v5
 
+    # Dados do protocolo no ciclo atual (protocol_ops)
+    from webdex_db import _ciclo_21h_since as _c21s
+    _p_trades = _p_wins = 0
+    _p_pnl = _p_wallets = 0.0
+    try:
+        with DB_LOCK:
+            _pr = cursor.execute("""
+                SELECT COUNT(*),
+                       SUM(CASE WHEN CAST(profit AS REAL) > 0 THEN 1 ELSE 0 END),
+                       SUM(CAST(profit AS REAL)),
+                       COUNT(DISTINCT wallet)
+                FROM protocol_ops
+                WHERE data_hora >= ?
+            """, (_c21s(),)).fetchone()
+        if _pr:
+            _p_trades   = int(_pr[0] or 0)
+            _p_wins     = int(_pr[1] or 0)
+            _p_pnl      = float(_pr[2] or 0)
+            _p_wallets  = int(_pr[3] or 0)
+    except Exception:
+        pass
+    _p_wr = (_p_wins / _p_trades * 100) if _p_trades > 0 else 0.0
+    _pnl_sign = "+" if _p_pnl >= 0 else ""
+    _pnl_icon = "🟢" if _p_pnl >= 0 else "🔴"
+
     # RPC pool health
     healthy_rpc = sum(1 for cd in rpc_pool._cooldown_until if cd <= time.time())
     vigia_ok    = HEALTH.get("vigia_loops", 0) > 0
@@ -2007,6 +2580,15 @@ def protocolo(m):
         "",
         f"🎟️  TokenPass:  <b>{esc(pass_icon)}</b>",
         f"🏦  Ambiente:   <b>{esc(env_nm)}</b>",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━",
+        "",
+        "",
+        "┈┈┈┈┈┈ CICLO ATUAL ┈┈┈┈┈┈",
+        "",
+        f"⚡  Trades:   <b>{_p_trades:,}</b>  ·  👥 <b>{_p_wallets}</b> wallets",
+        f"🎯  WinRate:  <b>{_p_wr:.1f}%</b>",
+        f"{_pnl_icon}  PnL:      <b>{_pnl_sign}${_p_pnl:,.2f} USD</b>",
         "",
         "━━━━━━━━━━━━━━━━━━━━",
         "",
@@ -2023,6 +2605,8 @@ def protocolo(m):
         "",
         f"🔌  RPC Pool:  <b>{healthy_rpc}/3</b> endpoints saudáveis",
         f"📡  Monitor:   {'🟢 ativo' if vigia_ok else '🔴 parado'}",
+        "",
+        "<i>⚡ WEbdEX · New Digital Economy</i>",
     ]
     try:
         bot.send_message(m.chat.id, "\n".join(lines),
@@ -2031,33 +2615,46 @@ def protocolo(m):
         logger.warning("[protocolo] send error: %s", e)
         send_html(m.chat.id, "\n".join(lines))
 
+    # IA audit do protocolo (async — não bloqueia)
+    if _p_trades >= 10:
+        def _ai_proto_task():
+            try:
+                from webdex_ai import _ai_protocolo_audit
+                audit = _ai_protocolo_audit(_p_trades, _p_wr, _p_pnl, tvl_total)
+                if audit:
+                    send_html(m.chat.id,
+                        f"┈┈┈┈┈┈ IA ┈┈┈┈┈┈\n\n🤖 {audit}")
+            except Exception:
+                pass
+        threading.Thread(target=_ai_proto_task, daemon=True).start()
+
 
 # ==============================================================================
 # ✅ WIZARD (pending-only)
 # ==============================================================================
 _KNOWN_BUTTONS = {
-    "🔌 Conectar","▶️ Ativar","⏸️ Pausar",
-    "📈 Dashboard PRO","📌 Ciclo 21h","📌 Painel 24h","🩺 Saúde",
+    # Menu principal
+    "🔌 Conectar", "▶️ Ativar", "⏸️ Pausar",
+    "📈 Dashboard PRO", "📌 Ciclo 21h", "🩺 Saúde",
     "🧠 IA",
-    "🗓️ Escolher Período","📅 Escolher Período","🔎 Wallet Info",
-    "📊 Consolidado","📊 Consolidado (24h)",
-    "📊 mybdBook","📊 Meu mybdBook","📊 mybdBook ADM","📈 mybdBook (Gráfico)",
-    "🏆 Ranking Lucro","🏛️ Comunidade","🎛️ Filtros",
-    "🧬 Ciclo da Subconta","🧠 Ranking Consistência","⏱️ Ranking Ciclo",
+    "🗓️ Escolher Período", "🔎 Wallet Info",
+    "📊 Consolidado (24h)",
+    "📊 mybdBook", "📊 mybdBook ADM", "📈 mybdBook (Gráfico)",
+    "🏆 Ranking Lucro", "🏛️ Comunidade", "🎛️ Filtros",
+    "🧬 Ciclo da Subconta", "🧠 Ranking Consistência", "⏱️ Ranking Ciclo",
     "🧾 IDs com Saldo",
-    "📜 Ops","⛽ Auditoria Gás","🧯 Auditoria Gás","🔔 Alertas",
-    "🔎 Buscar Tx","🔄 Sync OnChain","🔬 Análise",
-    "⏳ Inatividade","⌛ Inatividade",
-    "🌐 Protocolo","📡 Status","⚙️ Config","❓ Ajuda",
-    "🛠️ ADM","🔙 Menu","🔙 ADM",
-    "📊 Análise SubAccounts","📊 Relatório Institucional",
-    "📈 Lucro Real (Total/Ambiente)","📈 Lucro Real (Total/Env)",
-    "🧾 Fornecimento e Liquidez","🧾 Fornecimento & Liquidez",
+    "📜 Ops", "⛽ Auditoria Gás", "🔔 Alertas",
+    "🔍 Buscar Tx", "🔄 Sync OnChain", "🔬 Análise",
+    "⏳ Inatividade",
+    "🌐 Protocolo", "📡 Status", "⚙️ Config", "❓ Ajuda",
+    "🛠️ ADM", "🔙 Menu", "🔙 ADM",
+    # Botões ADM (handlers em admin.py)
+    "📊 Análise SubAccounts", "📊 Relatório Institucional",
     "📸 Progressão do Capital",
-    "👥 ADM PRO","⚙️ Limites","⏳ Inatividade PRO",
-    "🧠 IA Global (ON/OFF)","🔒 IA ADM-only (ON/OFF)","🧠 IA Modo (DEV/COMUNIDADE)",
-    "ciclo","7d","30d","24h",
-    "Todas","cancelar",
+    "👥 ADM PRO", "⚙️ Limites", "⏳ Inatividade PRO",
+    # Períodos e wizard
+    "ciclo", "7d", "30d", "24h",
+    "Todas", "cancelar",
     "⏭️ Pular RPC",
 }
 
@@ -2085,18 +2682,23 @@ def step_handler(m):
 
     if txt.lower() == "cancelar":
         upsert_user(m.chat.id, pending="")
-        send_support(m.chat.id, "Cancelado.", reply_markup=main_kb())
+        send_support(m.chat.id, "↩️ Ação cancelada.", reply_markup=main_kb())
         return
 
     if txt == "⬅️ Voltar":
         upsert_user(m.chat.id, pending="")
-        send_support(m.chat.id, "Ok. Voltei ao menu.", reply_markup=main_kb())
+        send_support(m.chat.id, "↩️ Menu principal.", reply_markup=main_kb())
         return
 
     # 1) Wizard Conectar
     if u["pending"] == "ASK_WALLET":
         if not (txt.startswith("0x") and len(txt) == 42):
             return send_support(m.chat.id, "⚠️ Wallet inválida. Envie no formato 0x...", reply_markup=types.ReplyKeyboardRemove())
+        # Normaliza para checksum EIP-55 (evita duplicatas por case diferente)
+        try:
+            txt = Web3.to_checksum_address(txt)
+        except Exception:
+            return send_support(m.chat.id, "⚠️ Endereço inválido. Verifique e tente novamente.", reply_markup=types.ReplyKeyboardRemove())
         # ── Fase C: verifica se wallet é conhecida on-chain
         kw = get_known_wallet(txt)
         if kw and kw["trade_count"] > 0:
@@ -2174,6 +2776,24 @@ def step_handler(m):
         if not r:
             return send_support(m.chat.id, "❌ Não encontrei essa tx no DB (ainda).\n\nDica: rode um 🔄 Sync OnChain para o range do bloco.", reply_markup=main_kb())
 
+        # PnL do dia para esta wallet
+        _pnl_dia = 0.0
+        try:
+            with DB_LOCK:
+                _prow = cursor.execute("""
+                    SELECT SUM(CAST(o.valor AS REAL) - CAST(o.gas_usd AS REAL))
+                    FROM operacoes o
+                    JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
+                    WHERE LOWER(ow.wallet)=? AND o.tipo='Trade'
+                      AND DATE(o.data_hora)=DATE(?)
+                """, (r["wallet"].lower(), r["data_hora"])).fetchone()
+            _pnl_dia = float(_prow[0] or 0) if _prow else 0.0
+        except Exception:
+            pass
+
+        _pnl_sign2 = "+" if _pnl_dia >= 0 else ""
+        _poly = f"https://polygonscan.com/tx/{normalize_txhash(txh)}"
+
         msg = (
             f"🔍 <b>TX ENCONTRADA</b>\n\n"
             f"🕒 {code(r['data_hora'])}\n"
@@ -2183,7 +2803,8 @@ def step_handler(m):
             f"⛽ Gás: <b>${r['gas_usd']:.4f}</b>\n"
             f"🧱 Bloco: {code(r['bloco'])}\n"
             f"👛 Wallet: {code((r['wallet'][:10]+'...'+r['wallet'][-6:]) if r['wallet'] else '-')}\n"
-            f"🔗 <a href='https://polygonscan.com/tx/{esc(normalize_txhash(txh))}'>Scan</a>"
+            f"📊  PnL do dia (wallet): <b>{_pnl_sign2}${_pnl_dia:.2f} USD</b>\n"
+            f'🔗  <a href="{_poly}">Ver no Polygonscan ↗</a>\n'
         )
         return send_support(m.chat.id, msg, reply_markup=main_kb(), disable_web_page_preview=True)
 
@@ -2520,7 +3141,7 @@ def inatividade_report(m, u):
     out.append("📌 <b>Subcontas sem trade</b> (detalhe)")
     out.append(f"🗓️ Período: <b>{esc(u.get('periodo','24h'))}</b>")
     out.append(f"🎛️ Filtro: <b>{esc(sf) if sf else 'Todas'}</b>")
-    out.append("────────────────────")
+    out.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     above = sum(1 for mins, *_ in rows if mins >= lim)
     out.append(f"⚙️ Limite (config): <b>{int(lim)} min</b>")
     out.append(f"🚨 Subcontas acima do limite: <b>{above}</b>")

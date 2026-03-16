@@ -6,6 +6,7 @@ Adaptação de tom: remove Markdown Telegram, usa Markdown Discord.
 Chamado pelos workers do OCME (milestone, ciclo 21h, anomalia).
 """
 import re
+import time
 import logging
 import threading
 import requests
@@ -13,8 +14,8 @@ import requests
 logger = logging.getLogger(__name__)
 
 _WEBHOOK_URL = (
-    "https://discord.com/api/webhooks/1482627373240287333/"
-    "acnnlboApTpEiSAjU0EjmobyeyUlF1waLobkIhuWiKfSZmCILRV79aepasysrGQtvOqt"
+    "https://discord.com/api/webhooks/1482729962258563263/"
+    "ku-KJGFzT3nKqUkcS1sYrmzNrNbSt2jLbkzIPKmYs2hoOaRdj65OfkVH6Tqo0eIW2XwQ"
 )
 
 _COLOR_INFO      = 0x00FFB2   # verde WEbdEX
@@ -38,13 +39,21 @@ def _telegram_to_discord(text: str) -> str:
 
 
 def _post_webhook(payload: dict) -> None:
-    """POST assíncrono para não bloquear o worker do OCME."""
-    try:
-        resp = requests.post(_WEBHOOK_URL, json=payload, timeout=8)
-        if resp.status_code not in (200, 204):
+    """POST com retry automático em caso de rate limit (429)."""
+    for attempt in range(3):
+        try:
+            resp = requests.post(_WEBHOOK_URL, json=payload, timeout=8)
+            if resp.status_code in (200, 204):
+                return
+            if resp.status_code == 429:
+                retry_after = resp.json().get("retry_after", 1.0)
+                time.sleep(float(retry_after) + 0.1)
+                continue
             logger.warning(f"[discord_sync] Webhook retornou {resp.status_code}: {resp.text[:200]}")
-    except Exception as e:
-        logger.warning(f"[discord_sync] Erro ao enviar webhook: {e}")
+            return
+        except Exception as e:
+            logger.warning(f"[discord_sync] Erro ao enviar webhook: {e}")
+            return
 
 
 def _async_post(payload: dict) -> None:

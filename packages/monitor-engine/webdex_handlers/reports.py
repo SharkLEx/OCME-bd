@@ -166,7 +166,7 @@ def _mybdbook_fetch_capital_rpc(wallet: str, env: str, rpc: str = "") -> dict:
     try:
         _fut = _ex.submit(_mybdbook_fetch_capital_inner, wallet, env, rpc)
         try:
-            return _fut.result(timeout=7)
+            return _fut.result(timeout=15)
         except _cf.TimeoutError:
             _fut.cancel()
             logger.warning(f"mybdBook capital timeout wallet={wallet[:10]}")
@@ -180,70 +180,80 @@ def _mybdbook_fetch_capital_rpc(wallet: str, env: str, rpc: str = "") -> dict:
 
 
 def _mybdbook_fetch_capital_inner(wallet: str, env: str, rpc: str = "") -> dict:
-    """Implementacao real — chamada pelo wrapper com timeout."""
+    """Implementacao real — chamada pelo wrapper com timeout.
+    Itera TODOS os envs em CONTRACTS (bd_v5 + AG_C_bd) para agregar capital real,
+    igual ao _query_user_capital do worker. Evita sub-total de env único.
+    """
     try:
-        # timeout=6s: evita que o worker fique travado em RPC lento
-        # Usa RPC recebido (pode ser RPC_CAPITAL do worker) — nunca usa web3 global do vigia
-        w3_user = web3_for_rpc(rpc or RPC_CAPITAL, timeout=6)
-        c = get_contracts(env, w3_user)
-        mgr = Web3.to_checksum_address(c["addr"]["MANAGER"])
+        from webdex_config import CONTRACTS as _CONTRACTS
+        w3_user = web3_for_rpc(rpc or RPC_CAPITAL, timeout=12)
         usr = Web3.to_checksum_address(wallet)
-
-        subs = c["sub"].functions.getSubAccounts(mgr, usr).call()
-        subs = subs[:40]
 
         usdt0_total = 0.0
         lp_total    = 0.0
         breakdown: dict = {}
 
-        _LP_ADDRS = {
+        _BASE_LP_ADDRS = {
             ADDR_LPLPUSD.lower(): ("LP-USD", 9),
             ADDR_LPUSDT0.lower(): ("LP-V5",  6),
         }
-        # Adiciona LPs dos contratos do ambiente
-        for lp_key in ["LP_USDT", "LP_LOOP"]:
-            lp_a = (c["addr"].get(lp_key) or "").lower()
-            if lp_a and lp_a not in _LP_ADDRS:
-                _LP_ADDRS[lp_a] = (lp_key.replace("_", "-"), 6)
 
-        for s in subs:
-            sid = s[0]
+        for env_name in _CONTRACTS:
             try:
-                strats = c["sub"].functions.getStrategies(mgr, usr, sid).call()
-            except Exception:
-                continue
-            strats = strats[:25]
+                c   = get_contracts(env_name, w3_user)
+                mgr = Web3.to_checksum_address(c["addr"]["MANAGER"])
 
-            for st in strats:
-                try:
-                    bals = c["sub"].functions.getBalances(mgr, usr, sid, st).call()
-                except Exception:
-                    continue
+                # LPs específicos do ambiente
+                _LP_ADDRS = dict(_BASE_LP_ADDRS)
+                for lp_key in ["LP_USDT", "LP_LOOP"]:
+                    lp_a = (c["addr"].get(lp_key) or "").lower()
+                    if lp_a and lp_a not in _LP_ADDRS:
+                        _LP_ADDRS[lp_a] = (lp_key.replace("_", "-"), 6)
 
-                for b in bals:
+                subs = c["sub"].functions.getSubAccounts(mgr, usr).call()[:40]
+
+                for s in subs:
+                    sid = s[0]
                     try:
-                        addr_raw = str(b[1]).lower()
-                        bal_raw  = int(b[0])
-                        dec_raw  = int(b[2])
-                        if bal_raw <= 0:
-                            continue
-
-                        if addr_raw == ADDR_USDT0.lower():
-                            # USDT0: stablecoin real 1:1
-                            val = bal_raw / (10 ** dec_raw)
-                            usdt0_total += val
-                            breakdown["USDT0"] = breakdown.get("USDT0", 0.0) + val
-
-                        elif addr_raw in _LP_ADDRS:
-                            # LP token: calcula valor justo
-                            sym, lp_dec = _LP_ADDRS[addr_raw]
-                            lp_bal = bal_raw / (10 ** lp_dec)
-                            lp_usd = _lp_fair_value_usd(str(b[1]), lp_bal, lp_dec, w3_user)
-                            lp_total += lp_usd
-                            breakdown[sym] = breakdown.get(sym, 0.0) + lp_usd
-
+                        strats = c["sub"].functions.getStrategies(mgr, usr, sid).call()[:25]
                     except Exception:
                         continue
+
+                    seen_coins: set = set()  # dedup por sub — evita N× inflação por estratégia
+                    for st in strats:
+                        try:
+                            bals = c["sub"].functions.getBalances(mgr, usr, sid, st).call()
+                        except Exception:
+                            continue
+
+                        for b in bals:
+                            try:
+                                addr_raw = str(b[1]).lower()
+                                if addr_raw in seen_coins:
+                                    continue
+                                bal_raw = int(b[0])
+                                dec_raw = int(b[2])
+                                if bal_raw <= 0:
+                                    continue
+
+                                if addr_raw == ADDR_USDT0.lower():
+                                    val = bal_raw / (10 ** dec_raw)
+                                    usdt0_total += val
+                                    breakdown["USDT"] = breakdown.get("USDT", 0.0) + val
+                                    seen_coins.add(addr_raw)
+
+                                elif addr_raw in _LP_ADDRS:
+                                    sym, lp_dec = _LP_ADDRS[addr_raw]
+                                    lp_bal = bal_raw / (10 ** lp_dec)
+                                    lp_usd = _lp_fair_value_usd(str(b[1]), lp_bal, lp_dec, w3_user)
+                                    lp_total += lp_usd
+                                    breakdown[sym] = breakdown.get(sym, 0.0) + lp_usd
+                                    seen_coins.add(addr_raw)
+
+                            except Exception:
+                                continue
+            except Exception:
+                continue
 
         total_usd = usdt0_total + lp_total
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -275,8 +285,8 @@ def _mybdbook_save_snapshot(chat_id: int, wallet: str, env: str,
                 (chat_id, wallet.lower(), env, ts, usdt0, lp_usd, total)
             )
             conn.commit()
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.error("[mybdbook] save_snapshot failed (chat_id=%s wallet=%s): %s", chat_id, wallet, _e)
 
 
 def _mybdbook_get_capital_series(wallet: str, limit: int = 60) -> list:
@@ -292,7 +302,8 @@ def _mybdbook_get_capital_series(wallet: str, limit: int = 60) -> list:
                 (wallet.lower(), limit)
             ).fetchall()
         return [(r[0], float(r[1])) for r in rows if float(r[1] or 0) > 0]
-    except Exception:
+    except Exception as _e:
+        logger.error("[mybdbook] get_capital_series failed (wallet=%s): %s", wallet, _e)
         return []
 
 
@@ -451,46 +462,30 @@ def _myfxbook_user_data(wallet: str, periodo: str = "ciclo",
                 env     = env or str(u_row[1] or "")
                 rpc     = rpc or str(u_row[2] or "")
 
-    # ── Capital Real: Opção A (RPC on-demand) ─────────────────────────────
+    # ── Capital: usa cache do worker (atualizado a cada 30min via _capital_snapshot_worker)
+    # O fetch on-demand foi removido: _mybdbook_fetch_capital_inner usa cálculo diferente
+    # do worker (_val_balance vs dec_raw direto) e retorna valores incorretos para LP.
+    # O worker agrega TODOS os envs corretamente — é a fonte de verdade para capital.
     capital   = 0.0
     cap_usdt0 = 0.0
     cap_lp    = 0.0
     cap_source = "cache"
 
-    if wallet and env:
-        cap_result = _mybdbook_fetch_capital_rpc(wallet, env, rpc)
-        if cap_result["ok"] and cap_result["total_usd"] > 0:
-            capital    = cap_result["total_usd"]
-            cap_usdt0  = cap_result["usdt0"]
-            cap_lp     = cap_result["lp_fair"]
-            cap_source = "on-chain"
-            # Salvar snapshot para gráfico de crescimento futuro
-            if chat_id:
-                _mybdbook_save_snapshot(chat_id, wallet, env, cap_usdt0, cap_lp, capital)
-                # Atualizar capital_cache somente se valor real (> 1 USD)
-                if capital > 1.0:
-                    try:
-                        with DB_LOCK:
-                            conn.execute(
-                                "UPDATE capital_cache SET total_usd=?, updated_ts=? "
-                                "WHERE chat_id=?",
-                                (capital, time.time(), chat_id)
-                            )
-                            conn.commit()
-                    except Exception:
-                        pass
-
-    # ── Fallback: capital_cache se RPC falhou ─────────────────────────────
-    if capital <= 0 and cap_row:
+    if cap_row:
         try:
+            import json as _jc
             _cached = float(cap_row[0] or 0)
-            if _cached > 1.0:
-                capital   = _cached
-                cap_usdt0 = _cached  # sem RPC nao separamos USDT0 vs LP
-                cap_lp    = 0.0
+            _bdj    = _jc.loads(cap_row[1] or "{}")
+            _bdj_sum = sum(float(v) for v in _bdj.values() if float(v or 0) > 0)
+            # Usa o maior entre total_usd e soma do breakdown (proteção contra corrupção)
+            capital   = max(_cached, _bdj_sum)
+            cap_usdt0 = float(_bdj.get("USDT", _bdj.get("USDT0", 0.0)))
+            cap_lp    = float(_bdj.get("LP-USD", _bdj.get("LP-V5", 0.0)))
+            if capital <= 0:
+                capital = cap_usdt0 + cap_lp
             cap_source = "cache"
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.error("[mybdbook] capital_cache read failed: %s", _e)
 
     # Série histórica de capital (para gráfico)
     cap_series = [(r[0], float(r[1])) for r in cap_series_rows if float(r[1] or 0) > 0]
@@ -527,6 +522,13 @@ def _myfxbook_user_data(wallet: str, periodo: str = "ciclo",
     # ROI
     roi   = (liq_total / capital * 100) if capital > 0 else 0.0
 
+    # Calmar Ratio — ROI anualizado / MDD%
+    # Usa horas do período para anualizacao; mínimo de 5 trades para ser significativo
+    _period_hours = period_to_hours(periodo) if periodo != "ciclo" else 21
+    _roi_annual   = roi * (8760.0 / _period_hours) if _period_hours > 0 else 0.0
+    _mdd_pct      = (mdd / capital * 100) if (capital > 0 and mdd > 0) else 0.0
+    calmar        = _roi_annual / _mdd_pct if (_mdd_pct > 0 and total_t >= 5) else 0.0
+
     # Melhor / pior trade
     best  = max(liquidos)
     worst = min(liquidos)
@@ -549,7 +551,7 @@ def _myfxbook_user_data(wallet: str, periodo: str = "ciclo",
         "winrate": winrate, "bruto": bruto, "gas": gas_total,
         "liq": liq_total, "roi": roi, "capital": capital,
         "cap_usdt0": cap_usdt0, "cap_lp": cap_lp, "cap_source": cap_source,
-        "mdd": mdd, "pf": pf, "expectancy": expectancy,
+        "calmar": calmar, "mdd": mdd, "pf": pf, "expectancy": expectancy,
         "best": best, "worst": worst, "subs": subs,
         "by_env": by_env, "equity": equity, "snaps": snaps,
         "cap_series": cap_series,   # série histórica por wallet para gráfico
@@ -625,8 +627,8 @@ def _myfxbook_adm_data(periodo: str = "ciclo") -> dict:
             capital_total = float(_stat[0])
             cap_by_env["bd_v5"]   = float(_stat[1] or 0)
             cap_by_env["AG_C_bd"] = float(_stat[2] or 0)
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.error("[mybdbook_adm] adm_capital_stats query failed: %s", _e)
     # Fallback: soma capital_cache de todos os usuários
     if capital_total <= 0:
         try:
@@ -634,8 +636,8 @@ def _myfxbook_adm_data(periodo: str = "ciclo") -> dict:
                 "SELECT COALESCE(total_usd,0) FROM capital_cache WHERE total_usd > 0"
             ).fetchall()
             capital_total = sum(float(r[0]) for r in _rows_cc)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.error("[mybdbook_adm] capital_cache fallback query failed: %s", _e)
     roi_total = (total_liq / capital_total * 100) if capital_total > 0 else 0.0
 
     # MDD global (série diária)
@@ -818,6 +820,9 @@ def _myfxbook_user_report(wallet: str, periodo: str = "ciclo", chat_id: int = 0,
     msg += f"  📏 Profit Factor: <b>{pf_str}</b>\n"
     msg += f"  💡 Expectância: <b>{d['expectancy']:+.5f} USD/trade</b>\n"
     msg += f"  📉 Max Drawdown: <b>{d['mdd']:.4f} USD</b>\n"
+    if d.get("calmar", 0) > 0:
+        _calmar_icon = "🟢" if d["calmar"] >= 3.0 else ("🟡" if d["calmar"] >= 1.0 else "🔴")
+        msg += f"  📐 Calmar Ratio: <b>{d['calmar']:.1f}</b> {_calmar_icon}\n"
     msg += f"  🏆 Melhor trade: <b>{d['best']:+.4f} USD</b>\n"
     msg += f"  ⚠️ Pior trade:   <b>{d['worst']:+.4f} USD</b>\n\n"
 
@@ -1029,8 +1034,8 @@ def _handle_myfxbook_user(m, u: dict):
                 comment = _myfxbook_ai_comment(d, mode="user")
                 if comment:
                     send_html(m.chat.id, comment)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.error("[mybdbook_user] AI background comment failed: %s", _e)
     threading.Thread(target=_ai_bg, daemon=True).start()
 
 
@@ -1113,6 +1118,6 @@ def _handle_myfxbook_adm(m):
                 comment = _myfxbook_ai_comment(d, mode="adm")
                 if comment:
                     send_html(m.chat.id, comment)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.error("[mybdbook_adm] AI background comment failed: %s", _e)
     threading.Thread(target=_ai_bg, daemon=True).start()
