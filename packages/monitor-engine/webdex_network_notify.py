@@ -81,7 +81,13 @@ _BLOCKS_PER_POLL   = 50
 _CONFIG_LAST_BLOCK = "network_notify_last_block"
 _POLYGONSCAN_TX    = "https://polygonscan.com/tx/{}"
 _POLYGONSCAN_ADDR  = "https://polygonscan.com/address/{}"
-_MIN_USD           = 10.0   # mínimo $10 para notificar
+_MIN_USD           = 1.0    # mínimo $1 para entrar no buffer
+_FLUSH_INTERVAL    = 300    # 5 minutos — janela de agregação
+
+# Buffer de agregação — acumula eventos e envia UMA mensagem resumida
+_buf_add:    list = []   # [(usd_value, coin_sym)]
+_buf_remove: list = []   # [(usd_value, coin_sym)]
+_last_flush: float = 0.0
 
 
 # ─────────────────────────────────────────────────────────────
@@ -149,66 +155,65 @@ def _mark_notified(tx_hash: str, log_index: int):
 
 
 # ─────────────────────────────────────────────────────────────
-# Notificações — Discord + Telegram
+# Buffer + flush — agrega eventos e envia resumo a cada 5 min
 # ─────────────────────────────────────────────────────────────
 
-def _notify_add(args: dict, tx_hash: str):
-    """PAY FEE RECEBIDO — capital entrando na rede."""
-    val_fmt  = _fmt_coin(args["value"],   args["coin"])
-    acc_id   = args["id"] or _short(args["user"])
-    user_url = _POLYGONSCAN_ADDR.format(args["user"])
-    tx_url   = _POLYGONSCAN_TX.format(tx_hash)
+def _buffer_add(args: dict):
+    """Acumula evento ADD no buffer."""
+    usd = _usd_value(args["value"], args["coin"])
+    sym = (TOKENS_MAP.get(args["coin"].lower()) or {}).get("sym", "?")
+    _buf_add.append((usd, sym))
 
-    # Discord
+
+def _buffer_remove(args: dict):
+    """Acumula evento REMOVE no buffer."""
+    usd = _usd_value(args["value"], args["coin"])
+    sym = (TOKENS_MAP.get(args["coin"].lower()) or {}).get("sym", "?")
+    _buf_remove.append((usd, sym))
+
+
+def _flush_buffer():
+    """Envia resumo agregado se houver atividade. Limpa buffer após envio."""
+    global _last_flush
+    import time as _t
+
+    now = _t.time()
+    if now - _last_flush < _FLUSH_INTERVAL:
+        return
+    _last_flush = now
+
+    if not _buf_add and not _buf_remove:
+        return
+
+    lines = []
+    if _buf_add:
+        total_add = sum(v for v, _ in _buf_add)
+        lines.append(f"⚡ **Pay Fee recebido:** `{len(_buf_add)}x` — total `${total_add:,.2f}`")
+    if _buf_remove:
+        total_rem = sum(v for v, _ in _buf_remove)
+        lines.append(f"🔋 **Pagamentos executados:** `{len(_buf_remove)}x` — total `${total_rem:,.2f}`")
+
+    desc = "\n".join(lines)
+
+    # Discord → #webdex-on-chain
     _async_post({"embeds": [{
-        "title": "⚡ PAY FEE RECEBIDO — WEbdEX Network",
-        "description": (
-            f"💰 `+{val_fmt}`\n\n"
-            f"👤 Conta: `{acc_id}`  ·  [`{_short(args['user'])}`]({user_url})\n\n"
-            f"[🔗 Ver no Polygonscan]({tx_url})"
-        ),
-        "color": _COLOR_ADD,
-        "footer": {"text": "WEbdEX Protocol · Polygon"},
+        "title": "🌐 WEbdEX Network — Atividade de Pagamentos",
+        "description": desc,
+        "color": _COLOR_ADD if _buf_add else _COLOR_REMOVE,
+        "footer": {"text": "WEbdEX Protocol · resumo 5 min"},
     }]})
 
-    # Telegram admins
-    tg_text = (
-        f"⚡ <b>PAY FEE RECEBIDO — WEbdEX Network</b>\n\n"
-        f"💰 <b>+{val_fmt}</b>\n"
-        f"👤 Conta: <code>{acc_id}</code>\n"
-        f"<a href=\"{tx_url}\">🔗 Ver no Polygonscan</a>"
-    )
-    _send_admins(tg_text)
+    # Telegram admins — texto simples
+    tg_lines = ["🌐 <b>WEbdEX Network — Atividade</b>\n"]
+    if _buf_add:
+        tg_lines.append(f"⚡ Pay Fee recebido: <b>{len(_buf_add)}x</b> (${sum(v for v,_ in _buf_add):,.2f})")
+    if _buf_remove:
+        tg_lines.append(f"🔋 Pagamentos executados: <b>{len(_buf_remove)}x</b> (${sum(v for v,_ in _buf_remove):,.2f})")
+    _send_admins("\n".join(tg_lines))
 
-
-def _notify_remove(args: dict, tx_hash: str):
-    """PAY FEE EXECUTADO — fee paga para os blocos."""
-    val_fmt = _fmt_coin(args["value"],   args["coin"])
-    fee_fmt = _fmt_coin(args["fee"],     args["coin"])
-    tx_url  = _POLYGONSCAN_TX.format(tx_hash)
-
-    # Discord
-    _async_post({"embeds": [{
-        "title": "🔋 PAY FEE EXECUTADO — WEbdEX Protocol",
-        "description": (
-            f"💸 Valor: `{val_fmt}`\n"
-            f"💼 Taxa protocolo: `{fee_fmt}`\n\n"
-            f"👤 [`{_short(args['user'])}`]({_POLYGONSCAN_ADDR.format(args['user'])})\n\n"
-            f"[🔗 Ver no Polygonscan]({tx_url})"
-        ),
-        "color": _COLOR_REMOVE,
-        "footer": {"text": "WEbdEX Protocol · Polygon"},
-    }]})
-
-    # Telegram admins
-    tg_text = (
-        f"🔋 <b>PAY FEE EXECUTADO — WEbdEX Protocol</b>\n\n"
-        f"💸 Valor: <b>{val_fmt}</b>\n"
-        f"💼 Taxa protocolo: <b>{fee_fmt}</b>\n"
-        f"👤 <code>{_short(args['user'])}</code>\n"
-        f"<a href=\"{tx_url}\">🔗 Ver no Polygonscan</a>"
-    )
-    _send_admins(tg_text)
+    logger.info("[network] Flush: %d ADD, %d REMOVE", len(_buf_add), len(_buf_remove))
+    _buf_add.clear()
+    _buf_remove.clear()
 
 
 def _send_admins(text: str):
@@ -239,9 +244,9 @@ def _process_log(log, contract):
             usd     = _usd_value(args["value"], args["coin"])
             if usd < _MIN_USD:
                 return
-            _notify_add(args, tx_hash)
+            _buffer_add(args)
             _mark_notified(tx_hash, log_index)
-            logger.info("[network] PayFee ADD: +%s | %s", _fmt_coin(args["value"], args["coin"]), _short(args["user"]))
+            logger.info("[network] PayFee ADD buffer: +%s | %s", _fmt_coin(args["value"], args["coin"]), _short(args["user"]))
 
         elif topic0 == _TOPIC_REMOVE:
             decoded = contract.events.BalanceNetworkRemove().process_log(log)
@@ -249,9 +254,9 @@ def _process_log(log, contract):
             usd     = _usd_value(args["value"], args["coin"])
             if usd < _MIN_USD:
                 return
-            _notify_remove(args, tx_hash)
+            _buffer_remove(args)
             _mark_notified(tx_hash, log_index)
-            logger.info("[network] PayFee REMOVE: %s | %s", _fmt_coin(args["value"], args["coin"]), _short(args["user"]))
+            logger.info("[network] PayFee REMOVE buffer: %s | %s", _fmt_coin(args["value"], args["coin"]), _short(args["user"]))
 
     except Exception as e:
         logger.warning("[network] Erro ao processar log: %s", e)
@@ -298,6 +303,8 @@ def network_notify_worker():
 
             for log in logs:
                 _process_log(log, contract)
+
+            _flush_buffer()  # envia resumo agregado se janela de 5 min passou
 
             last_block = to_b
             set_config(_CONFIG_LAST_BLOCK, str(last_block))
