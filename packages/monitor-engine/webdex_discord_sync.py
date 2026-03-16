@@ -93,23 +93,21 @@ def _async_post(payload: dict, url: str = _WEBHOOK_ONCHAIN) -> None:
 
 def notify_milestone(title: str, description: str, env: str = "") -> None:
     """Conquista/milestone do protocolo → #webdex-on-chain."""
-    env_label = "🟠 AG_C_bd" if "AG_C" in env else ("🔵 bd_v5" if "bd_v5" in env else "📊 Protocolo")
     _async_post({
         "embeds": [{
             "title": f"🏆 {title}",
             "description": _telegram_to_discord(description),
             "color": _COLOR_MILESTONE,
-            "footer": {"text": f"WEbdEX Protocol · {env_label}"},
+            "footer": {"text": "WEbdEX Protocol"},
         }]
     }, url=_WEBHOOK_ONCHAIN)
 
 
 def notify_ciclo_report(summary: str, env: str = "") -> None:
     """Resumo do ciclo 21h → #relatório-diário."""
-    env_label = "🟠 AG_C_bd" if "AG_C" in env else ("🔵 bd_v5" if "bd_v5" in env else "Global")
     _async_post({
         "embeds": [{
-            "title": f"📊 Relatório do Ciclo — {env_label}",
+            "title": "📊 Relatório do Ciclo — WEbdEX",
             "description": _telegram_to_discord(summary),
             "color": _COLOR_CICLO,
             "footer": {"text": "WEbdEX Protocol · Ciclo 21h BR"},
@@ -153,11 +151,10 @@ def notify_operacao(
     trades_hj: int = 0,
 ) -> None:
     """Trade executado pelo protocolo → #operações."""
-    emoji  = "🟢" if valor >= 0 else "🔴"
-    color  = _COLOR_TRADE_WIN if valor >= 0 else _COLOR_TRADE_LOS
-    env_lb = "🟠 AG" if "AG_C" in env else "🔵 V5"
-    desc   = (
-        f"{emoji} **`{sub}`** · {env_lb}\n\n"
+    emoji = "🟢" if valor >= 0 else "🔴"
+    color = _COLOR_TRADE_WIN if valor >= 0 else _COLOR_TRADE_LOS
+    desc  = (
+        f"{emoji} **`{sub}`**\n\n"
         f"💰 Resultado: **`${valor:+.4f}`**\n"
         f"🔄 Estratégia: `{estrategia}` · 🪙 `{token}`\n"
     )
@@ -170,7 +167,7 @@ def notify_operacao(
             "title": f"{emoji} Execução Confirmada — WEbdEX",
             "description": desc,
             "color": color,
-            "footer": {"text": f"WEbdEX Engine · {env_lb}"},
+            "footer": {"text": "WEbdEX Protocol · OCME"},
         }]
     }, url=_WEBHOOK_OPERACOES)
 
@@ -183,7 +180,7 @@ def notify_gm(hoje: str = "") -> None:
             "title": f"☀️ Bom dia, WEbdEX{data_str}!",
             "description": (
                 "O protocolo está **ativo e monitorando** 👁\n\n"
-                "🔵 bd_v5 · 🟠 AG_C_bd · Polygon Mainnet\n\n"
+                "WEbdEX · Polygon Mainnet\n\n"
                 "> Boa sorte nos trades de hoje. Que os ciclos sejam verdes! 🚀"
             ),
             "color": _COLOR_GM,
