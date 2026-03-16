@@ -46,6 +46,14 @@ COPY monitor-engine/webdex_config.py \
      monitor-engine/webdex_main.py \
      monitor-engine/webdex_ai.py \
      monitor-engine/webdex_observability.py \
+     monitor-engine/webdex_anomaly.py \
+     monitor-engine/webdex_milestones.py \
+     monitor-engine/webdex_discord_sync.py \
+     monitor-engine/webdex_discord_animate.py \
+     monitor-engine/webdex_onchain_notify.py \
+     monitor-engine/webdex_swapbook_notify.py \
+     monitor-engine/webdex_network_notify.py \
+     monitor-engine/webdex_creatomate.py \
      ./
 
 # Handlers do bot
