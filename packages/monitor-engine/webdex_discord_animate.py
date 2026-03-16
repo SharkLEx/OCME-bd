@@ -7,7 +7,7 @@ em momentos-chave do protocolo. Execução 100% assíncrona.
 
 Modelo: minimax/video-01  (~$0.20/clip, 6s)
 Créditos: $10 → ~50 clips disponíveis
-Token: configurado via REPLICATE_TOKEN no ambiente ou hardcoded abaixo.
+Token: configurado via variável de ambiente REPLICATE_TOKEN.
 
 Eventos suportados:
   "new_holder"  → novo holder do token WEbdEX
