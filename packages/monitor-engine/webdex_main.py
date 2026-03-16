@@ -15,6 +15,7 @@ from webdex_chain import _chain_cache_worker
 from webdex_workers import (
     sentinela,
     agendador_21h,
+    agendador_horario,
     _capital_snapshot_worker,
     _user_capital_refresh_worker,
     _funnel_worker,
@@ -40,6 +41,7 @@ _THREAD_REGISTRY: dict[str, callable] = {
     "vigia":                   vigia,
     "sentinela":               sentinela,
     "agendador_21h":           agendador_21h,
+    "agendador_horario":       agendador_horario,
     "capital_snapshot_worker": _capital_snapshot_worker,
     "user_capital_refresh":    _user_capital_refresh_worker,
     "funnel_worker":           _funnel_worker,

@@ -29,11 +29,10 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────
 _REPLICATE_TOKEN = os.getenv("REPLICATE_TOKEN", "")
 
-# URL pública do bdZinho — substitua quando hospedar a imagem
-# Por enquanto usa o logo WEbdEX como placeholder
+# URL pública do bdZinho — mascote oficial WEbdEX
 _BDZINHO_URL = os.getenv(
     "BDZINHO_IMAGE_URL",
-    "https://webdex.app/logo.png",
+    "https://i.ibb.co/MkcqbvLb/post-149-operador-da-tecnologia-01.jpg",
 )
 
 _MODEL_OWNER  = "minimax"
@@ -159,11 +158,19 @@ def _poll_prediction(pred_id: str) -> str | None:
 
 def _post_video(video_url: str, webhook_url: str, title: str,
                 description: str, color: int = 0x00FFB2) -> None:
-    """Posta clip animado no Discord via webhook."""
+    """Posta clip animado no Discord via webhook — upload direto como arquivo."""
+    import tempfile, os
     try:
-        # Discord auto-embeds MP4 se URL estiver no content
-        payload = {
-            "content": video_url,
+        # Baixa o vídeo para arquivo temporário
+        dl = requests.get(video_url, timeout=60, stream=True)
+        dl.raise_for_status()
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            for chunk in dl.iter_content(chunk_size=1 << 20):
+                tmp.write(chunk)
+            tmp_path = tmp.name
+
+        # Faz upload multipart → Discord mostra o vídeo inline (não só link)
+        payload_json = {
             "embeds": [{
                 "title": title,
                 "description": description,
@@ -171,11 +178,20 @@ def _post_video(video_url: str, webhook_url: str, title: str,
                 "footer": {"text": "WEbdEX Protocol · bdZinho"},
             }],
         }
-        resp = requests.post(webhook_url, json=payload, timeout=10)
+        import json as _json
+        with open(tmp_path, "rb") as f:
+            resp = requests.post(
+                webhook_url,
+                data={"payload_json": _json.dumps(payload_json)},
+                files={"file": ("bdzinho.mp4", f, "video/mp4")},
+                timeout=60,
+            )
+        os.unlink(tmp_path)
+
         if resp.status_code not in (200, 204):
             logger.warning("[animate] Webhook %s: %s", resp.status_code, resp.text[:120])
         else:
-            logger.info("[animate] Clip postado → %s", title)
+            logger.info("[animate] Clip postado inline → %s", title)
     except Exception as e:
         logger.warning("[animate] Erro ao postar no Discord: %s", e)
 

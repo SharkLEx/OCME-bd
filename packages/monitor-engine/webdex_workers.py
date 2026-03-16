@@ -24,7 +24,12 @@ from webdex_chain import (
     obter_preco_pol, _chain_cache_worker,
 )
 from webdex_bot_core import send_html, _notif_worker, send_logo_photo
-from webdex_discord_sync import notify_ciclo_report, notify_gm, _WEBHOOK_GM
+from webdex_discord_sync import (
+    notify_ciclo_report, notify_gm, _WEBHOOK_GM,
+    notify_operacoes_horario, notify_swaps_horario, notify_onchain_heartbeat,
+    _WEBHOOK_OPERACOES, _WEBHOOK_SWAPS,
+    get_pulse_stats_and_reset,
+)
 
 try:
     from webdex_discord_animate import animate_and_post as _animate
@@ -157,6 +162,86 @@ def agendador_21h():
         except Exception as _ae:
             logger.warning("[agendador_21h] erro no ciclo: %s", _ae)
         time.sleep(30)
+
+# ==============================================================================
+# ⏰ AGENDADOR HORÁRIO — #operações, #swaps e heartbeat #webdex-on-chain
+# ==============================================================================
+
+def agendador_horario():
+    """Relatórios horários ao vivo → #operações, #swaps, #webdex-on-chain."""
+    from webdex_swapbook_notify import get_swap_stats_and_reset
+    logger.info("⏰ Agendador horário: Ativo...")
+    last_hour = -1
+
+    while True:
+        try:
+            now = now_br()
+            # Dispara a cada 2h (par: 0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22)
+            is_2h_mark = (now.hour % 2 == 0) and (now.minute < 5)
+            if is_2h_mark and now.hour != last_hour:
+                last_hour = now.hour
+                hora_str  = now.strftime("%H:00")
+                two_h_ago = (now - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")
+
+                # ── Operações: query protocol_ops (últimas 2h) ──────────
+                with DB_LOCK:
+                    rows = cursor.execute(
+                        "SELECT COUNT(*) FROM protocol_ops WHERE ts >= ?",
+                        (two_h_ago,)
+                    ).fetchone()
+                total_ops = rows[0] if rows else 0
+                notify_operacoes_horario(total_ops, {}, hora_str)
+
+                # ── Swaps: contador em memória ──────────────────────────
+                sw = get_swap_stats_and_reset()
+                total_sw = sw["create"] + sw["execute"]
+                notify_swaps_horario(total_sw, sw["create"], sw["execute"], hora_str)
+
+                # ── Pulso curado + P&L 2h → #webdex-on-chain ───────────
+                pulse = get_pulse_stats_and_reset()
+                try:
+                    with DB_LOCK:
+                        pnl_row = cursor.execute(
+                            "SELECT SUM(valor) FROM operacoes WHERE data_hora >= ? AND tipo='Trade'",
+                            (two_h_ago,)
+                        ).fetchone()
+                    pnl_2h = float(pnl_row[0] or 0.0) if pnl_row else 0.0
+                except Exception:
+                    pnl_2h = 0.0
+                notify_onchain_heartbeat(
+                    total_ops, hora_str,
+                    swaps=sw["execute"],
+                    webdex_moves=pulse["webdex_moves"],
+                    new_holders=pulse["new_holders"],
+                    new_wallets=pulse["new_wallets"],
+                    pnl=pnl_2h,
+                )
+
+                # ── Animações bdZinho ───────────────────────────────────
+                if _animate:
+                    _animate(
+                        "trade_win", _WEBHOOK_OPERACOES,
+                        f"⚡ {total_ops:,} OPS NAS ÚLTIMAS 2H!",
+                        f"O protocolo WEbdEX operou {total_ops:,} vezes. Imparável! 🚀",
+                        0xFF6B35,
+                    )
+                    if total_sw > 0:
+                        _animate(
+                            "milestone", _WEBHOOK_SWAPS,
+                            f"🔄 {total_sw} SWAPS EM {hora_str}!",
+                            f"Create: {sw['create']} · Executados: {sw['execute']} — SwapBook vivo!",
+                            0x38BDF8,
+                        )
+
+                logger.info(
+                    "[agendador_horario] %s — %d ops, %d swaps",
+                    hora_str, total_ops, total_sw,
+                )
+
+        except Exception as _he:
+            logger.warning("[agendador_horario] erro: %s", _he)
+        time.sleep(30)
+
 
 # ==============================================================================
 # 💰 CAPITAL SNAPSHOT WORKER

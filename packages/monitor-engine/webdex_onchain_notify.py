@@ -28,7 +28,12 @@ from webdex_chain import (
     _is_429_error,
 )
 from webdex_db import DB_LOCK, cursor, conn, get_config, set_config
-from webdex_discord_sync import _async_post, _WEBHOOK_OPERACOES, _WEBHOOK_ONCHAIN
+from webdex_discord_sync import (
+    _async_post, _WEBHOOK_OPERACOES, _WEBHOOK_ONCHAIN,
+    _WEBHOOK_TOKEN_BD, _WEBHOOK_CONQUISTAS,
+    notify_nova_carteira, notify_token_bd, notify_webdex_transfer,
+    notify_onchain_event, inc_pulse_stat,
+)
 
 try:
     from webdex_discord_animate import animate_and_post as _animate
@@ -50,6 +55,8 @@ _LOOP_DECIMALS = 9  # LP_LOOP token — conforme TOKEN_CONFIG (ADDR_LPLPUSD dec=
 # WEbdEX token (TOKENPASS) — a cereja do bolo
 _WEBDEX_TOKEN   = Web3.to_checksum_address(CONTRACTS["AG_C_bd"]["TOKENPASS"])
 _WEBDEX_DECIMALS = 9
+# Threshold para aparecer no feed curado do #webdex-on-chain: 100k WEbdEX
+_WEBDEX_ONCHAIN_THRESHOLD = 100_000 * (10 ** 9)
 _WEBDEX_SUPPLY   = 369_369_369  # supply total on-chain
 _WEBDEX_SYMBOL   = "WEbdEX"
 
@@ -260,23 +267,41 @@ def _check_new_wallets(from_b: int, to_b: int):
 
 
 def _notify_new_wallet(wallet: str, tx_hash: str, profit_raw: int = 0):
-    profit_line = ""
+    # conta total de carteiras conhecidas para exibir no embed
+    with DB_LOCK:
+        row = cursor.execute(
+            "SELECT COUNT(*) FROM onchain_seen_wallets"
+        ).fetchone()
+    total_wallets = row[0] if row else 0
+
+    notify_nova_carteira(wallet, total_wallets)
+
+    # Mirror compacto → #webdex-on-chain
+    notify_onchain_event(
+        title="👛 NOVA CARTEIRA CONECTADA — WEbdEX",
+        description=(
+            f"[`{_short(wallet)}`]({_POLYGONSCAN_ADDR.format(wallet)}) entrou no protocolo\n"
+            f"👥 Total de carteiras: **`{total_wallets}`**"
+        ),
+        color=0xFFD700,
+        tx_hash=tx_hash,
+    )
+    inc_pulse_stat("new_wallets")
+
+    # #operações: detalhe da 1ª operação (se houver lucro)
     if profit_raw:
         fmt = _fmt_profit(profit_raw)
         if fmt:
-            profit_line = f"💰 1ª operação: **{fmt}**\n"
-
-    _async_post({"embeds": [{
-        "title": "🏆 CONQUISTA DESBLOQUEADA",
-        "description": (
-            f"**Nova Carteira Conectada — WEbdEX**\n\n"
-            f"👤 [`{_short(wallet)}`]({_POLYGONSCAN_ADDR.format(wallet)})\n"
-            f"{profit_line}\n"
-            f"[🔗 Ver no Polygonscan]({_POLYGONSCAN_TX.format(tx_hash)})"
-        ),
-        "color": _COLOR_WALLET,
-        "footer": {"text": "WEbdEX Protocol · Polygon"},
-    }]}, url=_WEBHOOK_OPERACOES)
+            _async_post({"embeds": [{
+                "title": "⚡ 1ª Operação — Nova Carteira",
+                "description": (
+                    f"👤 [`{_short(wallet)}`]({_POLYGONSCAN_ADDR.format(wallet)})\n"
+                    f"💰 Resultado: **{fmt}**\n"
+                    f"[🔗 Polygonscan]({_POLYGONSCAN_TX.format(tx_hash)})"
+                ),
+                "color": _COLOR_WALLET,
+                "footer": {"text": "WEbdEX Protocol · Polygon"},
+            }]}, url=_WEBHOOK_OPERACOES)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -549,7 +574,8 @@ def _backfill_webdex_holders():
 
 
 def _check_webdex_holders(from_b: int, to_b: int):
-    """Detecta novos holders do token WEbdEX (TOKENPASS) — notificação GIGANTE."""
+    """Monitora TODA movimentação do token WEbdEX — notifica #token-bd ao vivo."""
+    from webdex_discord_sync import notify_webdex_transfer, _WEBHOOK_CONQUISTAS
     ZERO = "0x0000000000000000000000000000000000000000"
     try:
         logs = rpc_pool.get_logs({
@@ -566,23 +592,70 @@ def _check_webdex_holders(from_b: int, to_b: int):
 
     for log in logs:
         try:
-            decoded = contract.events.Transfer().process_log(log)
-            to_addr = decoded["args"]["to"]
-            tx_hash = log["transactionHash"].hex()
+            decoded  = contract.events.Transfer().process_log(log)
+            from_addr = decoded["args"]["from"]
+            to_addr   = decoded["args"]["to"]
+            amount    = decoded["args"]["value"]
+            tx_hash   = log["transactionHash"].hex()
+            amt_fmt   = _fmt_tokens(amount, _WEBDEX_DECIMALS)
 
-            if to_addr.lower() == ZERO:
-                continue
-            if not _is_new_webdex_holder(to_addr):
-                continue
+            # Verifica novo holder antes de marcar
+            is_new = to_addr.lower() != ZERO and _is_new_webdex_holder(to_addr)
 
-            amount       = decoded["args"]["value"]
-            holder_count = _count_webdex_holders() + 1  # +1 o atual
-            _notify_webdex_holder(to_addr, amount, tx_hash, holder_count)
-            _mark_webdex_holder(to_addr)
-            logger.info("[onchain] 💎 Novo holder WEbdEX #%d: %s", holder_count, _short(to_addr))
+            # Notifica TODA movimentação → #token-bd
+            notify_webdex_transfer(
+                from_addr=from_addr,
+                to_addr=to_addr,
+                amount=amt_fmt,
+                tx_hash=tx_hash,
+                is_new_holder=is_new,
+            )
+
+            # Feed curado → #webdex-on-chain
+            if is_new:
+                holder_count = _count_webdex_holders() + 1
+                notify_onchain_event(
+                    title=f"💎 NOVO HOLDER #{holder_count:,} — TOKEN WEbdEX",
+                    description=(
+                        f"**A FAMÍLIA WEbdEX CRESCEU! 🎊**\n"
+                        f"[`{_short(to_addr)}`]({_POLYGONSCAN_ADDR.format(to_addr)})\n"
+                        f"💰 Recebeu: `{amt_fmt} WEbdEX`"
+                    ),
+                    color=0xFFD700,
+                    tx_hash=tx_hash,
+                )
+                inc_pulse_stat("new_holders")
+            elif amount >= _WEBDEX_ONCHAIN_THRESHOLD:
+                tipo  = "MINT" if from_addr.lower() == ZERO else ("BURN" if to_addr.lower() == ZERO else "TRANSFER")
+                icone = "🌱" if tipo == "MINT" else ("🔥" if tipo == "BURN" else "💎")
+                notify_onchain_event(
+                    title=f"{icone} TOKEN WEbdEX EM MOVIMENTO",
+                    description=(
+                        f"**{tipo}** · `{amt_fmt} WEbdEX`\n"
+                        f"📤 `{_short(from_addr)}`  ➜  📥 `{_short(to_addr)}`"
+                    ),
+                    color=0xA855F7,
+                    tx_hash=tx_hash,
+                )
+                inc_pulse_stat("webdex_moves")
+
+            # Animação bdZinho a cada movimentação
+            if _animate:
+                event_type = "new_holder" if is_new else "trade_win"
+                title = "💎 NOVO HOLDER WEbdEX!" if is_new else "💎 TOKEN WEbdEX EM MOVIMENTO!"
+                desc  = f"A família cresce! +{amt_fmt} WEbdEX na rede." if is_new else f"{amt_fmt} WEbdEX transferidos. O protocolo vive!"
+                _animate(event_type, _WEBHOOK_CONQUISTAS if is_new else _WEBHOOK_TOKEN_BD, title, desc, 0xFFD700)
+
+            # Se novo holder: notifica #conquistas também
+            if is_new:
+                _notify_webdex_holder(to_addr, amount, tx_hash, holder_count)
+                _mark_webdex_holder(to_addr)
+                logger.info("[onchain] 💎 Novo holder WEbdEX #%d: %s", holder_count, _short(to_addr))
+            else:
+                logger.info("[onchain] 💎 Transfer WEbdEX %s → %s | %s", _short(from_addr), _short(to_addr), amt_fmt)
 
         except Exception as e:
-            logger.warning("[onchain] Erro ao processar webdex holder log: %s", e)
+            logger.warning("[onchain] Erro ao processar webdex transfer: %s", e)
 
 
 def _notify_webdex_holder(addr: str, amount: int, tx_hash: str, holder_count: int):
@@ -597,13 +670,14 @@ def _notify_webdex_holder(addr: str, amount: int, tx_hash: str, holder_count: in
         f"[🔗 Ver no Polygonscan]({_POLYGONSCAN_TX.format(tx_hash)})"
     )
 
+    from webdex_discord_sync import _WEBHOOK_CONQUISTAS
     _async_post({"embeds": [{
         "title": f"💎 NOVO HOLDER #{holder_count:,} — TOKEN {_WEBDEX_SYMBOL}",
         "description": description,
         "color": 0xFFD700,
         "footer": {"text": f"WEbdEX Protocol · Token de Soberania Digital · Polygon"},
-        "thumbnail": {"url": "https://webdex.app/logo.png"},
-    }]})
+        "thumbnail": {"url": "https://i.ibb.co/MkcqbvLb/post-149-operador-da-tecnologia-01.jpg"},
+    }]}, url=_WEBHOOK_CONQUISTAS)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -670,18 +744,11 @@ def _webdex_periodic_report():
                 f"A soberania financeira não para."
             )
 
-        _async_post({"embeds": [{
-            "title": f"📡 TOKEN {_WEBDEX_SYMBOL} — RELATÓRIO DE CRESCIMENTO",
-            "description": (
-                f"{ai_text}\n\n"
-                f"──────────────────────\n"
-                f"👥 Holders ativos: **{holder_count:,}**\n"
-                f"💎 Em circulação: **{supply_fmt} {_WEBDEX_SYMBOL}**\n"
-                f"🔗 [Ver token no Polygonscan]({_POLYGONSCAN_ADDR.format(_WEBDEX_TOKEN)})"
-            ),
-            "color": 0x6C3FE8,
-            "footer": {"text": "WEbdEX Protocol · Relatório automático a cada 2h"},
-        }]})
+        notify_token_bd(
+            holders=holder_count,
+            supply=float(supply_fmt.replace(",", "")),
+            msg=ai_text,
+        )
         logger.info("[onchain] Relatório WEbdEX postado — %d holders", holder_count)
 
     except Exception as e:

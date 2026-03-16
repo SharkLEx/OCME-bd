@@ -17,11 +17,12 @@ Evento do contrato:
 import time
 import json
 import logging
+import threading
 
 from webdex_config import logger, TOKENS_MAP, Web3
 from webdex_chain import rpc_pool, web3, _is_429_error
 from webdex_db import DB_LOCK, cursor, conn, get_config, set_config
-from webdex_discord_sync import _async_post, _WEBHOOK_SWAPS
+from webdex_discord_sync import _async_post, _WEBHOOK_SWAPS, notify_onchain_event, inc_pulse_stat
 
 # ─────────────────────────────────────────────────────────────
 # Contrato
@@ -63,6 +64,29 @@ _POLL_INTERVAL    = 30   # segundos entre polls
 _BLOCKS_PER_POLL  = 50   # ~30s na Polygon (bloco ~2s)
 _CONFIG_LAST_BLOCK = "swapbook_last_block"
 _POLYGONSCAN_TX   = "https://polygonscan.com/tx/{}"
+
+# ─────────────────────────────────────────────────────────────
+# Contador horário em memória (exportado para agendador_horario)
+# ─────────────────────────────────────────────────────────────
+_swap_lock  = threading.Lock()
+_swap_stats: dict = {"create": 0, "execute": 0}
+
+
+def _inc_swap(method: str) -> None:
+    with _swap_lock:
+        if method == "Create Swap":
+            _swap_stats["create"] += 1
+        else:
+            _swap_stats["execute"] += 1
+
+
+def get_swap_stats_and_reset() -> dict:
+    """Retorna contadores da hora e zera para próximo ciclo."""
+    with _swap_lock:
+        stats = {"create": _swap_stats["create"], "execute": _swap_stats["execute"]}
+        _swap_stats["create"]  = 0
+        _swap_stats["execute"] = 0
+    return stats
 
 
 # ─────────────────────────────────────────────────────────────
@@ -198,7 +222,24 @@ def _process_log(log):
             _notify_create(args, tx_hash)
         else:
             _notify_execute(args, tx_hash)
+            # Mirror compacto → #webdex-on-chain (só swaps executados)
+            left  = _token_label(args["leftToken"])
+            right = _token_label(args["rightToken"])
+            l_amt = _fmt_amount(args["leftTokenAmount"],  args["leftToken"])
+            r_amt = _fmt_amount(args["rightTokenAmount"], args["rightToken"])
+            notify_onchain_event(
+                title=f"🔄 SWAP EXECUTADO — Oferta #{args['swapId']}",
+                description=(
+                    f"**{left}  ➜  {right}**\n"
+                    f"`{l_amt}` ➜ `{r_amt}`\n"
+                    f"👤 `{_short(args['from'])}` · 🤝 `{_short(args['to'])}`"
+                ),
+                color=0x38BDF8,
+                tx_hash=tx_hash,
+            )
+            inc_pulse_stat("swaps_exec")
 
+        _inc_swap(method)
         _mark_notified(tx_hash, log_index)
         logger.info("[swapbook] %s #%s | tx %s", method, args["swapId"], tx_hash[:14])
 

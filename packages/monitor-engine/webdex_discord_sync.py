@@ -1,12 +1,14 @@
 """
 webdex_discord_sync.py — Content Sync: OCME → Discord
 
-Roteamento por canal:
-  _WEBHOOK_ONCHAIN   → #webdex-on-chain  (on-chain events, anomalias, milestones, network)
-  _WEBHOOK_OPERACOES → #operações        (trades executados pelo protocolo)
-  _WEBHOOK_SWAPS     → #swaps            (SwapBook: Create Swap / Swap Tokens)
-  _WEBHOOK_RELATORIO → #relatório-diário (ciclo 21h diário)
-  _WEBHOOK_GM        → #gm-wagmi         (ritual diário das 7h)
+Roteamento por canal (categoria ⚡ PROTOCOLO AO VIVO):
+  _WEBHOOK_ONCHAIN    → #webdex-on-chain  (on-chain events, anomalias, network)
+  _WEBHOOK_TOKEN_BD   → #token-bd         (relatório 2h holders/supply)
+  _WEBHOOK_CONQUISTAS → #conquistas       (milestones, novas carteiras)
+  _WEBHOOK_OPERACOES  → #operações        (nova carteira conectada ao protocolo)
+  _WEBHOOK_SWAPS      → #swaps            (SwapBook: Create Swap / Swap Tokens)
+  _WEBHOOK_RELATORIO  → #relatório-diário (ciclo 21h diário)
+  _WEBHOOK_GM         → #gm-wagmi         (ritual diário das 7h)
 """
 import re
 import time
@@ -39,6 +41,14 @@ _WEBHOOK_GM = (
     "https://discord.com/api/webhooks/1482920003421470757/"
     "2r20C8lUm2V5ScJIEhCGJnF4Q2uswR9EbLx7aNv8mNe0LnJw3gHUHMx8XmXWCwZEdEry"
 )
+_WEBHOOK_TOKEN_BD = (
+    "https://discord.com/api/webhooks/1483080174408044655/"
+    "YU0bYNU2hELqImBdmnqjp3HEnkNTCN0DkbZAPXz0hI21AlcH1pj98ETkm4Q5N2mvAX1J"
+)
+_WEBHOOK_CONQUISTAS = (
+    "https://discord.com/api/webhooks/1483080178237313075/"
+    "92ir9DIHCW4TrVxHIMr3xsxPLy2piynxaGfwqq4zhAY7Lo3pz9B7iLxqIAEGECKFafNW"
+)
 
 # ─────────────────────────────────────────────────────────────
 # Cores padrão
@@ -50,6 +60,33 @@ _COLOR_CICLO     = 0x38BDF8   # azul
 _COLOR_TRADE_WIN = 0x00FF88   # verde trade positivo
 _COLOR_TRADE_LOS = 0xFF4444   # vermelho trade negativo
 _COLOR_GM        = 0xE91E8C   # rosa WEbdEX
+
+# ─────────────────────────────────────────────────────────────
+# Contadores em memória — pulso curado do #webdex-on-chain
+# ─────────────────────────────────────────────────────────────
+_pulse_lock  = threading.Lock()
+_pulse_stats: dict = {
+    "swaps_exec":   0,  # Swap Tokens executados
+    "webdex_moves": 0,  # Transfers WEbdEX relevantes (>= 100k)
+    "new_holders":  0,  # Novos holders WEbdEX
+    "new_wallets":  0,  # Novas carteiras conectadas ao protocolo
+}
+
+
+def inc_pulse_stat(key: str) -> None:
+    """Incrementa contador do pulso curado (thread-safe)."""
+    with _pulse_lock:
+        if key in _pulse_stats:
+            _pulse_stats[key] += 1
+
+
+def get_pulse_stats_and_reset() -> dict:
+    """Retorna contadores do período e zera para próximo ciclo."""
+    with _pulse_lock:
+        stats = dict(_pulse_stats)
+        for k in _pulse_stats:
+            _pulse_stats[k] = 0
+    return stats
 
 
 def _telegram_to_discord(text: str) -> str:
@@ -92,7 +129,7 @@ def _async_post(payload: dict, url: str = _WEBHOOK_ONCHAIN) -> None:
 # ─────────────────────────────────────────────────────────────
 
 def notify_milestone(title: str, description: str, env: str = "") -> None:
-    """Conquista/milestone do protocolo → #webdex-on-chain."""
+    """Conquista/milestone do protocolo → #conquistas."""
     _async_post({
         "embeds": [{
             "title": f"🏆 {title}",
@@ -100,7 +137,211 @@ def notify_milestone(title: str, description: str, env: str = "") -> None:
             "color": _COLOR_MILESTONE,
             "footer": {"text": "WEbdEX Protocol"},
         }]
+    }, url=_WEBHOOK_CONQUISTAS)
+
+
+def notify_token_bd(holders: int, supply: float, msg: str = "") -> None:
+    """Relatório periódico do token BD → #token-bd."""
+    desc = (
+        f"👥 **HOLDERS ATIVOS:** `{holders:,}`\n"
+        f"💎 **EM CIRCULAÇÃO:** `{supply:,.0f} WEbdEX`\n"
+        f"📦 **SUPPLY TOTAL:** `369,369,369 WEbdEX`\n"
+    )
+    if msg:
+        desc += f"\n─────────────────────\n{_telegram_to_discord(msg)}"
+    _async_post({
+        "embeds": [{
+            "title": "📊 TOKEN WEbdEX — RELATÓRIO DE CRESCIMENTO",
+            "description": desc,
+            "color": 0x6C3FE8,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · Relatório automático a cada 2h · Polygon"},
+        }]
+    }, url=_WEBHOOK_TOKEN_BD)
+
+
+def notify_webdex_transfer(
+    from_addr: str,
+    to_addr: str,
+    amount: str,
+    tx_hash: str = "",
+    is_new_holder: bool = False,
+) -> None:
+    """QUALQUER movimentação do token WEbdEX → #token-bd (ao vivo)."""
+    short_from = f"{from_addr[:6]}…{from_addr[-4:]}"
+    short_to   = f"{to_addr[:6]}…{to_addr[-4:]}"
+    ZERO = "0x0000000000000000000000000000000000000000"
+
+    if from_addr.lower() == ZERO:
+        tipo, icone, cor = "MINT", "🌱", 0x00FF88
+    elif to_addr.lower() == ZERO:
+        tipo, icone, cor = "BURN", "🔥", 0xFF4444
+    else:
+        tipo, icone, cor = "TRANSFER", "💎", 0xFFD700
+
+    new_holder_line = "\n\n🎊 **⚡ NOVO HOLDER CONFIRMADO! ⚡**\n**A FAMÍLIA WEbdEX CRESCEU!**" if is_new_holder else ""
+    poly_link = f"\n\n[🔗 Ver no Polygonscan](https://polygonscan.com/tx/{tx_hash})" if tx_hash else ""
+
+    desc = (
+        f"**{icone} TIPO:** `{tipo}`\n"
+        f"**📤 DE:** `{short_from}`\n"
+        f"**📥 PARA:** `{short_to}`\n"
+        f"**💰 VALOR:** `{amount} WEbdEX`"
+        f"{new_holder_line}"
+        f"{poly_link}"
+    )
+
+    _async_post({
+        "embeds": [{
+            "title": f"{icone} MOVIMENTO DETECTADO — TOKEN WEbdEX",
+            "description": desc,
+            "color": cor,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · A Cereja do Bolo · Polygon"},
+        }]
+    }, url=_WEBHOOK_TOKEN_BD)
+
+
+_OCME_BD_LINK = "https://t.me/OCME_bd"
+_BDZINHO_IMG  = "https://i.ibb.co/MkcqbvLb/post-149-operador-da-tecnologia-01.jpg"
+
+
+def notify_operacoes_horario(total: int, by_env: dict, hora_str: str) -> None:
+    """Relatório 2h de operações → #operações."""
+    if total == 0:
+        desc  = "🔇 **NENHUMA OPERAÇÃO** nas últimas 2h.\n*Protocolo aguardando próximo ciclo.*"
+        color = 0x555555
+    else:
+        bars  = min(10, max(1, round(total / 400)))
+        bar   = "█" * bars + "░" * (10 - bars)
+        desc  = (
+            f"**📈 TOTAL DE OPERAÇÕES:** `{total:,}`\n"
+            f"`{bar}` `{total:,} ops/2h`\n\n"
+            f"─────────────────────────\n"
+            f"🤖 **OCME_bd — Beta Exclusivo**\n"
+            f"O assistente IA do WEbdEX que traz relatórios on-chain,\n"
+            f"análise de fluxo e dados consolidados na palma da mão.\n"
+            f"*Em breve no portfolio oficial WEbdEX Protocol.*\n\n"
+            f"[→ Acessar OCME_bd no Telegram]({_OCME_BD_LINK})"
+        )
+        color = 0xFF6B35
+    _async_post({
+        "embeds": [{
+            "title": f"⚡ PROTOCOLO WEbdEX — AO VIVO · {hora_str}",
+            "description": desc,
+            "color": color,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · Relatório 2h · Polygon"},
+        }]
+    }, url=_WEBHOOK_OPERACOES)
+
+
+def notify_swaps_horario(total: int, create: int, execute: int, hora_str: str) -> None:
+    """Relatório 2h de swaps → #swaps."""
+    if total == 0:
+        desc  = "🔇 **NENHUM SWAP** nas últimas 2h.\n*SwapBook aguardando próxima oferta.*"
+        color = 0x555555
+    else:
+        bars  = min(10, max(1, total * 2))
+        bar   = "█" * bars + "░" * max(0, 10 - bars)
+        desc  = (
+            f"**📊 TOTAL DE SWAPS:** `{total}`\n\n"
+            f"🆕 **CREATE SWAP:** `{create}`\n"
+            f"✅ **SWAP EXECUTADO:** `{execute}`\n\n"
+            f"`{bar}` `{total} swaps/2h`"
+        )
+        color = 0x38BDF8
+    _async_post({
+        "embeds": [{
+            "title": f"🔄 SWAPBOOK WEbdEX — {hora_str}",
+            "description": desc,
+            "color": color,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · SwapBook · Relatório 2h · Polygon"},
+        }]
+    }, url=_WEBHOOK_SWAPS)
+
+
+def notify_onchain_event(
+    title: str,
+    description: str,
+    color: int = 0x00FFB2,
+    tx_hash: str = "",
+) -> None:
+    """Evento curado ao vivo → #webdex-on-chain (pulso do protocolo)."""
+    poly = f"\n[🔗 Polygonscan](https://polygonscan.com/tx/{tx_hash})" if tx_hash else ""
+    _async_post({
+        "embeds": [{
+            "title": title,
+            "description": description + poly,
+            "color": color,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · Polygon · Ao Vivo"},
+        }]
     }, url=_WEBHOOK_ONCHAIN)
+
+
+def notify_onchain_heartbeat(
+    ops_2h: int,
+    hora_str: str,
+    swaps: int = 0,
+    webdex_moves: int = 0,
+    new_holders: int = 0,
+    new_wallets: int = 0,
+    pnl: float = 0.0,
+) -> None:
+    """Heartbeat 2h consolidado → #webdex-on-chain."""
+    bars = min(10, max(1, round(ops_2h / 400)))
+    bar  = "█" * bars + "░" * (10 - bars)
+
+    lines = []
+    if swaps > 0:
+        lines.append(f"🔄 **Swaps executados:** `{swaps}`")
+    if webdex_moves > 0:
+        lines.append(f"💎 **Movimentos WEbdEX:** `{webdex_moves}`")
+    if new_holders > 0:
+        lines.append(f"🆕 **Novos holders:** `{new_holders}`")
+    if new_wallets > 0:
+        lines.append(f"👛 **Novas carteiras:** `{new_wallets}`")
+    if pnl != 0.0:
+        sign = "+" if pnl >= 0 else ""
+        emoji_pnl = "🟢" if pnl >= 0 else "🔴"
+        lines.append(f"{emoji_pnl} **P&L do ciclo:** `{sign}${pnl:.2f}`")
+
+    activity = "\n".join(lines) if lines else "*Protocolo estável — aguardando próximos eventos.*"
+
+    _async_post({
+        "embeds": [{
+            "title": f"📡 WEbdEX PROTOCOL — PULSO 2H · {hora_str}",
+            "description": (
+                f"**O OCME monitora a blockchain Polygon em tempo real.**\n\n"
+                f"⚡ **OPERAÇÕES (2h):** `{ops_2h:,}`\n"
+                f"`{bar}`\n\n"
+                f"─────────────────────────\n"
+                f"{activity}\n\n"
+                f"🔗 Polygon Mainnet · `{hora_str}`"
+            ),
+            "color": 0x00FFB2,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · OCME Monitor · Ao vivo"},
+        }]
+    }, url=_WEBHOOK_ONCHAIN)
+
+
+def notify_nova_carteira(endereco: str, total_holders: int) -> None:
+    """Nova carteira conectada ao protocolo → #conquistas."""
+    short = f"{endereco[:6]}…{endereco[-4:]}" if len(endereco) > 12 else endereco
+    _async_post({
+        "embeds": [{
+            "title": "🎉 Nova Carteira Conectada!",
+            "description": (
+                f"🔗 **`{short}`** abriu posição no protocolo\n\n"
+                f"👥 Total de holders: **`{total_holders}`**"
+            ),
+            "color": _COLOR_MILESTONE,
+            "footer": {"text": "WEbdEX Protocol · OCME"},
+        }]
+    }, url=_WEBHOOK_CONQUISTAS)
 
 
 def notify_ciclo_report(
@@ -129,13 +370,21 @@ def notify_ciclo_report(
         color = _COLOR_CICLO
         desc  = _telegram_to_discord(summary)
 
+    ocme_block = (
+        f"\n\n─────────────────────────\n"
+        f"💡 **Tem o OCME_bd no Telegram?**\n"
+        f"Quem tem o bot ativo recebe este relatório **personalizado por carteira**,\n"
+        f"análise por trade, alertas de anomalia e acesso total ao fluxo do protocolo.\n"
+        f"**Informação é poder. Na WEbdEX, ela vem até você.**\n\n"
+        f"[→ Ativar OCME_bd — Beta Gratuito]({_OCME_BD_LINK})"
+    )
     _async_post({
         "embeds": [{
-            "title": "🌙 Relatório do Ciclo 21h — WEbdEX",
-            "description": desc,
+            "title": "🌙 RELATÓRIO DO CICLO 21H — WEbdEX PROTOCOL",
+            "description": desc + ocme_block,
             "color": color,
-            "thumbnail": {"url": "https://webdex.app/logo.png"},
-            "footer": {"text": "WEbdEX Protocol · Ciclo 21h BR"},
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · Ciclo 21h BR · Polygon"},
         }]
     }, url=_WEBHOOK_RELATORIO)
 
