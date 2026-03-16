@@ -59,6 +59,25 @@ TOKENS_MAP = {
 }
 
 # ==============================================================================
+# RATE LIMITING — proteção contra spam/flood de comandos
+# ==============================================================================
+_rate_cache: dict[int, float] = {}
+_rate_lock  = threading.Lock()
+
+def _throttle(user_id: int, seconds: float, label: str = "") -> bool:
+    """
+    Verifica se o usuário pode executar a ação agora.
+    Retorna True se BLOQUEADO (ainda no cooldown), False se LIBERADO.
+    """
+    now = time.time()
+    with _rate_lock:
+        last = _rate_cache.get(user_id, 0.0)
+        if now - last < seconds:
+            return True   # bloqueado
+        _rate_cache[user_id] = now
+        return False      # liberado
+
+# ==============================================================================
 # DASH GRAPH CACHE TTL
 # ==============================================================================
 DASH_GRAPH_TTL = 300  # 5 min
@@ -164,7 +183,7 @@ def require_auth(func):
                 return func(m, *args, **kwargs)
             return func(m, u, *args, **kwargs)
         except Exception as e:
-            logger.exception(e)
+            logger.error("[handler] %s", e)
             try:
                 send_support(
                     m.chat.id,
@@ -199,6 +218,10 @@ def auto_resume_notify():
 # ==============================================================================
 @bot.message_handler(commands=["start"])
 def start(m):
+    # Rate limit: máx 1 /start a cada 3 segundos por usuário
+    if _throttle(m.from_user.id, 3.0, "start"):
+        return
+
     if not get_user(m.chat.id):
         upsert_user(m.chat.id)
 
@@ -1958,7 +1981,7 @@ def ia_question(m):
     try:
         answer = ai_answer_ptbr(t, chat_id=chat_id)
     except Exception as e:
-        logger.exception("IA falhou")
+        logger.error("[ia] falhou")
         answer = (
             "⚠️ A IA falhou momentaneamente.\n\n"
             "✅ Isso pode ocorrer por instabilidade externa (rede/timeout).\n"

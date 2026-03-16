@@ -78,7 +78,7 @@ def adm_pro_menu(m, u=None):
         msg = _adm_pro_report()
         _send_long(m.chat.id, msg, reply_markup=adm_kb())
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         send_support(m.chat.id, "⚠️ Erro ao gerar relatório ADM PRO.", reply_markup=adm_kb())
 
 def adm_menu(m, u=None, *args, **kwargs):
@@ -467,7 +467,7 @@ def _limites_callback(c):
         else:                            tip = "✅"
         bot.answer_callback_query(c.id, f"✅ {tip}")
     except Exception as e:
-        logger.exception("Erro ajustando limites: %s", e)
+        logger.error("Erro ajustando limites: %s", e)
         bot.answer_callback_query(c.id, "⚠️ Erro ao ajustar.")
     try:
         bot.edit_message_text(
@@ -494,7 +494,7 @@ def adm_pro_handler(m):
     try:
         _send_long(m.chat.id, _adm_pro_report(), reply_markup=_adm_pro_kb())
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         send_support(m.chat.id, "⚠️ Erro ao gerar relatório ADM PRO.", reply_markup=adm_kb())
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("admpr_"))
@@ -511,7 +511,7 @@ def _adm_pro_callback(c):
             parse_mode="HTML", reply_markup=_adm_pro_kb()
         )
     except Exception as e:
-        logger.exception("[admpr] refresh error: %s", e)
+        logger.error("[admpr] refresh error: %s", e)
 
 def _relatorio_kb():
     kb = types.InlineKeyboardMarkup()
@@ -644,7 +644,7 @@ def adm_relatorio_institucional(m):
     try:
         _send_long(m.chat.id, _relatorio_build_text(), reply_markup=_relatorio_kb())
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("relatorio_"))
@@ -661,7 +661,7 @@ def _relatorio_callback(c):
             parse_mode="HTML", reply_markup=_relatorio_kb()
         )
     except Exception as e:
-        logger.exception("[relatorio] refresh error: %s", e)
+        logger.error("[relatorio] refresh error: %s", e)
 
 def _inatividade_kb():
     kb = types.InlineKeyboardMarkup()
@@ -748,7 +748,7 @@ def inatividade_pro(m):
     try:
         _send_long(m.chat.id, _inatividade_text(), reply_markup=_inatividade_kb())
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         send_support(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("inativ_"))
@@ -765,7 +765,7 @@ def _inatividade_callback(c):
             parse_mode="HTML", reply_markup=_inatividade_kb()
         )
     except Exception as e:
-        logger.exception("[inativ] refresh error: %s", e)
+        logger.error("[inativ] refresh error: %s", e)
 
 
 # ==============================================================================
@@ -904,7 +904,7 @@ def adm_analise_subaccounts(m):
     try:
         _send_long(m.chat.id, _subaccounts_text(), reply_markup=_subaccounts_kb())
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("subac_"))
@@ -921,7 +921,7 @@ def _subaccounts_callback(c):
             parse_mode="HTML", reply_markup=_subaccounts_kb()
         )
     except Exception as e:
-        logger.exception("[subac] refresh error: %s", e)
+        logger.error("[subac] refresh error: %s", e)
 
 
 # ==============================================================================
@@ -1040,7 +1040,7 @@ def adm_lucro_real(m):
         bot.send_message(m.chat.id, _lucro_real_text("ciclo"),
                          parse_mode="HTML", reply_markup=_lucro_real_kb("ciclo"))
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
 
 @bot.callback_query_handler(func=lambda c: (c.data or "").startswith("lucro_"))
@@ -1057,7 +1057,7 @@ def _lucro_real_callback(c):
         bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
                               parse_mode="HTML", reply_markup=_lucro_real_kb(periodo))
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
 
 
 # ==============================================================================
@@ -1374,7 +1374,7 @@ def adm_lucro_protocolo(m):
         bot.send_message(m.chat.id, _lucro_protocolo_text("ciclo"),
                          parse_mode="HTML", reply_markup=_lucro_protocolo_kb("ciclo"))
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
 
 
@@ -1392,7 +1392,7 @@ def _lucro_protocolo_callback(c):
         bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
                               parse_mode="HTML", reply_markup=_lucro_protocolo_kb(periodo))
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
 
 
 # ==============================================================================
@@ -1710,7 +1710,7 @@ def adm_fornecimento_liquidez(m):
         bot.delete_message(m.chat.id, loading.message_id)
         bot.send_message(m.chat.id, txt, parse_mode="HTML", reply_markup=_fl_kb())
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.edit_message_text(f"⚠️ Erro: {e}", m.chat.id, loading.message_id,
                               reply_markup=adm_kb())
 
@@ -1730,7 +1730,7 @@ def _fl_callback(c):
             bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
                                   parse_mode="HTML", reply_markup=_fl_kb())
         except Exception as e:
-            logger.exception(e)
+            logger.error("[admin] %s", e)
             bot.answer_callback_query(c.id, f"⚠️ Erro: {e}")
 
 
@@ -2107,7 +2107,7 @@ def adm_progressao_capital(m):
     try:
         _send_long(m.chat.id, _prog_capital_text(), reply_markup=_prog_capital_kb())
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.send_message(m.chat.id, f"⚠️ Erro ao enviar: {e}", reply_markup=adm_kb())
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("prog_"))
@@ -2124,7 +2124,7 @@ def _prog_capital_callback(c):
             parse_mode="HTML", reply_markup=_prog_capital_kb()
         )
     except Exception as e:
-        logger.exception("[prog_capital] refresh error: %s", e)
+        logger.error("[prog_capital] refresh error: %s", e)
 
 
 # ==============================================================================
@@ -2252,7 +2252,7 @@ def adm_status_monitor(m):
         bot.send_message(m.chat.id, _status_monitor_text(), parse_mode="HTML",
                          reply_markup=_status_monitor_kb())
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
 
 @bot.callback_query_handler(func=lambda c: (c.data or "").startswith("status_"))
@@ -2341,7 +2341,7 @@ def adm_gerar_convites(m):
             return bot.send_message(m.chat.id, txt, reply_markup=adm_kb())
         bot.send_message(m.chat.id, txt, parse_mode="HTML", reply_markup=kb)
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.send_message(m.chat.id, f"⚠️ Erro: {e}", reply_markup=adm_kb())
 
 @bot.callback_query_handler(func=lambda c: (c.data or "").startswith("convite_"))
@@ -2400,7 +2400,7 @@ def _do_convites_csv(chat_id: int):
             caption=f"📨 {len(wallets)} wallets — links de convite prontos.",
         )
     except Exception as e:
-        logger.exception(e)
+        logger.error("[admin] %s", e)
         bot.send_message(chat_id, f"⚠️ Erro ao gerar CSV: {e}")
 
 
@@ -2471,6 +2471,8 @@ def _broadcast_audience_callback(c):
     bot.answer_callback_query(c.id, f"✅ Audiência: {label}")
     bot.register_next_step_handler_by_chat_id(c.from_user.id, _broadcast_receive_text)
 
+_MAX_BROADCAST_CHARS = 4000   # Telegram limita mensagens a ~4096 chars
+
 def _broadcast_receive_text(m):
     if not _is_admin(m.chat.id):
         return
@@ -2480,6 +2482,12 @@ def _broadcast_receive_text(m):
         return bot.send_message(m.chat.id, "❌ Broadcast cancelado.", reply_markup=adm_kb())
     if not txt:
         return bot.send_message(m.chat.id, "⚠️ Mensagem vazia. Tente novamente.", reply_markup=adm_kb())
+    if len(txt) > _MAX_BROADCAST_CHARS:
+        return bot.send_message(
+            m.chat.id,
+            f"⚠️ Mensagem muito longa ({len(txt):,} chars). Máximo: {_MAX_BROADCAST_CHARS:,} chars.",
+            reply_markup=adm_kb(),
+        )
 
     audience = _BROADCAST_AUDIENCE.get(m.chat.id, "all")
     try:

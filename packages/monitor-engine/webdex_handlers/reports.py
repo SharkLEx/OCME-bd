@@ -1100,7 +1100,7 @@ def _mybdbook_adm_callback(c):
         bot.edit_message_text(txt, c.message.chat.id, c.message.message_id,
                               parse_mode="HTML", reply_markup=_mybdbook_adm_kb(periodo))
     except Exception as e:
-        logger.exception(e)
+        logger.error("[handler] %s", e)
 
 
 def _handle_myfxbook_adm(m):

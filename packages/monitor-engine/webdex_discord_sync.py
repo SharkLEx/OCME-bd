@@ -10,6 +10,7 @@ Roteamento por canal (categoria ⚡ PROTOCOLO AO VIVO):
   _WEBHOOK_RELATORIO  → #relatório-diário (ciclo 21h diário)
   _WEBHOOK_GM         → #gm-wagmi         (ritual diário das 7h)
 """
+import os
 import re
 import time
 import logging
@@ -19,36 +20,29 @@ import requests
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────
-# Webhooks por canal
+# Webhooks por canal — lidos de variáveis de ambiente
 # ─────────────────────────────────────────────────────────────
-_WEBHOOK_ONCHAIN = (
-    "https://discord.com/api/webhooks/1482729962258563263/"
-    "ku-KJGFzT3nKqUkcS1sYrmzNrNbSt2jLbkzIPKmYs2hoOaRdj65OfkVH6Tqo0eIW2XwQ"
-)
-_WEBHOOK_OPERACOES = (
-    "https://discord.com/api/webhooks/1482918967021539462/"
-    "3BUlXTlJXD-IhMy8rBI26Rz5ljadnDxlDv0TFLiIfHCOeL4FOuRET21k2hkvm33kzyqK"
-)
-_WEBHOOK_SWAPS = (
-    "https://discord.com/api/webhooks/1482919384925081601/"
-    "UP1GPARFewvvPoXt2vjdz1PAczVuqOa3u68USVSU0zCgDcBASI7oKkbVjyvlSDkKhC4s"
-)
-_WEBHOOK_RELATORIO = (
-    "https://discord.com/api/webhooks/1482919871112019969/"
-    "wF5y-kC6FLjxmuxm13OlKzPBn4Bz2GUTJpBIVRPjrHW4mdmLLGPXD5RopWS0cjGMkOTh"
-)
-_WEBHOOK_GM = (
-    "https://discord.com/api/webhooks/1482920003421470757/"
-    "2r20C8lUm2V5ScJIEhCGJnF4Q2uswR9EbLx7aNv8mNe0LnJw3gHUHMx8XmXWCwZEdEry"
-)
-_WEBHOOK_TOKEN_BD = (
-    "https://discord.com/api/webhooks/1483080174408044655/"
-    "YU0bYNU2hELqImBdmnqjp3HEnkNTCN0DkbZAPXz0hI21AlcH1pj98ETkm4Q5N2mvAX1J"
-)
-_WEBHOOK_CONQUISTAS = (
-    "https://discord.com/api/webhooks/1483080178237313075/"
-    "92ir9DIHCW4TrVxHIMr3xsxPLy2piynxaGfwqq4zhAY7Lo3pz9B7iLxqIAEGECKFafNW"
-)
+_WEBHOOK_ONCHAIN    = os.getenv("DISCORD_WEBHOOK_ONCHAIN", "").strip()
+_WEBHOOK_OPERACOES  = os.getenv("DISCORD_WEBHOOK_OPERACOES", "").strip()
+_WEBHOOK_SWAPS      = os.getenv("DISCORD_WEBHOOK_SWAPS", "").strip()
+_WEBHOOK_RELATORIO  = os.getenv("DISCORD_WEBHOOK_RELATORIO", "").strip()
+_WEBHOOK_GM         = os.getenv("DISCORD_WEBHOOK_GM", "").strip()
+_WEBHOOK_TOKEN_BD   = os.getenv("DISCORD_WEBHOOK_TOKEN_BD", "").strip()
+_WEBHOOK_CONQUISTAS = os.getenv("DISCORD_WEBHOOK_CONQUISTAS", "").strip()
+
+# Validação de startup — falha rápido se algum webhook não configurado
+_REQUIRED_WEBHOOKS = {
+    "DISCORD_WEBHOOK_ONCHAIN":    _WEBHOOK_ONCHAIN,
+    "DISCORD_WEBHOOK_OPERACOES":  _WEBHOOK_OPERACOES,
+    "DISCORD_WEBHOOK_SWAPS":      _WEBHOOK_SWAPS,
+    "DISCORD_WEBHOOK_RELATORIO":  _WEBHOOK_RELATORIO,
+    "DISCORD_WEBHOOK_GM":         _WEBHOOK_GM,
+    "DISCORD_WEBHOOK_TOKEN_BD":   _WEBHOOK_TOKEN_BD,
+    "DISCORD_WEBHOOK_CONQUISTAS": _WEBHOOK_CONQUISTAS,
+}
+_missing = [k for k, v in _REQUIRED_WEBHOOKS.items() if not v]
+if _missing:
+    logger.warning("[discord_sync] Webhooks não configurados no .env: %s", ", ".join(_missing))
 
 # ─────────────────────────────────────────────────────────────
 # Cores padrão

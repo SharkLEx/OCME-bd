@@ -574,7 +574,8 @@ def _update_user_funnel(chat_id: int, wallet: str):
             )
         conn.commit()
     except Exception as e:
-        logger.warning(f"[funnel] Falha ao atualizar funil chat_id={chat_id} wallet={wallet[:8]}...: {e}")
+        _w = f"{wallet[:6]}...{wallet[-4:]}" if wallet and len(wallet) > 10 else "?"
+        logger.warning("[funnel] Falha ao atualizar funil chat_id=%s wallet=%s: %s", chat_id, _w, e)
 
 def process_log(log, tipo_evento):
     tx = normalize_txhash(log.get("transactionHash"))
