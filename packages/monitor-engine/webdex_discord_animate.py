@@ -17,6 +17,7 @@ Eventos suportados:
 """
 
 import os
+import random
 import time
 import threading
 import logging
@@ -64,14 +65,24 @@ _PROMPTS: dict[str, str] = {
         "Cute cartoon mascot jumping for joy with fist pump, "
         "green sparkles and coins, victorious celebration"
     ),
-    "relatorio_win": (
+    "relatorio_win": [
         "Cute cartoon mascot celebrating end of day, holding green profit chart, "
-        "confetti rain, victorious fist pump, moonlit night background"
-    ),
-    "relatorio_loss": (
+        "confetti rain, victorious fist pump, moonlit night background",
+        "Cute colorful cartoon mascot doing victory dance, green coins raining down, "
+        "crypto charts glowing green, arms raised in celebration, starry night sky",
+        "Cute cartoon character surfing on a giant green upward arrow, sparkles and stars, "
+        "triumphant confident expression, moonlit cityscape background",
+        "Cute cartoon mascot popping champagne bottle with green sparkles exploding, "
+        "golden trophy glowing beside it, happy dance, moonlit rooftop scene",
+    ],
+    "relatorio_loss": [
         "Cute cartoon mascot in thoughtful pose, looking at chart, "
-        "determined face, night sky background, resilient energy"
-    ),
+        "determined face, night sky background, resilient energy",
+        "Cute cartoon character sitting cross-legged, contemplating a red chart, "
+        "focused and determined expression, calm night sky, ready to come back stronger",
+        "Cute cartoon mascot meditating in zen pose, peaceful stars around, "
+        "soft moonlight, calm acceptance, glowing aura of resilience",
+    ],
 }
 
 
@@ -230,7 +241,8 @@ def animate_and_post(
         return
 
     def _run():
-        prompt = _PROMPTS.get(event, _PROMPTS["milestone"])
+        _p = _PROMPTS.get(event, _PROMPTS["milestone"])
+        prompt = random.choice(_p) if isinstance(_p, list) else _p
         pred_id = _start_prediction(prompt)
         if not pred_id:
             return

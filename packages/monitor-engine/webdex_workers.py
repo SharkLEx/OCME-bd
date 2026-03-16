@@ -167,19 +167,38 @@ def agendador_21h():
                     if _animate:
                         _evento_21h = "relatorio_win" if _agg_liq >= 0 else "relatorio_loss"
                         _emoji_21h  = "🟢" if _agg_liq >= 0 else "🔴"
-                        _pnl_str    = f"+${_agg_liq:.2f}" if _agg_liq >= 0 else f"-${abs(_agg_liq):.2f}"
+                        _bruto      = _agg_liq + _agg_gas
+                        _liq_str    = f"+${_agg_liq:.2f}" if _agg_liq >= 0 else f"-${abs(_agg_liq):.2f}"
+                        _bruto_str  = f"+${_bruto:.2f}" if _bruto >= 0 else f"-${abs(_bruto):.2f}"
                         _wr_21h     = (_agg_wins / _agg_trades * 100) if _agg_trades > 0 else 0.0
+                        _wr_bar     = "█" * int(_wr_21h / 10) + "░" * (10 - int(_wr_21h / 10))
+                        _color      = 0x00FF88 if _agg_liq >= 0 else 0xFF4444
+                        _titulo     = (
+                            f"{_emoji_21h}  RELATÓRIO NOTURNO — WEbdEX PROTOCOL"
+                            if _agg_liq >= 0 else
+                            f"{_emoji_21h}  RELATÓRIO NOTURNO — WEbdEX PROTOCOL"
+                        )
+                        _desc = (
+                            f"## {_emoji_21h} RESULTADO DO DIA\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                            f"💰  **P&L BRUTO**\n"
+                            f"### `{_bruto_str}`\n\n"
+                            f"⛽  **Custo de Gás**\n"
+                            f"**`-${_agg_gas:.2f}`**\n\n"
+                            f"✨  **P&L LÍQUIDO**\n"
+                            f"# `{_liq_str}`\n\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"📊  **{_agg_trades} trades**  ·  "
+                            f"**WinRate {_wr_21h:.0f}%**\n"
+                            f"`{_wr_bar}`\n\n"
+                            f"🗓️  {hoje}  ·  *WEbdEX Protocol*"
+                        )
                         _animate(
                             _evento_21h,
                             _WEBHOOK_RELATORIO,
-                            title=f"{_emoji_21h} Relatório 21h — WEbdEX",
-                            description=(
-                                f"**P&L Líquido:** `{_pnl_str}`\n"
-                                f"**Trades:** `{_agg_trades}` · **WinRate:** `{_wr_21h:.0f}%`\n"
-                                f"**Gás Total:** `${_agg_gas:.2f}`\n"
-                                f"**Data:** {hoje}"
-                            ),
-                            color=0x00FF88 if _agg_liq >= 0 else 0xFF4444,
+                            title=_titulo,
+                            description=_desc,
+                            color=_color,
                         )
                 time.sleep(70)
         except Exception as _ae:
