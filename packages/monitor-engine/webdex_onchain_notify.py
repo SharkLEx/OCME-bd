@@ -614,8 +614,9 @@ def _check_webdex_holders(from_b: int, to_b: int):
 
             # ── Feed ao vivo → #webdex-on-chain (A CEREJA DO BOLO) ───────────
             # TODA movimentação do token WEbdEX aparece aqui — sem threshold
-            tipo  = "MINT" if from_addr.lower() == ZERO else ("BURN" if to_addr.lower() == ZERO else "TRANSFER")
-            icone_tipo = "🌱" if tipo == "MINT" else ("🔥" if tipo == "BURN" else "💎")
+            # WEbdEX não tem BURN — apenas MINT (deploy) e TRANSFER
+            tipo  = "MINT" if from_addr.lower() == ZERO else "TRANSFER"
+            icone_tipo = "🌱" if tipo == "MINT" else "💎"
 
             if is_new:
                 holder_count = _count_webdex_holders() + 1
@@ -642,7 +643,7 @@ def _check_webdex_holders(from_b: int, to_b: int):
                         f"📤 `{_short(from_addr)}`  ➜  📥 `{_short(to_addr)}`"
                         f"{link_line}"
                     ),
-                    color=0xA855F7 if tipo == "TRANSFER" else (0x00FF88 if tipo == "MINT" else 0xFF4444),
+                    color=0x00FF88 if tipo == "MINT" else 0xA855F7,
                     tx_hash=tx_hash,
                 )
                 inc_pulse_stat("webdex_moves")

@@ -166,10 +166,9 @@ def notify_webdex_transfer(
     short_to   = f"{to_addr[:6]}…{to_addr[-4:]}"
     ZERO = "0x0000000000000000000000000000000000000000"
 
+    # WEbdEX não tem BURN — apenas MINT (deploy) e TRANSFER
     if from_addr.lower() == ZERO:
         tipo, icone, cor = "MINT", "🌱", 0x00FF88
-    elif to_addr.lower() == ZERO:
-        tipo, icone, cor = "BURN", "🔥", 0xFF4444
     else:
         tipo, icone, cor = "TRANSFER", "💎", 0xFFD700
 
