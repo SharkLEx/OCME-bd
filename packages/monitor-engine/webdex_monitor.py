@@ -38,10 +38,6 @@ except ImportError:
     _ocme_notify_progress = None  # type: ignore[assignment]
     _ocme_get_cache = None        # type: ignore[assignment]
 
-try:
-    from webdex_discord_sync import notify_operacao as _discord_notify_op
-except ImportError:
-    _discord_notify_op = None    # type: ignore[assignment]
 
 # ==============================================================================
 # 🧠 HEALTH
@@ -709,19 +705,6 @@ def process_log(log, tipo_evento):
                         bloco=int(log.get("blockNumber") or 0),
                         network="Polygon",
                     )
-                # Discord #operações — uma notificação por trade
-                if _discord_notify_op is not None:
-                    try:
-                        _discord_notify_op(
-                            sub=str(args["accountId"]),
-                            valor=float(val),
-                            token=str(meta["sym"]),
-                            estrategia=strategy_name,
-                            env=ambiente,
-                            tx_hash=tx,
-                        )
-                    except Exception:
-                        pass
 
         elif tipo_evento == "Transfer":
             addr = str(log.get("address", "")).lower()

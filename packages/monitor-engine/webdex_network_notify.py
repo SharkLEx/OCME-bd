@@ -82,7 +82,7 @@ _CONFIG_LAST_BLOCK = "network_notify_last_block"
 _POLYGONSCAN_TX    = "https://polygonscan.com/tx/{}"
 _POLYGONSCAN_ADDR  = "https://polygonscan.com/address/{}"
 _MIN_USD           = 1.0    # mínimo $1 para entrar no buffer
-_FLUSH_INTERVAL    = 300    # 5 minutos — janela de agregação
+_FLUSH_INTERVAL    = 21_600  # 6 horas — janela de agregação
 
 # Buffer de agregação — acumula eventos e envia UMA mensagem resumida
 _buf_add:    list = []   # [(usd_value, coin_sym)]

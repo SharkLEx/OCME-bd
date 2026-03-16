@@ -28,7 +28,7 @@ from webdex_chain import (
     _is_429_error,
 )
 from webdex_db import DB_LOCK, cursor, conn, get_config, set_config
-from webdex_discord_sync import _async_post
+from webdex_discord_sync import _async_post, _WEBHOOK_OPERACOES
 
 # ─────────────────────────────────────────────────────────────
 # Endereços monitorados
@@ -263,7 +263,7 @@ def _notify_new_wallet(wallet: str, tx_hash: str, profit_raw: int = 0):
         ),
         "color": _COLOR_WALLET,
         "footer": {"text": "WEbdEX Protocol · Polygon"},
-    }]})
+    }]}, url=_WEBHOOK_OPERACOES)
 
 
 # ─────────────────────────────────────────────────────────────
