@@ -163,18 +163,24 @@ def agendador_21h():
                         wins=_agg_wins,
                         gas=_agg_gas,
                     )
-                    # Vídeo branded Creatomate → #relatório-diário
-                    if _render_21h:
-                        try:
-                            _render_21h(
-                                pnl=_agg_liq,
-                                trades=_agg_trades,
-                                wins=_agg_wins,
-                                gas=_agg_gas,
-                                data=hoje,
-                            )
-                        except Exception as _ce:
-                            logger.error("[agendador_21h] Creatomate falhou: %s", _ce)
+                    # Animação bdZinho 21h → #relatório-diário
+                    if _animate:
+                        _evento_21h = "relatorio_win" if _agg_liq >= 0 else "relatorio_loss"
+                        _emoji_21h  = "🟢" if _agg_liq >= 0 else "🔴"
+                        _pnl_str    = f"+${_agg_liq:.2f}" if _agg_liq >= 0 else f"-${abs(_agg_liq):.2f}"
+                        _wr_21h     = (_agg_wins / _agg_trades * 100) if _agg_trades > 0 else 0.0
+                        _animate(
+                            _evento_21h,
+                            _WEBHOOK_RELATORIO,
+                            title=f"{_emoji_21h} Relatório 21h — WEbdEX",
+                            description=(
+                                f"**P&L Líquido:** `{_pnl_str}`\n"
+                                f"**Trades:** `{_agg_trades}` · **WinRate:** `{_wr_21h:.0f}%`\n"
+                                f"**Gás Total:** `${_agg_gas:.2f}`\n"
+                                f"**Data:** {hoje}"
+                            ),
+                            color=0x00FF88 if _agg_liq >= 0 else 0xFF4444,
+                        )
                 time.sleep(70)
         except Exception as _ae:
             logger.warning("[agendador_21h] erro no ciclo: %s", _ae)

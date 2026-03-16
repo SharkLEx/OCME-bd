@@ -37,7 +37,7 @@ _BDZINHO_URL = os.getenv(
 
 _MODEL_OWNER  = "minimax"
 _MODEL_NAME   = "video-01"
-_POLL_TIMEOUT = 120   # segundos máx para esperar o vídeo
+_POLL_TIMEOUT = 300   # segundos máx para esperar o vídeo (minimax ~2-3min)
 _POLL_SLEEP   = 6     # intervalo entre polls
 
 # Controle de gasto — não ultrapassar $8 dos $10 disponíveis
