@@ -25,7 +25,7 @@ from webdex_chain import (
 )
 from webdex_bot_core import send_html, _notif_worker, send_logo_photo
 from webdex_discord_sync import (
-    notify_ciclo_report, notify_gm, _WEBHOOK_GM,
+    notify_ciclo_report, notify_protocolo_relatorio, notify_gm, _WEBHOOK_GM,
     notify_operacoes_horario, notify_swaps_horario, notify_onchain_heartbeat,
     _WEBHOOK_OPERACOES, _WEBHOOK_SWAPS, _WEBHOOK_RELATORIO,
     get_pulse_stats_and_reset,
@@ -154,52 +154,78 @@ def agendador_21h():
                         _agg_liq += liq; _agg_gas += gas_t
                         _agg_trades += total_t; _agg_wins += wins
                     set_config(f"last_rep_{cid}", hoje)
-                # Relatório agregado Discord — uma mensagem por noite
-                if rows:
-                    notify_ciclo_report(
-                        summary=f"🌙 Ciclo 21h encerrado — {hoje}",
-                        liq=_agg_liq,
-                        trades=_agg_trades,
-                        wins=_agg_wins,
-                        gas=_agg_gas,
-                    )
-                    # Animação bdZinho 21h → #relatório-diário
-                    if _animate:
-                        _evento_21h = "relatorio_win" if _agg_liq >= 0 else "relatorio_loss"
-                        _emoji_21h  = "🟢" if _agg_liq >= 0 else "🔴"
-                        _bruto      = _agg_liq + _agg_gas
-                        _liq_str    = f"+${_agg_liq:.2f}" if _agg_liq >= 0 else f"-${abs(_agg_liq):.2f}"
-                        _bruto_str  = f"+${_bruto:.2f}" if _bruto >= 0 else f"-${abs(_bruto):.2f}"
-                        _wr_21h     = (_agg_wins / _agg_trades * 100) if _agg_trades > 0 else 0.0
-                        _wr_bar     = "█" * int(_wr_21h / 10) + "░" * (10 - int(_wr_21h / 10))
-                        _color      = 0x00FF88 if _agg_liq >= 0 else 0xFF4444
-                        _titulo     = (
-                            f"{_emoji_21h}  RELATÓRIO NOTURNO — WEbdEX PROTOCOL"
-                            if _agg_liq >= 0 else
-                            f"{_emoji_21h}  RELATÓRIO NOTURNO — WEbdEX PROTOCOL"
+                # Relatório protocolo Discord — UMA mensagem por noite (guard de data)
+                _discord_21h_key = f"discord_21h_{hoje}"
+                if get_config(_discord_21h_key, "") != "ok":
+                    try:
+                        from webdex_chain import chain_pol_price
+                        _pol_price = chain_pol_price()
+                        _dt_lim = _ciclo_21h_since()
+                        with DB_LOCK:
+                            _pr = cursor.execute("""
+                                SELECT COUNT(*), COUNT(DISTINCT wallet),
+                                       ROUND(SUM(profit),4),
+                                       COUNT(CASE WHEN profit>0 THEN 1 END),
+                                       ROUND(SUM(fee_bd),6),
+                                       ROUND(SUM(gas_pol),6)
+                                FROM protocol_ops WHERE ts>=?
+                            """, (_dt_lim,)).fetchone()
+                            _bd_all = float(cursor.execute(
+                                "SELECT ROUND(SUM(fee_bd),4) FROM protocol_ops WHERE fee_bd>0"
+                            ).fetchone()[0] or 0)
+                            _proto_count = int(cursor.execute(
+                                "SELECT COUNT(*) FROM protocol_ops"
+                            ).fetchone()[0] or 0)
+                            _top5 = cursor.execute("""
+                                SELECT wallet,
+                                       ROUND(SUM(profit),4), COUNT(*),
+                                       ROUND(SUM(fee_bd),4), ROUND(SUM(gas_pol),4)
+                                FROM protocol_ops WHERE ts>=?
+                                GROUP BY wallet ORDER BY SUM(profit) DESC LIMIT 5
+                            """, (_dt_lim,)).fetchall()
+                        _p_trades  = int(_pr[0] or 0)
+                        _p_traders = int(_pr[1] or 0)
+                        _p_lucro   = float(_pr[2] or 0)
+                        _p_wins    = int(_pr[3] or 0)
+                        _p_bd      = float(_pr[4] or 0)
+                        _p_gas_pol = float(_pr[5] or 0)
+                        _p_gas_usd = _p_gas_pol * _pol_price
+                        notify_protocolo_relatorio(
+                            hoje=hoje,
+                            pol_price=_pol_price,
+                            p_trades=_p_trades,
+                            p_traders=_p_traders,
+                            p_lucro=_p_lucro,
+                            p_wins=_p_wins,
+                            p_gas_pol=_p_gas_pol,
+                            p_gas_usd=_p_gas_usd,
+                            p_bd=_p_bd,
+                            bd_alltime=_bd_all,
+                            proto_count=_proto_count,
+                            top_traders=_top5,
                         )
-                        _desc = (
-                            f"## {_emoji_21h} RESULTADO DO DIA\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"💰  **P&L BRUTO**\n"
-                            f"### `{_bruto_str}`\n\n"
-                            f"⛽  **Custo de Gás**\n"
-                            f"**`-${_agg_gas:.2f}`**\n\n"
-                            f"✨  **P&L LÍQUIDO**\n"
-                            f"# `{_liq_str}`\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"📊  **{_agg_trades} trades**  ·  "
-                            f"**WinRate {_wr_21h:.0f}%**\n"
-                            f"`{_wr_bar}`\n\n"
-                            f"🗓️  {hoje}  ·  *WEbdEX Protocol*"
-                        )
-                        _animate(
-                            _evento_21h,
-                            _WEBHOOK_RELATORIO,
-                            title=_titulo,
-                            description=_desc,
-                            color=_color,
-                        )
+                        set_config(_discord_21h_key, "ok")
+                        # Animação bdZinho → #relatório-diário
+                        if _animate and _p_trades > 0:
+                            _ev = "relatorio_win" if _p_lucro >= 0 else "relatorio_loss"
+                            _em = "🟢" if _p_lucro >= 0 else "🔴"
+                            _pl = f"+${_p_lucro:.2f}" if _p_lucro >= 0 else f"-${abs(_p_lucro):.2f}"
+                            _wr = (_p_wins / _p_trades * 100) if _p_trades > 0 else 0.0
+                            _animate(
+                                _ev, _WEBHOOK_RELATORIO,
+                                title=f"{_em}  RELATÓRIO NOTURNO — WEbdEX PROTOCOL",
+                                description=(
+                                    f"## {_em} RESULTADO DO DIA\n"
+                                    f"💎 **P&L Protocolo:** `{_pl}`\n"
+                                    f"📊 **{_p_trades:,} trades** · **{_p_traders} traders** · **WR {_wr:.0f}%**\n"
+                                    f"⛽ **Gás:** `{_p_gas_pol:.2f} POL` (~${_p_gas_usd:.2f})\n"
+                                    f"🏦 **BD coletado:** `{_p_bd:.4f} BD`\n"
+                                    f"🗓️ {hoje}"
+                                ),
+                                color=0x00FF88 if _p_lucro >= 0 else 0xFF4444,
+                            )
+                    except Exception as _de:
+                        logger.error("[agendador_21h] Discord protocolo falhou: %s", _de)
                 time.sleep(70)
         except Exception as _ae:
             logger.warning("[agendador_21h] erro no ciclo: %s", _ae)

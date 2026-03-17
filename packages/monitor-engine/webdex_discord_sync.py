@@ -337,6 +337,83 @@ def notify_nova_carteira(endereco: str, total_holders: int) -> None:
     }, url=_WEBHOOK_CONQUISTAS)
 
 
+def notify_protocolo_relatorio(
+    hoje: str,
+    pol_price: float,
+    p_trades: int,
+    p_traders: int,
+    p_lucro: float,
+    p_wins: int,
+    p_gas_pol: float,
+    p_gas_usd: float,
+    p_bd: float,
+    bd_alltime: float,
+    proto_count: int,
+    top_traders: list,
+) -> None:
+    """Relatório completo 💎 LUCRO TOTAL DO PROTOCOLO → #relatório-diário (Discord)."""
+    p_wr   = (p_wins / p_trades * 100) if p_trades > 0 else 0.0
+    emoji  = "🟢" if p_lucro >= 0 else "🔴"
+    color  = 0x00FF88 if p_lucro >= 0 else 0xFF4444
+    filled = round(p_wr / 10)
+    wr_bar = "█" * filled + "░" * (10 - filled)
+    s_lucro = f"+${p_lucro:.2f}" if p_lucro >= 0 else f"-${abs(p_lucro):.2f}"
+    avg_gas = (p_gas_pol / p_trades) if p_trades > 0 else 0.0
+
+    # Bloco traders
+    desc = (
+        f"## {emoji} RESULTADO DO DIA\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📈  **P&L DOS TRADERS**  *(resultado on-chain dos usuários)*\n"
+        f"  ├─ 📊 Trades: **{p_trades:,}**  👥 Traders: **{p_traders}**  WR: **{p_wr:.1f}%**\n"
+        f"  ├─ ✅ Lucros: **{s_lucro}**\n"
+        f"  └─ `{wr_bar}`\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"⛽  **GÁS CONSUMIDO** *(Transações)*\n"
+        f"  ├─ 🔴 Total POL: **{p_gas_pol:,.4f} POL**  (~${p_gas_usd:.2f})\n"
+        f"  └─ 📊 Média/trade: **{avg_gas:.6f} POL**\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💎  **RECEITA DO PROTOCOLO**  *(BD/Passe coletado on-chain)*\n"
+        f"  ├─ 🏦 Período:   **{p_bd:,.4f} BD**\n"
+        f"  └─ 📦 Acumulado: **{bd_alltime:,.4f} BD**  *(all-time indexado)*\n"
+    )
+
+    # Top 5 traders
+    if top_traders:
+        medals = ["🥇", "🥈", "🥉", "04", "05"]
+        desc += f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🏆  **TOP 5 TRADERS (período)**\n"
+        for i, (wallet, lucro, t_trades, bd_pago, _gas) in enumerate(top_traders):
+            short_w = f"{wallet[:6]}…{wallet[-4:]}" if len(str(wallet)) > 10 else str(wallet)
+            sg = "🟢" if (lucro or 0) >= 0 else "🔴"
+            lstr = f"+${lucro:.2f}" if (lucro or 0) >= 0 else f"-${abs(lucro):.2f}"
+            desc += (
+                f"  {medals[i]}  `{short_w}`\n"
+                f"       {sg} **{lstr}**  ·  {t_trades:,}t  ·  💎 {bd_pago:.3f} BD\n"
+            )
+
+    desc += f"\n\n🔍 *Fonte: on-chain ({proto_count:,} ops indexadas)*\n🗓️  {hoje}  ·  POL: ${pol_price:.4f}"
+
+    # Bloco CTA OCME_bd
+    ocme_block = (
+        f"\n\n─────────────────────────\n"
+        f"💡 **Tem o OCME_bd no Telegram?**\n"
+        f"Quem tem o bot ativo recebe este relatório **personalizado por carteira**,\n"
+        f"análise por trade, alertas de anomalia e acesso total ao fluxo do protocolo.\n"
+        f"**Informação é poder. Na WEbdEX, ela vem até você.**\n\n"
+        f"[→ Ativar OCME_bd — Beta Gratuito]({_OCME_BD_LINK})"
+    )
+
+    _async_post({
+        "embeds": [{
+            "title": "💎 LUCRO TOTAL DO PROTOCOLO — WEbdEX",
+            "description": desc + ocme_block,
+            "color": color,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · Ciclo 21h BR · Polygon"},
+        }]
+    }, url=_WEBHOOK_RELATORIO)
+
+
 def notify_ciclo_report(
     summary: str,
     env: str = "",
