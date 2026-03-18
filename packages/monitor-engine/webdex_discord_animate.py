@@ -20,11 +20,23 @@ import atexit
 import json
 import os
 import random
+import sys
 import tempfile
 import time
 import threading
 import logging
 import requests
+
+# Tenta importar design_tokens do orchestrator (quando disponível no mesmo PYTHONPATH)
+# Fallback: constantes locais para manter o monitor-engine autônomo
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "orchestrator", "discord"))
+    from design_tokens import SUCCESS, WARNING, PINK_LIGHT  # noqa: F401
+    sys.path.pop(0)
+except ImportError:
+    SUCCESS    = 0x00FFB2
+    WARNING    = 0xFF8800
+    PINK_LIGHT = 0xFB0491
 
 logger = logging.getLogger(__name__)
 
@@ -313,7 +325,7 @@ def animate_and_post(
     webhook_url: str,
     title: str = "",
     description: str = "",
-    color: int = 0x00FFB2,
+    color: int = SUCCESS,
 ) -> None:
     """
     Gera clip bdZinho via Replicate e posta no Discord.
