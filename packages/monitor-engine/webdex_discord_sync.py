@@ -55,6 +55,13 @@ _COLOR_TRADE_WIN = 0x00FF88   # verde trade positivo
 _COLOR_TRADE_LOS = 0xFF4444   # vermelho trade negativo
 _COLOR_GM        = 0xE91E8C   # rosa WEbdEX
 
+_OCME_BD_LINK = os.getenv("OCME_BD_LINK", "https://t.me/OCME_bd")
+_BDZINHO_IMG  = os.getenv(
+    "BDZINHO_IMAGE_URL",
+    "https://i.ibb.co/MkcqbvLb/post-149-operador-da-tecnologia-01.jpg",
+)
+_TOKEN_TOTAL_SUPPLY = int(os.getenv("TOKEN_TOTAL_SUPPLY", "369369369"))
+
 # ─────────────────────────────────────────────────────────────
 # Contadores em memória — pulso curado do #webdex-on-chain
 # ─────────────────────────────────────────────────────────────
@@ -72,6 +79,8 @@ def inc_pulse_stat(key: str) -> None:
     with _pulse_lock:
         if key in _pulse_stats:
             _pulse_stats[key] += 1
+        else:
+            logger.warning("[discord_sync] inc_pulse_stat: chave desconhecida '%s'", key)
 
 
 def get_pulse_stats_and_reset() -> dict:
@@ -91,26 +100,46 @@ def _telegram_to_discord(text: str) -> str:
     text = re.sub(r"<pre>(.*?)</pre>", r"```\n\1\n```", text, flags=re.DOTALL)
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"[━┈]{10,}", "─────────────", text)
-    return text[:3900].strip()
+    text = text.strip()
+    if len(text) > 3900:
+        text = text[:3897] + "…"
+    return text
+
+
+def _safe_webhook_id(url: str) -> str:
+    """Retorna identificador seguro do webhook para logs — nunca expõe o token."""
+    try:
+        parts = url.rstrip("/").split("/")
+        # URL formato: .../webhooks/{id}/{token} — usa apenas o ID (posição -2)
+        return f"#{parts[-2][-8:]}"
+    except Exception:
+        return "#unknown"
 
 
 def _post_webhook(payload: dict, url: str) -> None:
-    """POST com retry automático em caso de rate limit (429)."""
+    """POST com retry automático em caso de rate limit (429) ou timeout."""
+    if not url:
+        logger.error("[discord_sync] Webhook URL vazia — mensagem descartada.")
+        return
     for attempt in range(3):
         try:
-            resp = requests.post(url, json=payload, timeout=8)
+            resp = requests.post(url, json=payload, timeout=20)
             if resp.status_code in (200, 204):
                 return
             if resp.status_code == 429:
-                retry_after = resp.json().get("retry_after", 1.0)
-                time.sleep(float(retry_after) + 0.1)
+                retry_after = resp.json().get("retry_after", 2.0)
+                time.sleep(float(retry_after) + 0.2)
                 continue
             logger.warning("[discord_sync] Webhook %s retornou %s: %s",
-                           url[-20:], resp.status_code, resp.text[:200])
+                           _safe_webhook_id(url), resp.status_code, resp.text[:200])
             return
         except Exception as e:
-            logger.warning("[discord_sync] Erro ao enviar webhook: %s", e)
-            return
+            logger.warning("[discord_sync] Tentativa %d/3 falhou: %s", attempt + 1, e)
+            if attempt < 2:
+                time.sleep(3)
+                continue
+            logger.error("[discord_sync] Webhook falhou após 3 tentativas: %s",
+                         _safe_webhook_id(url))
 
 
 def _async_post(payload: dict, url: str = _WEBHOOK_ONCHAIN) -> None:
@@ -139,7 +168,7 @@ def notify_token_bd(holders: int, supply: float, msg: str = "") -> None:
     desc = (
         f"👥 **HOLDERS ATIVOS:** `{holders:,}`\n"
         f"💎 **EM CIRCULAÇÃO:** `{supply:,.0f} WEbdEX`\n"
-        f"📦 **SUPPLY TOTAL:** `369,369,369 WEbdEX`\n"
+        f"📦 **SUPPLY TOTAL:** `{_TOKEN_TOTAL_SUPPLY:,} WEbdEX`\n"
     )
     if msg:
         desc += f"\n─────────────────────\n{_telegram_to_discord(msg)}"
@@ -195,8 +224,6 @@ def notify_webdex_transfer(
     }, url=_WEBHOOK_TOKEN_BD)
 
 
-_OCME_BD_LINK = "https://t.me/OCME_bd"
-_BDZINHO_IMG  = "https://i.ibb.co/MkcqbvLb/post-149-operador-da-tecnologia-01.jpg"
 
 
 def notify_operacoes_horario(total: int, by_env: dict, hora_str: str) -> None:
@@ -343,6 +370,8 @@ def notify_protocolo_relatorio(
     p_trades: int,
     p_traders: int,
     p_lucro: float,
+    p_ganhos: float,
+    p_perdas: float,
     p_wins: int,
     p_gas_pol: float,
     p_gas_usd: float,
@@ -350,27 +379,29 @@ def notify_protocolo_relatorio(
     bd_alltime: float,
     proto_count: int,
     top_traders: list,
+    label: str = "Ciclo 21h",
 ) -> None:
     """Relatório completo 💎 LUCRO TOTAL DO PROTOCOLO → #relatório-diário (Discord)."""
-    p_wr   = (p_wins / p_trades * 100) if p_trades > 0 else 0.0
-    emoji  = "🟢" if p_lucro >= 0 else "🔴"
-    color  = 0x00FF88 if p_lucro >= 0 else 0xFF4444
-    filled = round(p_wr / 10)
-    wr_bar = "█" * filled + "░" * (10 - filled)
-    s_lucro = f"+${p_lucro:.2f}" if p_lucro >= 0 else f"-${abs(p_lucro):.2f}"
-    avg_gas = (p_gas_pol / p_trades) if p_trades > 0 else 0.0
+    p_wr     = (p_wins / p_trades * 100) if p_trades > 0 else 0.0
+    emoji    = "🟢" if p_lucro >= 0 else "🔴"
+    color    = 0x00FF88 if p_lucro >= 0 else 0xFF4444
+    avg_gas  = (p_gas_pol / p_trades) if p_trades > 0 else 0.0
+    avg_trd  = (p_lucro / p_trades) if p_trades > 0 else 0.0
+    s_lucro  = f"+${p_lucro:.2f}" if p_lucro >= 0 else f"-${abs(p_lucro):.2f}"
+    s_ganhos = f"+${p_ganhos:.2f}"
+    s_perdas = f"$-{abs(p_perdas):.2f}"
+    s_avg    = f"+${avg_trd:.4f}" if avg_trd >= 0 else f"-${abs(avg_trd):.4f}"
 
     # Bloco traders
     desc = (
-        f"## {emoji} RESULTADO DO DIA\n"
+        f"🗓️ **{label}**  |  POL: ${pol_price:.4f}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📈  **P&L DOS TRADERS**  *(resultado on-chain dos usuários)*\n"
         f"  ├─ 📊 Trades: **{p_trades:,}**  👥 Traders: **{p_traders}**  WR: **{p_wr:.1f}%**\n"
-        f"  ├─ ✅ Lucros: **{s_lucro}**\n"
-        f"  └─ `{wr_bar}`\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"  ├─ ✅ Lucros: **{s_ganhos}**  ❌ Perdas: **{s_perdas}**\n"
+        f"  └─ {emoji} Resultado: **{s_lucro} USD**  *({s_avg}/trade)*\n\n"
         f"⛽  **GÁS CONSUMIDO** *(Transações)*\n"
-        f"  ├─ 🔴 Total POL: **{p_gas_pol:,.4f} POL**  (~${p_gas_usd:.2f})\n"
+        f"  ├─ 🔴 Total POL: **{p_gas_pol:,.4f} POL**  *(~${p_gas_usd:.2f})*\n"
         f"  └─ 📊 Média/trade: **{avg_gas:.6f} POL**\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💎  **RECEITA DO PROTOCOLO**  *(BD/Passe coletado on-chain)*\n"
@@ -380,7 +411,7 @@ def notify_protocolo_relatorio(
 
     # Top 5 traders
     if top_traders:
-        medals = ["🥇", "🥈", "🥉", "04", "05"]
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
         desc += f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🏆  **TOP 5 TRADERS (período)**\n"
         for i, (wallet, lucro, t_trades, bd_pago, _gas) in enumerate(top_traders):
             short_w = f"{wallet[:6]}…{wallet[-4:]}" if len(str(wallet)) > 10 else str(wallet)
