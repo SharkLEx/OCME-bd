@@ -46,7 +46,7 @@ def run():
     sqlite_conn = sqlite3.connect(DB_PATH)
     try:
         cur = sqlite_conn.cursor()
-        cur.execute("SELECT key, value FROM config WHERE key LIKE 'ai_mem_%'")
+        cur.execute("SELECT chave, valor FROM config WHERE chave LIKE 'ai_mem_%'")
         rows = cur.fetchall()
     finally:
         sqlite_conn.close()
@@ -62,7 +62,7 @@ def run():
     for key, value in rows:
         if not value:
             continue
-        chat_id = key.replace("ai_mem_", "")
+        chat_id = key.replace("ai_mem_", "")  # noqa: use 'key' como alias de chave
         try:
             chat_id = int(chat_id)
         except ValueError:
