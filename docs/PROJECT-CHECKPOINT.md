@@ -11,6 +11,7 @@
 | 7 | OCME-bd Monitor Engine | ✅ Done | Em completed/ |
 | 8 | WEbdEX Orchestrator | 🟡 In Progress | 8.1–8.7 Done, 8.8–8.9 Bloqueadas |
 | 9 | bdZinho Discord v2 | ✅ Done | 9.1–9.4 Done + Deployadas |
+| 10 | WEbdEX Design System: Telegram + Monitor Engine | 🟡 In Progress | 10.1 In Progress, 10.2–10.4 Backlog |
 
 ---
 
@@ -20,10 +21,22 @@
 |-------|--------|--------|--------|
 | 8.8 | Instagram Integration | ⏸️ Bloqueada | Aguardando credenciais Meta |
 | 8.9 | WhatsApp Integration | ⏸️ Bloqueada | Aguardando credenciais Meta |
+| 10.1 | Telegram Design Tokens + 21h Report | 🟡 In Progress | feat/epic-7-monitor-engine |
+| 10.2 | Monitor Engine Color Migration | ⬜ Backlog | feat/epic-7-monitor-engine |
+| 10.3 | Metrics Worker + Discord 21h Notification | ⬜ Backlog | feat/epic-7-monitor-engine |
+| 10.4 | Operational Utilities | ⬜ Backlog | feat/epic-7-monitor-engine |
 
 ---
 
 ## 🚀 Último Trabalho Realizado
+
+### Sessão 2026-03-19 (continuação)
+
+**Epic 10 criado — WEbdEX Design System: Telegram + Monitor Engine** (@pm Morgan):
+- Epic 10 formalizado: 4 stories para commitar código uncommitted do monitor-engine
+- Stories criadas: 10.1 (In Progress), 10.2, 10.3, 10.4 (Backlog)
+- Arquivos: `docs/stories/active/epic-10.md`, `10.1–10.4.story.md`
+- Próximo: @dev commitar story 10.1 (telegram_design_tokens.py + webdex_workers.py)
 
 ### Sessão 2026-03-19
 
