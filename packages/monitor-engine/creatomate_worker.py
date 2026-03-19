@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 _API_KEY      = os.environ.get("CREATOMATE_API_KEY", "")
 _API_BASE     = "https://api.creatomate.com/v1"
 _POLL_INTERVAL = 3   # segundos entre checks de status
-_POLL_TIMEOUT  = 90  # segundos máximo aguardando render
+_POLL_TIMEOUT  = 180  # segundos máximo aguardando render
 
 # Composição WEbdEX CICLO 21h — Editorial Brutalism v2
 # Variáveis dinâmicas: {{data}}, {{pnl_sinal}}, {{pnl_valor}}, {{pnl_cor}},
@@ -62,7 +62,7 @@ _CICLO_SOURCE = {
             "x_anchor": "0%",
             "y_anchor": "0%",
             "font_family": "Space Grotesk",
-            "font_weight": "800",
+            "font_weight": "700",
             "font_size": 26,
             "letter_spacing": "-3%",
             "fill_color": "#FFFFFF",
@@ -152,7 +152,7 @@ _CICLO_SOURCE = {
             "x_anchor": "0%",
             "y_anchor": "0%",
             "font_family": "Space Grotesk",
-            "font_weight": "800",
+            "font_weight": "700",
             "font_size": 140,
             "letter_spacing": "-4%",
             "fill_color": "{{pnl_cor}}",
@@ -205,7 +205,7 @@ _CICLO_SOURCE = {
             "x_anchor": "0%",
             "y_anchor": "0%",
             "font_family": "Space Grotesk",
-            "font_weight": "800",
+            "font_weight": "700",
             "font_size": 76,
             "letter_spacing": "-3%",
             "fill_color": "#FFFFFF",
@@ -243,7 +243,7 @@ _CICLO_SOURCE = {
             "x_anchor": "0%",
             "y_anchor": "0%",
             "font_family": "Space Grotesk",
-            "font_weight": "800",
+            "font_weight": "700",
             "font_size": 76,
             "letter_spacing": "-3%",
             "fill_color": "#FFFFFF",
