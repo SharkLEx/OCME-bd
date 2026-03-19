@@ -29,6 +29,7 @@ def _request(method: str, path: str, body: Optional[dict] = None) -> dict:
     headers = {
         "Authorization": f"Bearer {_API_KEY}",
         "Content-Type": "application/json",
+        "User-Agent": "WEbdEX-Monitor/1.0",
     }
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     with urllib.request.urlopen(req, timeout=30) as resp:
