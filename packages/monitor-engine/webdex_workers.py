@@ -27,7 +27,7 @@ from webdex_bot_core import send_html, _notif_worker, send_logo_photo
 from webdex_discord_sync import (
     notify_ciclo_report, notify_protocolo_relatorio, notify_gm, _WEBHOOK_GM,
     notify_operacoes_horario, notify_swaps_horario, notify_onchain_heartbeat,
-    _WEBHOOK_OPERACOES, _WEBHOOK_SWAPS, _WEBHOOK_RELATORIO,
+    _WEBHOOK_OPERACOES, _WEBHOOK_SWAPS, _WEBHOOK_RELATORIO, _WEBHOOK_ONCHAIN,
     get_pulse_stats_and_reset,
 )
 
@@ -40,6 +40,14 @@ try:
     from webdex_creatomate import render_relatorio_21h as _render_21h
 except ImportError:
     _render_21h = None  # type: ignore[assignment]
+
+try:
+    from telegram_design_tokens import (
+        HDR, SEP, EMOJI as TG, winrate_bar, format_currency, cta_ocme,
+    )
+    _TG_TOKENS = True
+except ImportError:
+    _TG_TOKENS = False
 
 # ==============================================================================
 # 🛡️ SENTINELA
@@ -134,23 +142,39 @@ def agendador_21h():
                         total_t = int(wr_row[0] or 0) if wr_row else 0
                         wins    = int(wr_row[1] or 0) if wr_row else 0
                         wr_pct  = (wins / total_t * 100) if total_t > 0 else 0
-                        # Barra de WinRate (10 blocos)
-                        filled  = round(wr_pct / 10)
-                        wr_bar  = "█" * filled + "░" * (10 - filled)
-                        emoji   = "🟢" if liq >= 0 else "🔴"
-                        msg = (
-                            f"🌙 <b>RELATÓRIO 21H — WEbdEX</b>\n"
-                            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                            f"{emoji}  Líquido: <b>${liq:+.2f}</b>\n"
-                            f"⛽  Gás Total: <b>${gas_t:.2f}</b>\n"
-                            f"📊  Trades: <b>{total_t}</b>  |  Wins: <b>{wins}</b>\n\n"
-                            f"🎯  WinRate: <b>{wr_pct:.0f}%</b>\n"
-                            f"<code>{wr_bar}</code>\n\n"
-                            f"━━━━━━━━━━━━━━━━━━━━\n"
-                            f"🗓️  {hoje}"
-                        )
+                        # Mensagem 21h — via design tokens (telegram_design_tokens.py)
+                        if _TG_TOKENS:
+                            _emoji_res = TG.resultado_win if liq >= 0 else TG.resultado_loss
+                            _wr_bar    = winrate_bar(wins, total_t, width=10)
+                            msg = (
+                                HDR.ciclo_21h()
+                                + f"{SEP.linha}\n\n"
+                                + f"{_emoji_res}  Líquido: <b>{format_currency(liq, signed=True)}</b>\n"
+                                + f"{TG.gas}  Gás Total: <b>{format_currency(gas_t)}</b>\n"
+                                + f"{TG.grafico}  Trades: <b>{total_t}</b>  |  Wins: <b>{wins}</b>\n\n"
+                                + f"🎯  WinRate: <b>{wr_pct:.0f}%</b>\n"
+                                + f"<code>{_wr_bar}</code>\n\n"
+                                + f"{SEP.linha}\n"
+                                + f"{TG.calendario}  {hoje}"
+                                + cta_ocme()
+                            )
+                        else:
+                            filled  = round(wr_pct / 10)
+                            _wr_bar = "█" * filled + "░" * (10 - filled)
+                            _emoji  = "🟢" if liq >= 0 else "🔴"
+                            msg = (
+                                f"🌙 <b>RELATÓRIO 21H — WEbdEX</b>\n"
+                                f"━━━━━━━━━━━━━━━━━━━━\n\n"
+                                f"{_emoji}  Líquido: <b>${liq:+.2f}</b>\n"
+                                f"⛽  Gás Total: <b>${gas_t:.2f}</b>\n"
+                                f"📊  Trades: <b>{total_t}</b>  |  Wins: <b>{wins}</b>\n\n"
+                                f"🎯  WinRate: <b>{wr_pct:.0f}%</b>\n"
+                                f"<code>{_wr_bar}</code>\n\n"
+                                f"━━━━━━━━━━━━━━━━━━━━\n"
+                                f"🗓️  {hoje}"
+                            )
                         send_html(cid, msg)
-                        send_logo_photo(cid, "🌙 <b>WEbdEX</b> — bom descanso, até amanhã! 🚀")
+                        send_logo_photo(cid, f"{'🌙' if not _TG_TOKENS else TG.ciclo_noite} <b>WEbdEX</b> — bom descanso, até amanhã! 🚀")
                         _agg_liq += liq; _agg_gas += gas_t
                         _agg_trades += total_t; _agg_wins += wins
                     set_config(f"last_rep_{cid}", hoje)
@@ -167,7 +191,9 @@ def agendador_21h():
                                        ROUND(SUM(profit),4),
                                        COUNT(CASE WHEN profit>0 THEN 1 END),
                                        ROUND(SUM(fee_bd),6),
-                                       ROUND(SUM(gas_pol),6)
+                                       ROUND(SUM(gas_pol),6),
+                                       ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4),
+                                       ROUND(SUM(CASE WHEN profit<0 THEN profit ELSE 0 END),4)
                                 FROM protocol_ops WHERE ts>=?
                             """, (_dt_lim,)).fetchone()
                             _bd_all = float(cursor.execute(
@@ -183,12 +209,18 @@ def agendador_21h():
                                 FROM protocol_ops WHERE ts>=?
                                 GROUP BY wallet ORDER BY SUM(profit) DESC LIMIT 5
                             """, (_dt_lim,)).fetchall()
+                        if not _pr or _pr[0] is None:
+                            logger.info("[agendador_21h] Sem ops no ciclo atual — pulando relatório Discord")
+                            set_config(_discord_21h_key, "ok")
+                            continue
                         _p_trades  = int(_pr[0] or 0)
                         _p_traders = int(_pr[1] or 0)
                         _p_lucro   = float(_pr[2] or 0)
                         _p_wins    = int(_pr[3] or 0)
                         _p_bd      = float(_pr[4] or 0)
                         _p_gas_pol = float(_pr[5] or 0)
+                        _p_ganhos  = float(_pr[6] or 0)
+                        _p_perdas  = float(_pr[7] or 0)
                         _p_gas_usd = _p_gas_pol * _pol_price
                         notify_protocolo_relatorio(
                             hoje=hoje,
@@ -196,6 +228,8 @@ def agendador_21h():
                             p_trades=_p_trades,
                             p_traders=_p_traders,
                             p_lucro=_p_lucro,
+                            p_ganhos=_p_ganhos,
+                            p_perdas=_p_perdas,
                             p_wins=_p_wins,
                             p_gas_pol=_p_gas_pol,
                             p_gas_usd=_p_gas_usd,
@@ -203,6 +237,7 @@ def agendador_21h():
                             bd_alltime=_bd_all,
                             proto_count=_proto_count,
                             top_traders=_top5,
+                            label="Ciclo 21h",
                         )
                         set_config(_discord_21h_key, "ok")
                         # Animação bdZinho → #relatório-diário
@@ -299,6 +334,21 @@ def agendador_horario():
                             f"🔄 {total_sw} SWAPS EM {hora_str}!",
                             f"Create: {sw['create']} · Executados: {sw['execute']} — SwapBook vivo!",
                             0x38BDF8,
+                        )
+                    # Heartbeat on-chain → #webdex-on-chain (só quando há atividade)
+                    if total_ops > 0 and _WEBHOOK_ONCHAIN:
+                        _pnl_sign = "📈" if pnl_2h >= 0 else "📉"
+                        _animate(
+                            "trade_win" if pnl_2h >= 0 else "relatorio_loss",
+                            _WEBHOOK_ONCHAIN,
+                            f"🔗 PULSO ON-CHAIN — {hora_str}",
+                            (
+                                f"{_pnl_sign} P&L 2h: `{'+'if pnl_2h>=0 else ''}{pnl_2h:.2f}` USD\n"
+                                f"⚡ {total_ops:,} ops · 🔄 {pulse['webdex_moves']} moves WEbdEX\n"
+                                f"👛 {pulse['new_wallets']} novas carteiras · "
+                                f"👥 {pulse['new_holders']} novos holders"
+                            ),
+                            0x00FFB2 if pnl_2h >= 0 else 0xFF4444,
                         )
 
                 logger.info(
@@ -467,7 +517,7 @@ def _capital_snapshot_worker():
                         except Exception as _snap_e:
                             logger.debug("capital_snapshot save_snapshot: %s", _snap_e)
                     else:
-                        logger.warning("⚠️ capital_cache baixo/zero: chat_id=%s env=%s total_usd=%.4f", chat_id, env or "AG_C_bd", total_usd)
+                        logger.debug("capital_cache sem posição ativa: chat_id=%s env=%s total_usd=%.4f", chat_id, env or "AG_C_bd", total_usd)
                 except Exception as _usr_e:
                     logger.warning("❌ capital_cache falhou: chat_id=%s erro=%s", chat_id, _usr_e)
         except Exception as _we:
