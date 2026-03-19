@@ -1,6 +1,6 @@
 # PROJECT-CHECKPOINT — WEbdEX Protocol OS
 
-> Última atualização: 2026-03-19 | Branch: `feat/epic-7-monitor-engine`
+> Última atualização: 2026-03-19 (Epic 12 kickoff — Story 12.1 + 14.3 criadas) | Branch: `feat/epic-7-monitor-engine`
 
 ---
 
@@ -16,7 +16,9 @@
 | 8 | WEbdEX Orchestrator | 🟡 In Progress | 8.1–8.7 Done, 8.8–8.9 Bloqueadas |
 | 9 | bdZinho Discord v2 | ✅ Done | 9.1–9.4 Done + Deployadas |
 | 10 | WEbdEX Design System: Telegram + Monitor Engine | ✅ Done | 10.1–10.4 Done + Deployadas |
-| 11 | WEbdEX Protocol OS: Automação de Conteúdo | 🔄 InProgress | 11.1 InProgress |
+| 11 | WEbdEX Protocol OS: Automação de Conteúdo | ✅ Done | 11.1 ✅ Done + Deployada |
+| 12 | bdZinho Intelligence v3 | 🟡 In Progress | 12.1 🟡 In Progress |
+| 14 | Subscription Flow v2 | 🟡 In Progress | 14.3 ⏳ Backlog (paralelo ao Epic 12) |
 
 ---
 
@@ -34,6 +36,41 @@
 ---
 
 ## 🚀 Último Trabalho Realizado
+
+### Sessão 2026-03-19 (fix Creatomate v2 — ENTREGA 100% ✅)
+
+**Fix final `creatomate_worker.py` — todos os CRITICALs do Smith resolvidos:**
+- `font_weight:"800"` → `"700"` em 4 elementos (Space Grotesk max = 700)
+- `_POLL_TIMEOUT` 90s → 180s (margem para renders em produção)
+- `.env.example`: `CREATOMATE_TEMPLATE_21H` deprecated (source inline v2 não usa template)
+- Confirmado: `{{pnl_cor}}` em `fill_color` resolvido via `modifications` (render `4172396e` ✅)
+- Deploy VPS: `orchestrator-discord:/app/creatomate_worker.py` ✅ Bot online
+- Commit: `d3f6de6` | Push: `feat/epic-7-monitor-engine` ✅
+
+### Sessão 2026-03-19 (fix Creatomate — source JSON corrigido ✅)
+
+**Fix `creatomate_worker.py` — bugs Creatomate API descobertos e corrigidos:**
+- `type:"rectangle"` → `type:"shape" + shape:"rectangle"` (API não suporta rectangle como type direto)
+- `letter_spacing` em `"em"` → `"%"` (API exige número com %)
+- `height:"7px"/"1px"` → numérico `7`/`1`
+- Render completo 15 elementos confirmado: `c2bb3413` ✅ MP4 1080x1920
+- Deploy VPS: `orchestrator-discord:/app/creatomate_worker.py` ✅ Bot online
+- Commit: `1585229` | Push: `feat/epic-7-monitor-engine` ✅
+
+### Sessão 2026-03-19 (Story 11.1 — Creatomate CICLO 21h ✅ Done)
+
+**Story 11.1 — Creatomate CICLO video** (Done):
+- `creatomate_worker.py` implementado em `packages/monitor-engine/` — zero deps externas
+- `metrics_worker.py` integrado: `gerar_video_ciclo()` chamado após embed Discord com graceful degradation
+- Template "WEbdEX CICLO 21h" criado no Creatomate dashboard: ID `8be3eb11-df12-4480-9dd3-7acd9c6e8d0e`
+- 13 elementos: Data Brutalism — fundo preto, pink accents, pnl dinâmico verde/vermelho
+- `.env.example` atualizado com template ID confirmado
+- Commits: `a04ea57` (código) + `96a01e0` (template ID)
+- **Deploy VPS ✅**: `creatomate_worker.py` + `metrics_worker.py` → `orchestrator-discord:/app/` via docker cp + commit + recreate
+- `CREATOMATE_API_KEY` + `CREATOMATE_TEMPLATE_21H` configuradas no container — import confirmado `API_KEY: True`
+- **Push ✅**: `d4958b8..96a01e0` → `origin/feat/epic-7-monitor-engine` (@devops)
+- `orchestrator-discord` online: `Bot online: WEbdEX#7787`, `[ciclo_21h] Worker iniciado`
+- Próximo ciclo 21h BRT: vídeo Creatomate será gerado e enviado automaticamente no Discord
 
 ### Sessão 2026-03-19 (continuação — blockers 10.3/10.4 resolvidos)
 

@@ -34,6 +34,15 @@ try:
 except ImportError:
     _ocme_build_ai_context = None  # type: ignore[assignment]
 
+# ── Epic 12 Story 12.1 — Long-term Memory (soft import — graceful degradation) ──
+try:
+    from webdex_ai_memory import mem_add_pg, mem_get_pg, mem_delete_all_pg
+    _PG_MEMORY_ENABLED = True
+    logger.info("[ai] Long-term memory PostgreSQL: ATIVO")
+except ImportError:
+    _PG_MEMORY_ENABLED = False
+    logger.warning("[ai] Long-term memory PostgreSQL: módulo não encontrado — usando deque apenas")
+
 # ==============================================================================
 # ⚙️ CONFIG
 # ==============================================================================
@@ -41,17 +50,23 @@ AI_MODEL      = OPENAI_MODEL  # usa o modelo configurado no .env (OpenRouter ou 
 AI_MEMORY_MAX = 12
 
 # ==============================================================================
-# 🧠 MEMORY (SHORT, EDUCATIONAL)
+# 🧠 MEMORY — PostgreSQL (Story 12.1) com fallback para deque (legado)
 # ==============================================================================
-_AI_MEMORY: dict = {}
-
+_AI_MEMORY: dict = {}         # fallback: deque em RAM
 _MEM_CONFIG_PREFIX = "ai_mem_"
 
 
 def mem_add(chat_id, role: str, text: str):
+    """Adiciona mensagem à memória. Usa PostgreSQL se disponível, deque como fallback."""
+    if _PG_MEMORY_ENABLED:
+        try:
+            mem_add_pg(chat_id, role, text)
+            return
+        except Exception as e:
+            logger.warning("[ai] mem_add_pg falhou (%s) — fallback para deque", e)
+    # Fallback: deque + SQLite (comportamento original)
     q = _AI_MEMORY.setdefault(chat_id, deque(maxlen=AI_MEMORY_MAX))
     q.append({"role": role, "content": text})
-    # Persiste no banco para sobreviver restarts
     try:
         set_config(f"{_MEM_CONFIG_PREFIX}{chat_id}", json.dumps(list(q)))
     except Exception:
@@ -59,8 +74,14 @@ def mem_add(chat_id, role: str, text: str):
 
 
 def mem_get(chat_id) -> list:
+    """Retorna contexto da memória. Usa PostgreSQL se disponível, deque como fallback."""
+    if _PG_MEMORY_ENABLED:
+        try:
+            return mem_get_pg(chat_id)
+        except Exception as e:
+            logger.warning("[ai] mem_get_pg falhou (%s) — fallback para deque", e)
+    # Fallback: deque + SQLite (comportamento original)
     if chat_id not in _AI_MEMORY or not _AI_MEMORY[chat_id]:
-        # Tenta restaurar do banco (após restart)
         try:
             raw = get_config(f"{_MEM_CONFIG_PREFIX}{chat_id}", "")
             if raw:
@@ -70,6 +91,22 @@ def mem_get(chat_id) -> list:
         except Exception:
             pass
     return list(_AI_MEMORY.get(chat_id, []))
+
+
+def mem_clear_lgpd(chat_id) -> int:
+    """LGPD: deleta TODA a memória do usuário. Retorna registros deletados."""
+    # Limpa deque local independente
+    _AI_MEMORY.pop(chat_id, None)
+    try:
+        set_config(f"{_MEM_CONFIG_PREFIX}{chat_id}", "")
+    except Exception:
+        pass
+    if _PG_MEMORY_ENABLED:
+        try:
+            return mem_delete_all_pg(chat_id)
+        except Exception as e:
+            logger.error("[ai] mem_delete_all_pg falhou: %s", e)
+    return 0
 
 
 # ==============================================================================

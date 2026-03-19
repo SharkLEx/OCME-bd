@@ -3175,3 +3175,53 @@ def inatividade_report(m, u):
         out.append(f"{i:02d}) {flag} {code(sub)} — <b>{mins:.0f} min</b> | trades {n} | last {code(last_dh)}")
 
     send_support(m.chat.id, "\n".join(out), reply_markup=main_kb())
+
+
+# ==============================================================================
+# 🗑️ LGPD — /esquecer_tudo (Story 12.1)
+# ==============================================================================
+
+# Confirmações pendentes: chat_id → timestamp da solicitação
+_lgpd_pending: dict = {}
+_LGPD_TIMEOUT = 60  # segundos para confirmar
+
+@bot.message_handler(commands=["esquecer_tudo"])
+def cmd_esquecer_tudo(m):
+    """Inicia fluxo LGPD de deleção de memória IA."""
+    _lgpd_pending[m.chat.id] = time.time()
+    bot.send_message(
+        m.chat.id,
+        "⚠️ <b>Atenção: Deleção de Memória</b>\n\n"
+        "Isso apagará <b>TODA</b> a sua memória do bdZinho.\n"
+        "O assistente não se lembrará de nenhuma conversa anterior.\n\n"
+        "Para confirmar, envie /confirmar_esquecimento\n"
+        "Para cancelar, ignore (expira em 60 segundos).",
+        parse_mode="HTML"
+    )
+
+
+@bot.message_handler(commands=["confirmar_esquecimento"])
+def cmd_confirmar_esquecimento(m):
+    """Executa deleção de memória após confirmação."""
+    ts = _lgpd_pending.pop(m.chat.id, None)
+    if ts is None or (time.time() - ts) > _LGPD_TIMEOUT:
+        bot.send_message(
+            m.chat.id,
+            "❌ Solicitação expirada ou não iniciada. Use /esquecer_tudo primeiro."
+        )
+        return
+    try:
+        from webdex_ai import mem_clear_lgpd
+        deleted = mem_clear_lgpd(m.chat.id)
+        bot.send_message(
+            m.chat.id,
+            f"🗑️ <b>Memória apagada com sucesso.</b>\n\n"
+            f"O bdZinho não se lembrará de nenhuma conversa anterior.\n"
+            f"({deleted} mensagens removidas)",
+            parse_mode="HTML",
+            reply_markup=main_kb()
+        )
+        logger.info("[user] LGPD: memória deletada para chat_id=%s (%d registros)", m.chat.id, deleted)
+    except Exception as e:
+        logger.error("[user] Falha ao deletar memória LGPD (chat_id=%s): %s", m.chat.id, e)
+        bot.send_message(m.chat.id, "❌ Erro ao apagar memória. Tente novamente mais tarde.")
