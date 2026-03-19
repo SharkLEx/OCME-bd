@@ -1,24 +1,35 @@
-import sqlite3, time
+import sqlite3
+from datetime import datetime, timedelta, timezone
 
-db = 'webdex_v5_final.db'
-c = sqlite3.connect(db)
+db = 'data/webdex_v5_final.db'
+c = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=3)
 
-print("=== ULTIMAS 5 OPERACOES ===")
-rows = c.execute("SELECT data_hora, tipo, valor, sub_conta, ambiente FROM operacoes ORDER BY rowid DESC LIMIT 5").fetchall()
-for r in rows:
+print("=== TVL POR AMBIENTE ===")
+tvl = c.execute(
+    """SELECT env, total_usd, ts FROM fl_snapshots
+       WHERE (env, ts) IN (SELECT env, MAX(ts) FROM fl_snapshots GROUP BY env)
+       ORDER BY env"""
+).fetchall()
+for r in tvl:
     print(r)
 
-print("\n=== CONFIG ===")
-lb = c.execute("SELECT valor FROM config WHERE chave='last_block'").fetchone()
-print("last_block:", lb[0] if lb else "N/A")
+print("\n=== OPERACOES CICLO ATUAL ===")
+now_br = datetime.now(timezone.utc) - timedelta(hours=3)
+cutoff_br = now_br.replace(hour=21, minute=0, second=0, microsecond=0)
+if now_br < cutoff_br:
+    cutoff_br -= timedelta(days=1)
+cutoff_utc = (cutoff_br + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
+ops = c.execute(
+    "SELECT COUNT(*), COALESCE(SUM(profit),0) FROM protocol_ops WHERE ts > ?",
+    (cutoff_utc,)
+).fetchone()
+print(f"ops desde 21h BR: {ops[0]}, profit: {ops[1]:.4f}")
 
-tot = c.execute("SELECT COUNT(*) FROM operacoes").fetchone()
-print("total operacoes:", tot[0])
-
-print("\n=== OPERACOES ULTIMA HORA ===")
-from datetime import datetime, timedelta
-one_hour_ago = (datetime.now() - timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
-recent = c.execute("SELECT COUNT(*) FROM operacoes WHERE data_hora >= ?", (one_hour_ago,)).fetchone()
-print("operacoes ultima 1h:", recent[0])
+print("\n=== CAPITAL USUARIOS ===")
+cap = c.execute(
+    "SELECT COUNT(*), COALESCE(SUM(total_usd),0) FROM capital_cache WHERE total_usd > 1"
+).fetchone()
+print(f"carteiras: {cap[0]}, total: ${cap[1]:,.0f}")
 
 c.close()
+print("\n=== DB OK ===")
