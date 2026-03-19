@@ -23,12 +23,14 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# ─── Design tokens com fallback (monitor-engine não tem orchestrator no path) ─
 try:
-    import sys as _sys
-    _sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "orchestrator", "discord"))
+    from webdex_discord_animate import animate_and_post as _animate
+except ImportError:
+    _animate = None  # type: ignore[assignment]
+
+# ─── Design tokens — disponível em monitor-engine/design_tokens.py ───────────
+try:
     from design_tokens import SUCCESS, WARNING, RED_LIGHT, PINK_LIGHT, ERROR, FOOTER_TEXT
-    _sys.path.pop(0)
 except ImportError:
     SUCCESS    = 0x00FFB2
     WARNING    = 0xFF8800
@@ -38,7 +40,7 @@ except ImportError:
     FOOTER_TEXT = "WEbdEX Protocol · bdZinho"
 
 # ─── Configuração ─────────────────────────────────────────────────────────────
-STATE_FILE    = os.getenv("NOTIFICATION_STATE_FILE", "/app/notification_state.json")
+STATE_FILE    = os.getenv("NOTIFICATION_STATE_FILE", "/app/data/notification_state.json")
 COOLDOWN_SECS = int(os.getenv("NOTIFICATION_COOLDOWN_SECS", "1800"))  # 30 min
 
 # Webhooks — reutiliza os do canal de conquistas e on-chain
@@ -107,6 +109,17 @@ def _post_embed(webhook_url: str, title: str, description: str, color: int) -> b
                 retry_after = float(resp.json().get("retry_after", 2.0))
                 time.sleep(retry_after + 0.2)
                 continue
+            if resp.status_code == 403:
+                logger.error(
+                    "[notif] WEBHOOK 403 FORBIDDEN — webhook expirado ou canal removido. "
+                    "Regenerar em: Discord → Canal → Integrações → Webhooks. Title=%s", title
+                )
+                return False
+            if resp.status_code >= 500:
+                logger.warning("[notif] Webhook %s (server error) tentativa %d/3", resp.status_code, attempt + 1)
+                if attempt < 2:
+                    time.sleep(3)
+                    continue
             logger.warning("[notif] Webhook %s: %s", resp.status_code, resp.text[:120])
             return False
         except Exception as e:
@@ -124,8 +137,6 @@ def _check_new_holders(db_path: str, state: dict) -> list[dict]:
     Compara com conjunto persistido em state["known_wallets"].
     """
     events = []
-    if not _can_notify(state, "new_holder"):
-        return events
     try:
         with sqlite3.connect(db_path, timeout=5, check_same_thread=False) as db:
             rows = db.execute(
@@ -135,21 +146,31 @@ def _check_new_holders(db_path: str, state: dict) -> list[dict]:
         known_wallets   = set(state.get("known_wallets", []))
 
         new_ones = current_wallets - known_wallets
-        if new_ones and known_wallets:  # só notifica se já tinha estado anterior
+
+        # Sempre atualiza known_wallets — mesmo durante cooldown, para não acumular lote
+        state["known_wallets"] = list(current_wallets)
+
+        if new_ones and known_wallets and _can_notify(state, "new_holder"):
+            _n = len(new_ones)
             events.append({
-                "type":        "new_holder",
-                "webhook":     _WEBHOOK_CONQUISTAS,
-                "color":       RED_LIGHT,
-                "title":       "🎉 Novo holder no protocolo!",
-                "description": (
-                    f"**{len(new_ones)}** nova{'s' if len(new_ones) > 1 else ''} "
-                    f"carteira{'s' if len(new_ones) > 1 else ''} entraram no WEbdEX.\n"
+                "type":          "new_holder",
+                "webhook":       _WEBHOOK_CONQUISTAS,
+                "color":         RED_LIGHT,
+                "title":         "🎉 Novo holder no protocolo!",
+                "description":   (
+                    f"**{_n}** nova{'s' if _n > 1 else ''} "
+                    f"carteira{'s' if _n > 1 else ''} entraram no WEbdEX.\n"
                     f"Total ativo: **{len(current_wallets)}** carteiras."
                 ),
+                "animate_event": "new_holder",
+                "animate_title": f"🎉 {'NOVOS HOLDERS' if _n > 1 else 'NOVO HOLDER'}!",
+                "animate_desc":  (
+                    f"**{_n}** nova{'s' if _n > 1 else ''} carteira{'s' if _n > 1 else ''} "
+                    f"entrou{'ram' if _n > 1 else ''} no WEbdEX!\n"
+                    f"A comunidade cresce: **{len(current_wallets)} holders ativos** 🚀"
+                ),
+                "animate_color": RED_LIGHT,
             })
-
-        # Sempre atualiza a lista conhecida
-        state["known_wallets"] = list(current_wallets)
 
     except Exception as e:
         logger.debug("[notif] check_new_holders falhou: %s", e)
@@ -177,14 +198,21 @@ def _check_milestones(db_path: str, state: dict) -> list[dict]:
 
         if current_tier > last_milestone and current_tier > 0:
             events.append({
-                "type":        "milestone",
-                "webhook":     _WEBHOOK_CONQUISTAS,
-                "color":       PINK_LIGHT,
-                "title":       "🏆 Milestone atingido!",
-                "description": (
+                "type":          "milestone",
+                "webhook":       _WEBHOOK_CONQUISTAS,
+                "color":         PINK_LIGHT,
+                "title":         "🏆 Milestone atingido!",
+                "description":   (
                     f"O WEbdEX ultrapassou **${current_tier:,.0f}** em TVL!\n"
                     f"TVL atual: **${tvl:,.2f}**"
                 ),
+                "animate_event": "milestone",
+                "animate_title": f"🏆 ${current_tier:,.0f} TVL — MARCO ATINGIDO!",
+                "animate_desc":  (
+                    f"O WEbdEX Protocol ultrapassou **${current_tier:,.0f}** em TVL!\n"
+                    f"Capital total gerenciado: **${tvl:,.2f}** 💎"
+                ),
+                "animate_color": PINK_LIGHT,
             })
             state["last_milestone_tvl"] = current_tier
 
@@ -262,6 +290,18 @@ def run_notification_check(db_path: str) -> int:
         if ok:
             _mark_notified(state, evt["type"])
             sent += 1
+            # Animação bdZinho — apenas para eventos com "animate_event" configurado
+            if _animate and evt.get("animate_event"):
+                try:
+                    _animate(
+                        evt["animate_event"],
+                        evt["webhook"],
+                        evt.get("animate_title", evt["title"]),
+                        evt.get("animate_desc",  evt["description"]),
+                        evt.get("animate_color", evt["color"]),
+                    )
+                except Exception as _ae:
+                    logger.debug("[notif] animate falhou (%s): %s", evt["animate_event"], _ae)
 
     if all_events:
         _save_state(state)
@@ -283,8 +323,12 @@ def notification_engine_worker() -> None:
     depois executa run_notification_check a cada 5 minutos.
     Registrado em webdex_main._THREAD_REGISTRY como daemon thread.
     """
-    import os as _os
-    db_path = _os.getenv("SQLITE_DB_PATH", "/app/webdex.db")
+    # Tenta importar DB_PATH do webdex_config (fonte da verdade do sistema)
+    try:
+        from webdex_config import DB_PATH as _db_path_cfg
+        db_path = _db_path_cfg
+    except Exception:
+        db_path = os.getenv("SQLITE_DB_PATH", "/app/data/webdex_v5_final.db")
     logger.info("[notif] Motor de notificações proativas: Ativo... (intervalo=%ds)", _WORKER_INTERVAL)
     time.sleep(90)  # aguarda sistema inicializar
     while True:

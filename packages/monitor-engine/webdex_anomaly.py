@@ -100,19 +100,21 @@ def _check_frequency_drop(wallet: str, sub_conta: str, ambiente: str) -> Optiona
 
     try:
         with DB_LOCK:
-            count_24h = cursor.execute("""
+            _r24 = cursor.execute("""
                 SELECT COUNT(*) FROM operacoes o
                 JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
                 WHERE ow.wallet=? AND o.sub_conta=? AND o.ambiente=?
                   AND o.tipo='Trade' AND o.data_hora >= ?
-            """, (wallet, sub_conta, ambiente, cutoff_24h)).fetchone()[0]
+            """, (wallet, sub_conta, ambiente, cutoff_24h)).fetchone()
+            count_24h = int(_r24[0]) if _r24 and _r24[0] is not None else 0
 
-            count_7d = cursor.execute("""
+            _r7d = cursor.execute("""
                 SELECT COUNT(*) FROM operacoes o
                 JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
                 WHERE ow.wallet=? AND o.sub_conta=? AND o.ambiente=?
                   AND o.tipo='Trade' AND o.data_hora >= ? AND o.data_hora < ?
-            """, (wallet, sub_conta, ambiente, cutoff_8d, cutoff_24h)).fetchone()[0]
+            """, (wallet, sub_conta, ambiente, cutoff_8d, cutoff_24h)).fetchone()
+            count_7d = int(_r7d[0]) if _r7d and _r7d[0] is not None else 0
     except Exception as e:
         logger.debug("[anomaly] freq_drop query error: %s", e)
         return None

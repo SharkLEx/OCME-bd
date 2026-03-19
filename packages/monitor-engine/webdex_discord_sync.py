@@ -45,15 +45,31 @@ if _missing:
     logger.warning("[discord_sync] Webhooks não configurados no .env: %s", ", ".join(_missing))
 
 # ─────────────────────────────────────────────────────────────
-# Cores padrão
+# Design tokens — Manual da Marca WEbdEX (Sati / Story 9.1)
 # ─────────────────────────────────────────────────────────────
-_COLOR_INFO      = 0x00FFB2   # verde WEbdEX
-_COLOR_MILESTONE = 0xFFD700   # dourado
-_COLOR_ALERT     = 0xFF6B35   # laranja
-_COLOR_CICLO     = 0x38BDF8   # azul
-_COLOR_TRADE_WIN = 0x00FF88   # verde trade positivo
-_COLOR_TRADE_LOS = 0xFF4444   # vermelho trade negativo
-_COLOR_GM        = 0xE91E8C   # rosa WEbdEX
+try:
+    from design_tokens import (
+        SUCCESS as _SUCCESS, WARNING as _WARNING, ERROR as _ERROR,
+        PINK_LIGHT as _PINK_LIGHT, RED_LIGHT as _RED_LIGHT,
+        CHART_BLUE as _CHART_BLUE, DARK as _DARK,
+    )
+except ImportError:
+    _SUCCESS    = 0x00FFB2
+    _WARNING    = 0xFF8800
+    _ERROR      = 0xFF4455
+    _PINK_LIGHT = 0xFB0491
+    _RED_LIGHT  = 0xD90048
+    _CHART_BLUE = 0x00D4FF
+    _DARK       = 0x131313
+
+_COLOR_INFO      = _SUCCESS     # verde WEbdEX — info, P&L positivo
+_COLOR_MILESTONE = _PINK_LIGHT  # pink accent — milestones, conquistas
+_COLOR_ALERT     = _WARNING     # laranja — atenção, loss
+_COLOR_CICLO     = _CHART_BLUE  # azul — ciclos, gráficos
+_COLOR_TRADE_WIN = _SUCCESS     # verde — trade positivo
+_COLOR_TRADE_LOS = _WARNING     # laranja — trade negativo
+_COLOR_GM        = _PINK_LIGHT  # pink — ritual diário GM
+_COLOR_TOKEN_BD  = _PINK_LIGHT  # pink — relatório token WEbdEX
 
 _OCME_BD_LINK = os.getenv("OCME_BD_LINK", "https://t.me/OCME_bd")
 _BDZINHO_IMG  = os.getenv(
@@ -176,7 +192,7 @@ def notify_token_bd(holders: int, supply: float, msg: str = "") -> None:
         "embeds": [{
             "title": "📊 TOKEN WEbdEX — RELATÓRIO DE CRESCIMENTO",
             "description": desc,
-            "color": 0x6C3FE8,
+            "color": _COLOR_TOKEN_BD,
             "thumbnail": {"url": _BDZINHO_IMG},
             "footer": {"text": "WEbdEX Protocol · Relatório automático a cada 2h · Polygon"},
         }]
@@ -197,9 +213,9 @@ def notify_webdex_transfer(
 
     # WEbdEX não tem BURN — apenas MINT (deploy) e TRANSFER
     if from_addr.lower() == ZERO:
-        tipo, icone, cor = "MINT", "🌱", 0x00FF88
+        tipo, icone, cor = "MINT", "🌱", _SUCCESS
     else:
-        tipo, icone, cor = "TRANSFER", "💎", 0xFFD700
+        tipo, icone, cor = "TRANSFER", "💎", _CHART_BLUE
 
     new_holder_line = "\n\n🎊 **⚡ NOVO HOLDER CONFIRMADO! ⚡**\n**A FAMÍLIA WEbdEX CRESCEU!**" if is_new_holder else ""
     poly_link = f"\n\n[🔗 Ver no Polygonscan](https://polygonscan.com/tx/{tx_hash})" if tx_hash else ""
@@ -230,7 +246,7 @@ def notify_operacoes_horario(total: int, by_env: dict, hora_str: str) -> None:
     """Relatório 2h de operações → #operações."""
     if total == 0:
         desc  = "🔇 **NENHUMA OPERAÇÃO** nas últimas 2h.\n*Protocolo aguardando próximo ciclo.*"
-        color = 0x555555
+        color = _DARK
     else:
         bars  = min(10, max(1, round(total / 400)))
         bar   = "█" * bars + "░" * (10 - bars)
@@ -244,7 +260,7 @@ def notify_operacoes_horario(total: int, by_env: dict, hora_str: str) -> None:
             f"*Em breve no portfolio oficial WEbdEX Protocol.*\n\n"
             f"[→ Acessar OCME_bd no Telegram]({_OCME_BD_LINK})"
         )
-        color = 0xFF6B35
+        color = _WARNING
     _async_post({
         "embeds": [{
             "title": f"⚡ PROTOCOLO WEbdEX — AO VIVO · {hora_str}",
@@ -260,7 +276,7 @@ def notify_swaps_horario(total: int, create: int, execute: int, hora_str: str) -
     """Relatório 2h de swaps → #swaps."""
     if total == 0:
         desc  = "🔇 **NENHUM SWAP** nas últimas 2h.\n*SwapBook aguardando próxima oferta.*"
-        color = 0x555555
+        color = _DARK
     else:
         bars  = min(10, max(1, total * 2))
         bar   = "█" * bars + "░" * max(0, 10 - bars)
@@ -270,7 +286,7 @@ def notify_swaps_horario(total: int, create: int, execute: int, hora_str: str) -
             f"✅ **SWAP EXECUTADO:** `{execute}`\n\n"
             f"`{bar}` `{total} swaps/2h`"
         )
-        color = 0x38BDF8
+        color = _CHART_BLUE
     _async_post({
         "embeds": [{
             "title": f"🔄 SWAPBOOK WEbdEX — {hora_str}",
@@ -285,7 +301,7 @@ def notify_swaps_horario(total: int, create: int, execute: int, hora_str: str) -
 def notify_onchain_event(
     title: str,
     description: str,
-    color: int = 0x00FFB2,
+    color: int = _SUCCESS,
     tx_hash: str = "",
 ) -> None:
     """Evento curado ao vivo → #webdex-on-chain (pulso do protocolo)."""
@@ -341,7 +357,7 @@ def notify_onchain_heartbeat(
                 f"{activity}\n\n"
                 f"🔗 Polygon Mainnet · `{hora_str}`"
             ),
-            "color": 0x00FFB2,
+            "color": _SUCCESS,
             "thumbnail": {"url": _BDZINHO_IMG},
             "footer": {"text": "WEbdEX Protocol · OCME Monitor · Ao vivo"},
         }]
@@ -384,7 +400,7 @@ def notify_protocolo_relatorio(
     """Relatório completo 💎 LUCRO TOTAL DO PROTOCOLO → #relatório-diário (Discord)."""
     p_wr     = (p_wins / p_trades * 100) if p_trades > 0 else 0.0
     emoji    = "🟢" if p_lucro >= 0 else "🔴"
-    color    = 0x00FF88 if p_lucro >= 0 else 0xFF4444
+    color    = _SUCCESS if p_lucro >= 0 else _ERROR
     avg_gas  = (p_gas_pol / p_trades) if p_trades > 0 else 0.0
     avg_trd  = (p_lucro / p_trades) if p_trades > 0 else 0.0
     s_lucro  = f"+${p_lucro:.2f}" if p_lucro >= 0 else f"-${abs(p_lucro):.2f}"
@@ -492,7 +508,7 @@ def notify_ciclo_report(
 
 def notify_anomaly(alert_text: str, severity: str = "warning") -> None:
     """Alerta de anomalia → #webdex-on-chain."""
-    color = 0xFF0000 if severity == "critical" else _COLOR_ALERT
+    color = _ERROR if severity == "critical" else _COLOR_ALERT
     icon  = "🚨" if severity == "critical" else "⚠️"
     _async_post({
         "embeds": [{
