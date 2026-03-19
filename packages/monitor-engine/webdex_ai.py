@@ -43,6 +43,16 @@ except ImportError:
     _PG_MEMORY_ENABLED = False
     logger.warning("[ai] Long-term memory PostgreSQL: módulo não encontrado — usando deque apenas")
 
+# ── Epic 12 Story 12.2 — Tool Use / Function Calling (soft import — graceful degradation) ──
+try:
+    from webdex_tools import TOOLS, execute_tool
+    _TOOLS_ENABLED = True
+    logger.info("[ai] Tool use (Function Calling): ATIVO (%d tools)", len(TOOLS))
+except ImportError:
+    _TOOLS_ENABLED = False
+    TOOLS = []
+    logger.warning("[ai] Tool use desabilitado — webdex_tools não encontrado")
+
 # ==============================================================================
 # ⚙️ CONFIG
 # ==============================================================================
@@ -1270,6 +1280,30 @@ def build_webdex_brain_prompt(chat_id, user_text: str) -> list:
     # ── Snapshot do DB do usuário (dados reais) ───────────────────────────────
     brain_db = _brain_db_snapshot(chat_id, user_text, intent)
 
+    # ── Story 12.2 AC6: injetar wallet do usuário para tool use ──────────────
+    if _TOOLS_ENABLED:
+        try:
+            row_u = conn.execute(
+                "SELECT wallet FROM users WHERE chat_id=?", (str(chat_id),)
+            ).fetchone()
+            _user_wallet = row_u[0] if row_u and row_u[0] and str(row_u[0]).startswith("0x") else None
+        except Exception:
+            _user_wallet = None
+
+        if _user_wallet:
+            system += (
+                f"\n\nTOOL USE — WALLET DO USUÁRIO:\n"
+                f"A wallet registrada deste usuário é: {_user_wallet}\n"
+                f"Quando usar get_user_portfolio, passe exatamente esta wallet como argumento.\n"
+                f"NUNCA compartilhe este endereço com outros chat_ids."
+            )
+        else:
+            system += (
+                "\n\nTOOL USE — WALLET NÃO REGISTRADA:\n"
+                "Este usuário não tem wallet registrada no WEbdEX.\n"
+                "Se pedirem portfolio ou dados on-chain pessoais, oriente: /start → Conectar Wallet."
+            )
+
     # ── Contexto específico por intent — orienta o foco da resposta ──────────
     focus_map = {
         "resultado": (
@@ -1510,6 +1544,129 @@ def call_openai(messages, model: str = "") -> str:
 
 
 # ==============================================================================
+# 🔧 TOOL USE LOOP — Story 12.2
+# ==============================================================================
+
+def call_openai_with_tools(messages: list, chat_id: int, model: str = "") -> str:
+    """
+    Chat Completions com suporte a Function Calling (Tool Use).
+    Loop de tool use: max _TOOL_MAX_ITER iterações para evitar loop infinito.
+    Cada tool call é executada com circuit breaker + rate limit + timeout.
+
+    Se _TOOLS_ENABLED=False, delega para call_openai() sem tools.
+    """
+    if not _TOOLS_ENABLED:
+        return call_openai(messages, model=model)
+
+    if not model:
+        model = AI_MODEL
+
+    api_key = (os.getenv("OPENROUTER_API_KEY") or
+               os.getenv("OPENAI_API_KEY") or
+               os.getenv("OPENAI_KEY") or
+               _AI_API_KEY or "")
+    if not api_key:
+        return "IA indisponível: configure OPENROUTER_API_KEY ou OPENAI_API_KEY no .env"
+
+    base_url = _AI_BASE_URL
+    url = f"{base_url}/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://webdex.bot",
+        "X-Title": "WEbdEX Brain",
+    }
+
+    _TOOL_MAX_ITER = 3
+    msgs = list(messages)  # cópia local para o loop
+
+    for iteration in range(_TOOL_MAX_ITER + 1):
+        payload = {
+            "model": model,
+            "messages": msgs,
+            "temperature": float(os.getenv("OPENAI_TEMPERATURE", "0.2")),
+            "max_tokens": int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "1400")),
+        }
+        # Adiciona tools apenas se disponíveis e ainda não no último passo
+        if _TOOLS_ENABLED and TOOLS and iteration < _TOOL_MAX_ITER:
+            payload["tools"] = TOOLS
+            payload["tool_choice"] = "auto"
+
+        timeout_s = int(os.getenv("OPENAI_TIMEOUT", "45"))
+        tries = int(os.getenv("OPENAI_RETRIES", "2"))
+        backoff = 2.0
+
+        resp_data = None
+        for attempt in range(max(1, tries)):
+            try:
+                resp = requests.post(url, headers=headers, json=payload, timeout=timeout_s)
+                if resp.status_code == 429:
+                    time.sleep(min(float(resp.headers.get("Retry-After", backoff)), 30))
+                    backoff *= 1.8
+                    continue
+                if resp.status_code >= 500:
+                    time.sleep(backoff)
+                    backoff *= 1.8
+                    continue
+                resp_data = resp.json()
+                break
+            except requests.exceptions.Timeout:
+                time.sleep(backoff)
+                backoff *= 1.8
+            except Exception as e:
+                logger.warning("[ai] call_openai_with_tools request error: %s", e)
+                time.sleep(backoff)
+                backoff *= 1.8
+
+        if resp_data is None:
+            return "IA indisponível após múltiplas tentativas."
+
+        choice = (resp_data.get("choices") or [{}])[0]
+        finish_reason = choice.get("finish_reason", "stop")
+        msg = choice.get("message", {})
+
+        # ── Sem tool calls → resposta final ──────────────────────────────────
+        if finish_reason != "tool_calls" or not msg.get("tool_calls"):
+            content = (msg.get("content") or "").strip()
+            if not content:
+                err = resp_data.get("error", {})
+                content = f"IA retornou resposta vazia. {err.get('message', '')}".strip()
+            return content
+
+        # ── Processar tool calls ─────────────────────────────────────────────
+        tool_calls = msg.get("tool_calls", [])
+        logger.info("[ai] Tool calls recebidas: %s", [tc.get("function", {}).get("name") for tc in tool_calls])
+
+        # Adiciona a resposta do assistente (com tool_calls) ao histórico
+        msgs.append(msg)
+
+        # Executa cada tool e adiciona resultado ao histórico
+        for tc in tool_calls:
+            fn = tc.get("function", {})
+            fn_name = fn.get("name", "")
+            fn_args_raw = fn.get("arguments", "{}")
+            tc_id = tc.get("id", "")
+
+            try:
+                fn_args = json.loads(fn_args_raw)
+            except json.JSONDecodeError:
+                fn_args = {}
+
+            result = execute_tool(fn_name, fn_args, chat_id=int(chat_id))
+            logger.debug("[ai] Tool %s → %s...", fn_name, result[:80])
+
+            msgs.append({
+                "role": "tool",
+                "tool_call_id": tc_id,
+                "content": result,
+            })
+
+    # Se chegou aqui é porque esgotou iterações sem finish_reason=stop
+    logger.warning("[ai] Tool use loop esgotou %d iterações para chat_id=%s", _TOOL_MAX_ITER, chat_id)
+    return call_openai(msgs, model=model)
+
+
+# ==============================================================================
 # 🛡️ PREVENTIVE HINT
 # ==============================================================================
 
@@ -1588,7 +1745,11 @@ def handle_ai_message_extended(chat_id, text: str, extra_raw=None, mode: str = N
             "content": f"Dados reais para análise:\n{extra_raw[:2000]}"
         })
 
-    response = call_openai(messages, model=AI_MODEL)
+    # Story 12.2: usa tool use se disponível, fallback para call_openai simples
+    if _TOOLS_ENABLED:
+        response = call_openai_with_tools(messages, chat_id=chat_id, model=AI_MODEL)
+    else:
+        response = call_openai(messages, model=AI_MODEL)
 
     mem_add(chat_id, "user", text)
     mem_add(chat_id, "assistant", response)
