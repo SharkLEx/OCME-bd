@@ -268,5 +268,27 @@ async def _send_ciclo_notification(
             await channel.send(embed=embed)
         logger.info("[ciclo_21h] Notificação 21h enviada ao #bdzinho-ia")
         _mark_sent_today()
+
+        # Gerar vídeo Creatomate (graceful degradation — falha não afeta o ciclo)
+        try:
+            from creatomate_worker import gerar_video_ciclo
+            hoje_str = (now_utc - timedelta(hours=3)).strftime("%d.%m.%Y")
+            video_bytes = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: gerar_video_ciclo({
+                    "profit":    profit,
+                    "ops_count": ops,
+                    "tvl_total": tvl,
+                    "data_str":  hoje_str,
+                })
+            )
+            if video_bytes:
+                import io
+                video_file = discord.File(io.BytesIO(video_bytes), filename="ciclo_21h.mp4")
+                await channel.send(file=video_file)
+                logger.info("[ciclo_21h] Vídeo Creatomate enviado no Discord")
+        except Exception as ve:
+            logger.warning("[ciclo_21h] Vídeo Creatomate ignorado: %s", ve)
+
     except Exception as e:
         logger.error("[ciclo_21h] Falha ao enviar notificação: %s", e)

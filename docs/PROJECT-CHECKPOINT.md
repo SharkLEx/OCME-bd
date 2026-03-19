@@ -6,12 +6,17 @@
 
 ## 📊 Status das Epics
 
+> Última atualização: 2026-03-19 (Story 11.1 InProgress)
+
+
+
 | Epic | Título | Status | Stories |
 |------|--------|--------|---------|
 | 7 | OCME-bd Monitor Engine | ✅ Done | Em completed/ |
 | 8 | WEbdEX Orchestrator | 🟡 In Progress | 8.1–8.7 Done, 8.8–8.9 Bloqueadas |
 | 9 | bdZinho Discord v2 | ✅ Done | 9.1–9.4 Done + Deployadas |
-| 10 | WEbdEX Design System: Telegram + Monitor Engine | 🟡 In Progress | 10.1 In Progress, 10.2–10.4 Backlog |
+| 10 | WEbdEX Design System: Telegram + Monitor Engine | ✅ Done | 10.1–10.4 Done + Deployadas |
+| 11 | WEbdEX Protocol OS: Automação de Conteúdo | 🔄 InProgress | 11.1 InProgress |
 
 ---
 
@@ -21,22 +26,34 @@
 |-------|--------|--------|--------|
 | 8.8 | Instagram Integration | ⏸️ Bloqueada | Aguardando credenciais Meta |
 | 8.9 | WhatsApp Integration | ⏸️ Bloqueada | Aguardando credenciais Meta |
-| 10.1 | Telegram Design Tokens + 21h Report | 🟡 In Progress | feat/epic-7-monitor-engine |
-| 10.2 | Monitor Engine Color Migration | ⬜ Backlog | feat/epic-7-monitor-engine |
-| 10.3 | Metrics Worker + Discord 21h Notification | ⬜ Backlog | feat/epic-7-monitor-engine |
-| 10.4 | Operational Utilities | ⬜ Backlog | feat/epic-7-monitor-engine |
+| 10.1 | Telegram Design Tokens + 21h Report | ✅ Done | Deploy OK |
+| 10.2 | Monitor Engine Color Migration | ✅ Done | Deploy OK |
+| 10.3 | Metrics Worker + Discord 21h Notification | ✅ Done | Workers ativos no orchestrator-discord, 508+ snapshots no PostgreSQL, ciclo 21h verificando diariamente |
+| 10.4 | Operational Utilities | ✅ Done | `check_db.py` ✅ deploy OK — DB OK, TVL $1.5M, 3756 ops |
 
 ---
 
 ## 🚀 Último Trabalho Realizado
 
-### Sessão 2026-03-19 (continuação)
+### Sessão 2026-03-19 (continuação — blockers 10.3/10.4 resolvidos)
 
-**Epic 10 criado — WEbdEX Design System: Telegram + Monitor Engine** (@pm Morgan):
-- Epic 10 formalizado: 4 stories para commitar código uncommitted do monitor-engine
-- Stories criadas: 10.1 (In Progress), 10.2, 10.3, 10.4 (Backlog)
-- Arquivos: `docs/stories/active/epic-10.md`, `10.1–10.4.story.md`
-- Próximo: @dev commitar story 10.1 (telegram_design_tokens.py + webdex_workers.py)
+**Epic 10 — ✅ DONE** (@dev + @devops, commit 23cffc6):
+- `protocol_context.py` copiado para `monitor-engine` — `get_status_embed_data()` ✅ import OK no container
+- `check_db.py` path corrigido (`data/webdex_v5_final.db`) + schema migrado → TVL $1.5M, 3756 ops ✅
+- Deploy: docker cp → restart ocme-monitor
+- Story 10.3: metrics_worker + ciclo_21h ativos no orchestrator-discord, 508 snapshots, ciclo verificado ✅
+- Story 10.4: ✅ Done — check_db, check_users, check_wallets, broadcast_start funcionais
+
+### Sessão 2026-03-19 (continuação — Epic 10 completo)
+
+**Epic 10 — Push + Deploy realizado** (@devops Operator):
+- 5 commits pushados para `feat/epic-7-monitor-engine` (958bb1b)
+- Deploy no VPS: 10 arquivos → `ocme-monitor:/app/` via docker cp + restart
+- `telegram_design_tokens` ✅ import OK em produção
+- `webdex_discord_sync`, `notification_engine` ✅ OK
+- Story 10.3 BLOCKER: `protocol_context` não encontrado no container
+- Story 10.4 BLOCKER: `check_db.py` referencia tabela `operacoes` (schema errado)
+- Container `ocme-monitor` 🟢 Healthy — 18 threads ativas
 
 ### Sessão 2026-03-19
 
