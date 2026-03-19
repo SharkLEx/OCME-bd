@@ -11,7 +11,7 @@ from web3 import Web3
 from solcx import compile_source, install_solc
 
 # ── Config ────────────────────────────────────────────────────────────────────
-RPC_URL      = os.getenv("RPC_URL", "https://polygon-mainnet.g.alchemy.com/v2/-W3UMRjuFK-xbHXetMv5nZRoLkNusBIB")
+RPC_URL      = os.getenv("RPC_URL", "https://polygon-rpc.com")  # Use RPC público como fallback — NUNCA hardcode chave Alchemy aqui
 PRIVATE_KEY  = os.getenv("DEPLOY_PRIVATE_KEY", "")   # ← preencher via env, nunca hardcoded
 DEPLOY_WALLET = "0xb5Fb0CDaab5784cBE05CcB9D843DaFe4663883C5"
 
