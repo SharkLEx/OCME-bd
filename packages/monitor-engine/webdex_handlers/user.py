@@ -3224,4 +3224,56 @@ def cmd_confirmar_esquecimento(m):
         logger.info("[user] LGPD: memória deletada para chat_id=%s (%d registros)", m.chat.id, deleted)
     except Exception as e:
         logger.error("[user] Falha ao deletar memória LGPD (chat_id=%s): %s", m.chat.id, e)
-        bot.send_message(m.chat.id, "❌ Erro ao apagar memória. Tente novamente mais tarde.")
+
+
+# ==============================================================================
+# 🔐 SUBSCRIPTION TIER — Story 14.3
+# ==============================================================================
+_sub_tier_cache: dict[int, tuple[str, float]] = {}  # chat_id → (tier, timestamp)
+_SUB_TIER_CACHE_TTL = 300  # 5 minutos
+_sub_tier_lock = threading.Lock()
+
+
+def check_subscription_tier(chat_id: int) -> str:
+    """
+    Retorna o tier de subscription ativo para o chat_id.
+    Consulta a tabela `subscriptions` e cacheia o resultado por 5 minutos.
+    Retorna 'pro' se assinatura ativa e não expirada, 'free' caso contrário.
+    Graceful degradation: retorna 'free' em caso de erro de DB.
+    """
+    now = time.time()
+
+    # Verificar cache
+    with _sub_tier_lock:
+        cached = _sub_tier_cache.get(chat_id)
+        if cached is not None:
+            tier, ts = cached
+            if now - ts < _SUB_TIER_CACHE_TTL:
+                return tier
+
+    try:
+        now_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        with DB_LOCK:
+            row = cursor.execute(
+                """
+                SELECT tier FROM subscriptions
+                WHERE chat_id = ?
+                  AND status = 'active'
+                  AND (expires_at IS NULL OR expires_at > ?)
+                ORDER BY expires_at DESC
+                LIMIT 1
+                """,
+                (chat_id, now_utc),
+            ).fetchone()
+
+        tier = row[0] if row else "free"
+
+    except Exception as e:
+        logger.debug("[sub_tier] Erro ao consultar subscription para chat_id=%s: %s", chat_id, e)
+        tier = "free"
+
+    # Atualizar cache
+    with _sub_tier_lock:
+        _sub_tier_cache[chat_id] = (tier, now)
+
+    return tier

@@ -24,6 +24,7 @@ from webdex_workers import (
     _protocol_ops_sync_worker,
 )
 from webdex_anomaly import anomaly_worker
+from subscription_worker import subscription_worker
 from webdex_milestones import milestone_worker
 from webdex_swapbook_notify import swapbook_notify_worker
 from webdex_onchain_notify import onchain_notify_worker
@@ -55,6 +56,7 @@ _THREAD_REGISTRY: dict[str, callable] = {
     "onchain_notify_worker":     onchain_notify_worker,
     "network_notify_worker":     network_notify_worker,
     "notification_engine_worker": notification_engine_worker,
+    "subscription_worker":        subscription_worker,
 }
 
 
