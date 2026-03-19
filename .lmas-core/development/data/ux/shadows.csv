@@ -1,0 +1,14 @@
+level,name,x_offset,y_offset,blur,spread,color,opacity,use_case,material_equivalent,tailwind_class
+0,none,0,0,0,0,#000000,0,Flat elements no elevation,Elevation 0,shadow-none
+1,xs,0,1px,2px,0,#000000,0.05,Subtle separation for cards and inputs,Elevation 1,shadow-xs
+2,sm,0,1px,3px,0,#000000,0.10,Buttons and small interactive elements,Elevation 2,shadow-sm
+3,base,0,2px,4px,-1px,#000000,0.10,Cards and dropdowns at rest,Elevation 3,shadow
+4,md,0,4px,6px,-1px,#000000,0.10,Hovered cards and active dropdowns,Elevation 4,shadow-md
+5,lg,0,10px,15px,-3px,#000000,0.10,Modals and floating panels,Elevation 6,shadow-lg
+6,xl,0,20px,25px,-5px,#000000,0.10,Popovers and important overlays,Elevation 8,shadow-xl
+7,2xl,0,25px,50px,-12px,#000000,0.25,Hero cards and featured elements,Elevation 12,shadow-2xl
+8,inner,inset 0,2px,4px,0,#000000,0.06,Pressed buttons and inset inputs,n/a,shadow-inner
+9,glow-primary,0,0,20px,0,#3B82F6,0.35,Focus rings and highlighted elements,n/a,custom shadow-blue-500/35
+10,glow-success,0,0,20px,0,#22C55E,0.30,Success states and confirmed actions,n/a,custom shadow-green-500/30
+11,dark-mode-sm,0,1px,3px,0,#000000,0.30,Cards in dark mode need stronger shadows,Elevation 2,dark:shadow-sm adjusted
+12,dark-mode-lg,0,10px,15px,-3px,#000000,0.40,Modals in dark mode need stronger shadows,Elevation 6,dark:shadow-lg adjusted

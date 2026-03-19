@@ -1,5 +1,9 @@
 ---
 
+> **DEPRECATED v5.0.0** — This task is deprecated. Paper MCP replaces v0/Lovable prompt generation.
+> Use `*wireframe` or `*build` with Paper MCP for visual design instead.
+> This file is kept for backward compatibility with projects not using Paper.
+
 ## Execution Modes
 
 **Choose your execution mode:**

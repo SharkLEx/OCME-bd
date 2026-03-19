@@ -13,4 +13,3 @@ These are the canonical locations — agents should read their memory on activat
 @import .lmas-core/development/agents/devops/MEMORY.md
 @import .lmas-core/development/agents/pm/MEMORY.md
 @import .lmas-core/development/agents/po/MEMORY.md
-@import .lmas-core/development/agents/bdpro/MEMORY.md

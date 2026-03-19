@@ -1,0 +1,325 @@
+workflow:
+  id: campaign-pipeline
+  name: Campaign Pipeline
+  version: "1.0"
+  domain: marketing
+  description: >-
+    Pipeline completo de campanha de mídia paga. Automatiza o fluxo desde a estratégia
+    até a execução e otimização: strategy → research → plan → creative → review → approve → execute → optimize.
+    Aplicável a campanhas de Meta Ads, Google Ads, LinkedIn Ads, TikTok Ads.
+  type: generic
+  project_types:
+    - paid-media
+    - performance-marketing
+    - lead-generation
+    - brand-awareness
+    - retargeting
+
+  metadata:
+    elicit: true
+    confirmation_required: true
+
+  execution_modes:
+    - mode: yolo
+      description: Execução autônoma com mínima interação
+      prompts: 0-1
+    - mode: interactive
+      description: Checkpoints de decisão em cada handoff
+      prompts: 8-15
+      default: true
+    - mode: preflight
+      description: Planejamento completo antes da execução
+      prompts: "15-20"
+
+  phases:
+    - phase_1: Strategy & Research
+    - phase_2: Planning & Creative
+    - phase_3: Review & Approval
+    - phase_4: Execution & Optimization
+
+  sequence:
+    - step: define_strategy
+      id: strategy
+      phase: 1
+      agent: content-strategist
+      action: Definir estratégia da campanha
+      notes: |
+        Content Strategist define a estratégia de conteúdo da campanha:
+        - Usa task create-content-strategy
+        - Define objetivos de comunicação
+        - Identifica pilares de conteúdo para a campanha
+        - Define target personas
+        - Mapeia mensagens por etapa do funil
+
+        Entrada requerida:
+        - Objetivo de negócio da campanha
+        - Budget disponível (estimativa)
+        - Público-alvo preliminar
+
+        Critérios de sucesso:
+        - [ ] Objetivos de comunicação claros
+        - [ ] Personas definidas
+        - [ ] Mensagens por etapa do funil
+        - [ ] Canais recomendados
+      outputs:
+        - campaign_strategy
+      next: research
+
+    - step: market_research
+      id: research
+      phase: 1
+      agent: content-researcher
+      action: Pesquisar mercado e concorrência
+      requires: strategy
+      optional: true
+      skip_condition: "campaign.type == 'retargeting' OR data_available == true"
+      notes: |
+        Content Researcher pesquisa dados para embasar a campanha:
+        - Análise de concorrentes (posicionamento em ads)
+        - Benchmarks de mercado (CPA, CTR médios do setor)
+        - Tendências de audiência e comportamento
+        - Palavras-chave e interesses para targeting
+
+        Quando pular:
+        - Campanha de retargeting (dados já existem)
+        - Dados de mercado já disponíveis de pesquisa recente
+
+        Critérios de sucesso:
+        - [ ] Benchmarks do setor coletados
+        - [ ] Concorrentes analisados
+        - [ ] Dados de audiência validados
+      outputs:
+        - market_research
+        - competitor_ads_analysis
+      next: plan
+
+    - step: create_campaign_plan
+      id: plan
+      phase: 2
+      agent: traffic-manager
+      action: Planejar campanha de mídia paga
+      requires: strategy
+      notes: |
+        Traffic Manager cria o plano detalhado da campanha:
+        - Usa task campaign-plan com template campaign-plan-tmpl.md
+        - Define objetivos SMART
+        - Aloca budget por plataforma
+        - Define audiências (demographics, interests, custom, lookalike)
+        - Seleciona formatos de anúncio
+        - Define KPIs e targets
+        - Cria timeline com fases (learning → optimization → scale)
+        - Define plano de A/B testing
+        - Define regras de otimização
+
+        Entrada requerida:
+        - Campaign strategy (do step strategy)
+        - Budget total aprovado ou estimado
+        - Market research (se disponível)
+
+        Critérios de sucesso:
+        - [ ] Objetivos SMART definidos
+        - [ ] Budget alocado por plataforma
+        - [ ] Audiências segmentadas
+        - [ ] KPIs com targets definidos
+        - [ ] Timeline com fases
+        - [ ] Plano de A/B testing
+      outputs:
+        - campaign_plan
+        - creative_brief
+      next: creative
+
+    - step: visual_creative_guidelines
+      id: visual_guidelines
+      phase: 2
+      agent: ux-design-expert
+      action: Gerar diretrizes visuais para criativos de anúncio
+      requires: plan
+      optional: true
+      skip_condition: "campaign.type == 'text-only' OR campaign.channel == 'search'"
+      notes: |
+        UX Design Expert gera diretrizes visuais para os criativos:
+        - Layout guidelines por plataforma (Meta, Google, LinkedIn, TikTok)
+        - Tipografia e hierarquia visual
+        - Uso de cores alinhado com brand guidelines
+        - Specs de tamanho e safe zones por formato
+
+        Comando: @ux-design-expert → *banner {campaign.platform}
+
+        Quando pular:
+        - Campanha text-only (search ads)
+        - Canal sem componente visual
+
+        Critérios de sucesso:
+        - [ ] Layout guidelines por plataforma
+        - [ ] Specs de tipografia e cores
+        - [ ] Safe zones e tamanhos definidos
+      outputs:
+        - visual_guidelines: "Banner design guidelines with platform-specific specs"
+      next: creative
+
+    - step: create_ad_copy
+      id: creative
+      phase: 2
+      agent: copywriter
+      action: Criar copies para anúncios
+      requires: plan
+      notes: |
+        Copywriter cria as peças criativas da campanha:
+        - Usa task ad-copy para cada plataforma/formato
+        - Respeita limites de caracteres por plataforma
+        - Produz variações para A/B testing
+        - Cria headlines, descriptions, CTAs
+
+        Entrada requerida:
+        - Campaign plan (com formatos e plataformas)
+        - Brand guidelines + tone of voice
+        - Creative brief do traffic manager
+
+        Critérios de sucesso:
+        - [ ] 5-10 headlines por plataforma
+        - [ ] 3-5 descriptions por plataforma
+        - [ ] CTAs alinhados com objetivo
+        - [ ] Variações para A/B testing
+        - [ ] Limites de caracteres respeitados
+      outputs:
+        - ad_copy_package
+      next: review
+
+    - step: review_creative
+      id: review
+      phase: 3
+      agent: content-reviewer
+      action: Revisar peças criativas
+      requires: creative
+      notes: |
+        Content Reviewer revisa todas as peças da campanha:
+        - Brand alignment de TODAS as peças
+        - Legal compliance (claims, disclaimers)
+        - Quality score por peça
+        - Consistência entre peças da mesma campanha
+
+        Vereditos:
+        - APPROVE → segue para aprovação do marketing-chief
+        - REVISE → volta ao copywriter com feedback
+        - REJECT → volta ao copywriter com justificativa
+
+        Critérios de sucesso:
+        - [ ] Todas as peças revisadas
+        - [ ] Brand alignment OK
+        - [ ] Legal compliance OK
+        - [ ] Quality score >= 7 em todas as peças
+      outputs:
+        - review_verdict
+        - quality_scores
+      next: approve
+      on_revise: creative
+      on_reject: creative
+
+    - step: approve_campaign
+      id: approve
+      phase: 3
+      agent: marketing-chief
+      action: Aprovar campanha e budget
+      requires: review
+      condition: "review.verdict == 'APPROVE'"
+      notes: |
+        Marketing Chief aprova a campanha completa:
+        - Usa task approve-campaign
+        - Revisa estratégia e alinhamento com brand
+        - Valida budget e ROI projetado
+        - Verifica targeting e audiências
+        - OBRIGATÓRIO para budget > R$1.000
+
+        Critérios de sucesso:
+        - [ ] Estratégia alinhada com posicionamento
+        - [ ] Budget justificado com ROI projetado
+        - [ ] Criativos aprovados
+        - [ ] Targeting validado
+      outputs:
+        - campaign_approval
+      next: execute
+
+    - step: execute_budget
+      id: execute
+      phase: 4
+      agent: traffic-manager
+      action: Alocar budget e iniciar campanha
+      requires: approve
+      condition: "approve.status == 'APPROVED'"
+      notes: |
+        Traffic Manager executa a campanha:
+        - Usa task budget-allocation para alocar budget final
+        - Configura campanhas nas plataformas
+        - Ativa tracking e UTM parameters
+        - Inicia fase de learning
+
+        Critérios de sucesso:
+        - [ ] Budget alocado conforme plano
+        - [ ] Campanhas configuradas nas plataformas
+        - [ ] Tracking ativo
+        - [ ] Fase de learning iniciada
+      outputs:
+        - campaign_active
+        - tracking_config
+      next: optimize
+
+    - step: optimize_performance
+      id: optimize
+      phase: 4
+      agent: traffic-manager
+      action: Otimizar performance e gerar relatórios
+      requires: execute
+      recurring: true
+      frequency: "weekly"
+      notes: |
+        Traffic Manager monitora e otimiza continuamente:
+        - Analisa performance vs KPI targets
+        - Realoca budget entre campanhas (usa task budget-allocation)
+        - Pausa campanhas abaixo do threshold
+        - Escala campanhas com bom ROAS
+        - Gera relatório de ROI (usa task roi-report)
+        - Se reallocation > 20% → escala para @marketing-chief
+
+        Critérios de sucesso:
+        - [ ] Performance monitorada vs targets
+        - [ ] Otimizações aplicadas baseadas em dados
+        - [ ] Relatório de ROI gerado
+        - [ ] Budget realocado se necessário
+      outputs:
+        - optimization_actions
+        - roi_report
+      next: null
+
+  quality_gates:
+    creative_review:
+      agent: content-reviewer
+      step: review
+      verdicts:
+        APPROVE: "All creatives score >= 7.0"
+        REVISE: "Some creatives need improvements"
+        REJECT: "Major brand/legal issues"
+      blocking: true
+      constitution_ref: "MK-II (Brand Alignment), MK-III (Legal Compliance)"
+
+    campaign_approval:
+      agent: marketing-chief
+      step: approve
+      required_for:
+        - budget_above_1000
+        - new_campaign
+        - brand_sensitive_targeting
+      blocking: true
+      constitution_ref: "MK-IV (Data-Informed Decisions)"
+
+  error_handling:
+    strategy: retry-with-feedback
+    max_revisions: 3
+    escalation:
+      trigger: "revisions >= 3 OR budget_overrun > 10%"
+      escalate_to: marketing-chief
+      action: "Review campaign strategy and objectives alignment"
+
+    budget_safeguards:
+      daily_cap_exceeded: "Pause campaign, notify @traffic-manager"
+      roas_below_threshold: "Reduce budget by 50%, notify @marketing-chief"
+      spend_without_conversion: "Pause after 3x CPA target without conversion"

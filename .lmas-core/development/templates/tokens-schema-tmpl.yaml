@@ -1,0 +1,180 @@
+# Design Tokens Schema Template
+# LMAS Template — @ux-design-expert (Switch)
+# Version: 1.0.0 | Created: 2026-03-17
+# Follows W3C Design Tokens Community Group (DTCG) format
+# Reference: https://design-tokens.github.io/community-group/format/
+# Fill {{PLACEHOLDERS}} or extend with project-specific tokens.
+
+metadata:
+  template_id: tokens-schema
+  version: "1.0.0"
+  created: "2026-03-17"
+  format: "W3C DTCG"
+  used_by:
+    - "@ux-design-expert (Switch)"
+    - "@dev (Neo)"
+
+---
+
+# Primitive Tokens — Raw values, not used directly in components
+colors:
+  primitive:
+    white:
+      $value: "#FFFFFF"
+      $type: "color"
+    black:
+      $value: "#000000"
+      $type: "color"
+    gray:
+      50:  { $value: "#F9FAFB", $type: "color" }
+      100: { $value: "#F3F4F6", $type: "color" }
+      200: { $value: "#E5E7EB", $type: "color" }
+      300: { $value: "#D1D5DB", $type: "color" }
+      400: { $value: "#9CA3AF", $type: "color" }
+      500: { $value: "#6B7280", $type: "color" }
+      600: { $value: "#4B5563", $type: "color" }
+      700: { $value: "#374151", $type: "color" }
+      800: { $value: "#1F2937", $type: "color" }
+      900: { $value: "#111827", $type: "color" }
+    blue:
+      50:  { $value: "#EFF6FF", $type: "color" }
+      500: { $value: "#3B82F6", $type: "color" }
+      600: { $value: "#2563EB", $type: "color" }
+      700: { $value: "#1D4ED8", $type: "color" }
+    red:
+      50:  { $value: "#FEF2F2", $type: "color" }
+      500: { $value: "#EF4444", $type: "color" }
+      600: { $value: "#DC2626", $type: "color" }
+    green:
+      50:  { $value: "#F0FDF4", $type: "color" }
+      500: { $value: "#22C55E", $type: "color" }
+      600: { $value: "#16A34A", $type: "color" }
+    amber:
+      50:  { $value: "#FFFBEB", $type: "color" }
+      500: { $value: "#F59E0B", $type: "color" }
+
+  # Semantic Tokens — Reference primitives, used in components
+  semantic:
+    color-primary:
+      $value: "{colors.primitive.blue.600}"
+      $type: "color"
+      $description: "Primary brand color for interactive elements"
+    color-primary-hover:
+      $value: "{colors.primitive.blue.700}"
+      $type: "color"
+    color-secondary:
+      $value: "{colors.primitive.gray.600}"
+      $type: "color"
+    color-surface:
+      $value: "{colors.primitive.white}"
+      $type: "color"
+    color-surface-raised:
+      $value: "{colors.primitive.gray.50}"
+      $type: "color"
+    color-background:
+      $value: "{colors.primitive.gray.100}"
+      $type: "color"
+    color-text-primary:
+      $value: "{colors.primitive.gray.900}"
+      $type: "color"
+    color-text-secondary:
+      $value: "{colors.primitive.gray.500}"
+      $type: "color"
+    color-text-inverse:
+      $value: "{colors.primitive.white}"
+      $type: "color"
+    color-border:
+      $value: "{colors.primitive.gray.200}"
+      $type: "color"
+    color-error:
+      $value: "{colors.primitive.red.500}"
+      $type: "color"
+    color-success:
+      $value: "{colors.primitive.green.500}"
+      $type: "color"
+    color-warning:
+      $value: "{colors.primitive.amber.500}"
+      $type: "color"
+
+typography:
+  font_families:
+    heading:
+      $value: "Inter, system-ui, -apple-system, sans-serif"
+      $type: "fontFamily"
+    body:
+      $value: "Inter, system-ui, -apple-system, sans-serif"
+      $type: "fontFamily"
+    mono:
+      $value: "'JetBrains Mono', 'Fira Code', monospace"
+      $type: "fontFamily"
+
+  font_sizes:
+    xs:   { $value: "0.75rem",  $type: "dimension", $description: "12px" }
+    sm:   { $value: "0.875rem", $type: "dimension", $description: "14px" }
+    base: { $value: "1rem",     $type: "dimension", $description: "16px" }
+    lg:   { $value: "1.125rem", $type: "dimension", $description: "18px" }
+    xl:   { $value: "1.25rem",  $type: "dimension", $description: "20px" }
+    2xl:  { $value: "1.5rem",   $type: "dimension", $description: "24px" }
+    3xl:  { $value: "1.875rem", $type: "dimension", $description: "30px" }
+    4xl:  { $value: "2.25rem",  $type: "dimension", $description: "36px" }
+
+  font_weights:
+    regular: { $value: "400", $type: "fontWeight" }
+    medium:  { $value: "500", $type: "fontWeight" }
+    semibold: { $value: "600", $type: "fontWeight" }
+    bold:    { $value: "700", $type: "fontWeight" }
+
+  line_heights:
+    tight:  { $value: "1.25", $type: "number" }
+    normal: { $value: "1.5",  $type: "number" }
+    relaxed: { $value: "1.75", $type: "number" }
+
+spacing:
+  scale:
+    0:  { $value: "0px",   $type: "dimension" }
+    1:  { $value: "4px",   $type: "dimension" }
+    2:  { $value: "8px",   $type: "dimension" }
+    3:  { $value: "12px",  $type: "dimension" }
+    4:  { $value: "16px",  $type: "dimension" }
+    5:  { $value: "20px",  $type: "dimension" }
+    6:  { $value: "24px",  $type: "dimension" }
+    8:  { $value: "32px",  $type: "dimension" }
+    10: { $value: "40px",  $type: "dimension" }
+    12: { $value: "48px",  $type: "dimension" }
+    16: { $value: "64px",  $type: "dimension" }
+    20: { $value: "80px",  $type: "dimension" }
+
+borders:
+  radius:
+    none: { $value: "0px",    $type: "dimension" }
+    sm:   { $value: "4px",    $type: "dimension" }
+    md:   { $value: "8px",    $type: "dimension" }
+    lg:   { $value: "12px",   $type: "dimension" }
+    xl:   { $value: "16px",   $type: "dimension" }
+    full: { $value: "9999px", $type: "dimension" }
+  width:
+    thin:   { $value: "1px", $type: "dimension" }
+    medium: { $value: "2px", $type: "dimension" }
+    thick:  { $value: "4px", $type: "dimension" }
+
+shadows:
+  elevation:
+    none: { $value: "none", $type: "shadow" }
+    sm:   { $value: "0 1px 2px 0 rgba(0,0,0,0.05)", $type: "shadow" }
+    md:   { $value: "0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1)", $type: "shadow" }
+    lg:   { $value: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1)", $type: "shadow" }
+    xl:   { $value: "0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)", $type: "shadow" }
+
+motion:
+  durations:
+    instant:  { $value: "0ms",   $type: "duration" }
+    fast:     { $value: "100ms", $type: "duration" }
+    normal:   { $value: "200ms", $type: "duration" }
+    slow:     { $value: "300ms", $type: "duration" }
+    slower:   { $value: "500ms", $type: "duration" }
+  easings:
+    default:    { $value: "cubic-bezier(0.4, 0, 0.2, 1)", $type: "cubicBezier" }
+    ease_in:    { $value: "cubic-bezier(0.4, 0, 1, 1)",   $type: "cubicBezier" }
+    ease_out:   { $value: "cubic-bezier(0, 0, 0.2, 1)",   $type: "cubicBezier" }
+    ease_in_out: { $value: "cubic-bezier(0.4, 0, 0.2, 1)", $type: "cubicBezier" }
+    spring:     { $value: "cubic-bezier(0.34, 1.56, 0.64, 1)", $type: "cubicBezier" }

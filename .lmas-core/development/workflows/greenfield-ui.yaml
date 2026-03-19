@@ -50,12 +50,8 @@ workflow:
         - user_research_prompt
       notes: "Creates UI/UX specification using front-end-spec-tmpl. SAVE OUTPUT: Copy final front-end-spec.md to your project's docs/ folder."
 
-    - id: ux-generate-v0-prompt
-      agent: ux-design-expert
-      creates: v0_prompt (optional)
-      requires: front-end-spec.md
-      condition: user_wants_ai_generation
-      notes: "OPTIONAL BUT RECOMMENDED: Generate AI UI prompt for tools like v0, Lovable, etc. Use the generate-ai-frontend-prompt task. User can then generate UI in external tool and download project structure."
+    # ux-generate-v0-prompt: DEPRECATED v5.0.0 — Paper MCP replaces v0/Lovable prompt generation
+    # Use *wireframe or *build with Paper MCP for visual design instead
 
     - id: architect-create-architecture
       agent: architect
@@ -63,8 +59,7 @@ workflow:
       requires: front-end-spec.md
       optional_steps:
         - technical_research_prompt
-        - review_generated_ui_structure
-      notes: "Creates frontend architecture using front-end-architecture-tmpl. If user generated UI with v0/Lovable, can incorporate the project structure into architecture. May suggest changes to PRD stories or new stories. SAVE OUTPUT: Copy final front-end-architecture.md to your project's docs/ folder."
+      notes: "Creates frontend architecture using front-end-architecture-tmpl. May suggest changes to PRD stories or new stories. SAVE OUTPUT: Copy final front-end-architecture.md to your project's docs/ folder."
 
     - id: pm-update-prd
       agent: pm
@@ -90,8 +85,8 @@ workflow:
     - meta: guidance
       id: project-setup-guidance
       action: guide_project_structure
-      condition: user_has_generated_ui
-      notes: "If user generated UI with v0/Lovable: For polyrepo setup, place downloaded project in separate frontend repo. For monorepo, place in apps/web or frontend/ directory. Review architecture document for specific guidance."
+      condition: user_has_design_in_paper
+      notes: "If user has design in Paper: use get_jsx to export components. For polyrepo setup, place in separate frontend repo. For monorepo, place in apps/web or frontend/ directory. Review architecture document for specific guidance."
 
     - phase: 2
       name: Document Sharding
@@ -205,11 +200,7 @@ workflow:
         A[Start: UI Development] --> B[analyst: project-brief.md]
         B --> C[pm: prd.md]
         C --> D[ux-design-expert: front-end-spec.md]
-        D --> D2{Generate v0 prompt?}
-        D2 -->|Yes| D3[ux-design-expert: create v0 prompt]
-        D2 -->|No| E[architect: front-end-architecture.md]
-        D3 --> D4[User: generate UI in v0/Lovable]
-        D4 --> E
+        D --> E[architect: front-end-architecture.md]
         E --> F{Architecture suggests PRD changes?}
         F -->|Yes| G[pm: update prd.md]
         F -->|No| H[po: validate all artifacts]

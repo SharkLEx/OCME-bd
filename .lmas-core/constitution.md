@@ -1,12 +1,12 @@
-# LMAS Constitution
+# LMAS Constitution — Base
 
-> **Version:** 1.0.0 | **Ratified:** 2025-01-30 | **Last Amended:** 2025-01-30
+> **Version:** 2.0.0 | **Ratified:** 2025-01-30 | **Last Amended:** 2026-03-14
 
-Este documento define os princípios fundamentais e inegociáveis do LMAS. Todos os agentes, tasks, e workflows DEVEM respeitar estes princípios. Violações são bloqueadas automaticamente via gates.
+Este documento define os princípios **universais** do LMAS que se aplicam a **TODOS** os domínios, times e squads. Princípios específicos de cada domínio (software, marketing, finance, etc.) são definidos em **Domain Extensions** separadas.
 
 ---
 
-## Core Principles
+## Core Principles (Universal)
 
 ### I. CLI First (NON-NEGOTIABLE)
 
@@ -23,105 +23,115 @@ O CLI é a fonte da verdade onde toda inteligência, execução, e automação v
 CLI (Máxima) → Observability (Secundária) → UI (Terciária)
 ```
 
-**Gate:** `dev-develop-story.md` - WARN se UI criada antes de CLI funcional
+**Gate:** WARN se UI criada antes de CLI funcional
 
 ---
 
 ### II. Agent Authority (NON-NEGOTIABLE)
 
-Cada agente tem autoridades exclusivas que não podem ser violadas.
+Cada agente tem autoridades exclusivas que não podem ser violadas. As autoridades específicas são definidas pela **authority_matrix** do domínio ativo.
 
 **Regras:**
-- MUST: Apenas @devops pode executar `git push` para remote
-- MUST: Apenas @devops pode criar Pull Requests
-- MUST: Apenas @devops pode criar releases e tags
+- MUST: Cada agente opera dentro dos limites de sua autoridade exclusiva
 - MUST: Agentes DEVEM delegar para o agente apropriado quando fora de seu escopo
 - MUST: Nenhum agente pode assumir autoridade de outro
+- MUST: A authority matrix do domínio ativo define quem pode fazer o quê
 
-**Exclusividades:**
-
-| Autoridade | Agente Exclusivo |
-|------------|------------------|
-| git push | @devops |
-| PR creation | @devops |
-| Release/Tag | @devops |
-| Story creation | @sm, @po |
-| Architecture decisions | @architect |
-| Quality verdicts | @qa |
-
-**Gate:** Implementado via definição de agentes (não requer gate adicional)
-
----
-
-### III. Story-Driven Development (MUST)
-
-Todo desenvolvimento começa e termina com uma story.
-
-**Regras:**
-- MUST: Nenhum código é escrito sem uma story associada
-- MUST: Stories DEVEM ter acceptance criteria claros antes de implementação
-- MUST: Progresso DEVE ser rastreado via checkboxes na story
-- MUST: File List DEVE ser mantida atualizada na story
-- SHOULD: Stories seguem o workflow: @po/@sm cria → @dev implementa → @qa valida → @devops push
-
-**Gate:** `dev-develop-story.md` - BLOCK se não houver story válida
-
----
-
-### IV. No Invention (MUST)
-
-Especificações não inventam - apenas derivam dos requisitos.
-
-**Regras:**
-- MUST: Todo statement em spec.md DEVE rastrear para:
-  - Um requisito funcional (FR-*)
-  - Um requisito não-funcional (NFR-*)
-  - Uma constraint (CON-*)
-  - Um finding de research (verificado e documentado)
-- MUST NOT: Adicionar features não presentes nos requisitos
-- MUST NOT: Assumir detalhes de implementação não pesquisados
-- MUST NOT: Especificar tecnologias não validadas
-
-**Gate:** `spec-write-spec.md` - BLOCK se spec contiver invenções
-
----
-
-### V. Quality First (MUST)
-
-Qualidade não é negociável. Todo código passa por múltiplos gates antes de merge.
-
-**Regras:**
-- MUST: `npm run lint` passa sem erros
-- MUST: `npm run typecheck` passa sem erros
-- MUST: `npm test` passa sem falhas
-- MUST: `npm run build` completa com sucesso
-- MUST: CodeRabbit não reporta issues CRITICAL
-- MUST: Story status é "Done" ou "Ready for Review"
-- SHOULD: Cobertura de testes não diminui
-
-**Gate:** `pre-push.md` - BLOCK se qualquer check falhar
-
----
-
-### VI. Absolute Imports (SHOULD)
-
-Imports relativos criam acoplamento e dificultam refatoração.
-
-**Regras:**
-- SHOULD: Sempre usar imports absolutos com alias `@/`
-- SHOULD NOT: Usar imports relativos (`../../../`)
-- EXCEPTION: Imports dentro do mesmo módulo/feature podem ser relativos
-
-**Exemplo:**
-```typescript
-// CORRETO
-import { useStore } from '@/stores/feature/store'
-
-// INCORRETO
-import { useStore } from '../../../stores/feature/store'
+**Resolução de autoridade:**
+```
+Domain Extension (authority_matrix) → Define exclusividades por domínio
 ```
 
-**Gate:** ESLint rule (já implementado)
+**Gate:** Implementado via definição de agentes + domain authority matrix
+
+---
+
+### III. Deliverable-Driven Work (MUST)
+
+Todo trabalho começa e termina com um **deliverable rastreável**. O formato e tipo do deliverable é definido pelo domínio ativo (story, brief, requisition, etc.).
+
+**Regras:**
+- MUST: Nenhum trabalho é executado sem um deliverable associado
+- MUST: Deliverables DEVEM ter critérios de aceitação claros antes de execução
+- MUST: Progresso DEVE ser rastreado via checkboxes no deliverable
+- MUST: Deliverables seguem o workflow definido pelo domínio ativo
+- SHOULD: Deliverables seguem o fluxo: criador → executor → reviewer → publisher
+
+**Formato do deliverable:**
+```
+Definido em: domains/{domain-id}/constitution.yaml → deliverable_format
+```
+
+**Gate:** BLOCK se não houver deliverable válido associado ao trabalho
+
+---
+
+### IV. Quality Gates (MUST)
+
+Todo deliverable passa por quality gates antes de entrega. Os gates específicos são definidos pelo domínio ativo.
+
+**Regras:**
+- MUST: Todo deliverable passa pelos quality gates do domínio antes de ser considerado "done"
+- MUST: Gates com severidade BLOCK impedem entrega até correção
+- MUST: Gates com severidade WARN são registrados mas não impedem entrega
+- MUST: Deliverable status deve refletir a aprovação dos gates
+
+**Severity Levels (universais):**
+
+| Severidade | Comportamento | Uso |
+|------------|---------------|-----|
+| BLOCK | Impede execução, requer correção | NON-NEGOTIABLE, MUST críticos |
+| WARN | Permite continuar com alerta | MUST não-críticos |
+| INFO | Apenas reporta | SHOULD |
+
+**Definição dos gates:**
+```
+Definido em: domains/{domain-id}/constitution.yaml → quality_gates
+Referência: domains/_base/gate-severity.yaml
+```
+
+---
+
+## Domain Extensions
+
+A partir da v2.0.0, a Constitution segue um modelo **Base + Extensions**:
+
+```
+constitution.md (este arquivo)     → Princípios universais (4 artigos)
+  └── domains/{domain-id}/
+      └── constitution.yaml        → Artigos, authority matrix, gates do domínio
+```
+
+### Domínios Registrados
+
+| Domain ID | Nome | Artigos | Default |
+|-----------|------|---------|---------|
+| `software-dev` | Software Development | SD-I, SD-II, SD-III | ✅ Sim |
+| `marketing` | Marketing Digital | MK-I, MK-II, MK-III, MK-IV | Não |
+
+### Resolução de Domínio
+
+O domínio ativo é resolvido na seguinte ordem de prioridade:
+
+1. Campo `domain` no squad `config.yaml`
+2. Campo `domain` no team bundle ativo
+3. Campo `domain.active` no `project-config.yaml`
+4. Fallback: `software-dev` (default)
+
+### Registrar Novo Domínio
+
+Ver `domains/README.md` para instruções de como criar um novo domínio.
+
+### Migração v1.0.0 → v2.0.0
+
+| Constitution v1.0.0 | Constitution v2.0.0 |
+|---------------------|---------------------|
+| Art. I: CLI First | Art. I: CLI First (inalterado) |
+| Art. II: Agent Authority | Art. II: Agent Authority (genérico, matrix no domain) |
+| Art. III: Story-Driven Development | Art. III: Deliverable-Driven Work (genérico) |
+| Art. IV: No Invention | → `domains/software-dev/` Art. SD-I |
+| Art. V: Quality First | Art. IV: Quality Gates (genérico, checks no domain) |
+| Art. VI: Absolute Imports | → `domains/software-dev/` Art. SD-II |
 
 ---
 
@@ -130,42 +140,35 @@ import { useStore } from '../../../stores/feature/store'
 ### Amendment Process
 
 1. Proposta de mudança documentada com justificativa
-2. Review por @architect e @po
+2. Review por stakeholders relevantes do domínio
 3. Aprovação requer consenso
 4. Mudança implementada com atualização de versão
-5. Propagação para templates e tasks dependentes
+5. Propagação para domain extensions, templates e tasks dependentes
 
 ### Versioning
 
-- **MAJOR:** Remoção ou redefinição incompatível de princípio
-- **MINOR:** Novo princípio ou expansão significativa
+- **MAJOR:** Remoção ou redefinição incompatível de princípio universal
+- **MINOR:** Novo princípio universal, novo domínio registrado, ou expansão significativa
 - **PATCH:** Clarificações, correções de texto, refinamentos
 
 ### Compliance
 
-- Todos os PRs DEVEM verificar compliance com Constitution
+- Todos os deliverables DEVEM verificar compliance com Constitution base + domain extension
 - Gates automáticos BLOQUEIAM violações de princípios NON-NEGOTIABLE
 - Gates automáticos ALERTAM violações de princípios MUST
 - Violações de SHOULD são reportadas mas não bloqueiam
-
-### Gate Severity Levels
-
-| Severidade | Comportamento | Uso |
-|------------|---------------|-----|
-| BLOCK | Impede execução, requer correção | NON-NEGOTIABLE, MUST críticos |
-| WARN | Permite continuar com alerta | MUST não-críticos |
-| INFO | Apenas reporta | SHOULD |
 
 ---
 
 ## References
 
-- **Princípios derivados de:** `.claude/CLAUDE.md`
-- **Inspirado por:** GitHub Spec-Kit Constitution System
+- **Domain extensions:** `.lmas-core/domains/`
+- **Domain registry:** `.lmas-core/data/domain-registry.yaml`
+- **Gate severity definitions:** `.lmas-core/domains/_base/gate-severity.yaml`
+- **Domain schema:** `.lmas-core/schemas/domain-constitution.schema.json`
 - **Gates implementados em:** `.lmas-core/development/tasks/`
-- **Checklists relacionados:** `.lmas-core/product/checklists/`
 
 ---
 
-*LMAS Constitution v1.0.0*
-*CLI First | Agent-Driven | Quality First*
+*LMAS Constitution v2.0.0*
+*Universal Base | Domain Extensions | CLI First*

@@ -1,6 +1,7 @@
 bundle:
   name: Team All
   icon: 👥
+  domain: software-dev
   description: Includes every core system agent.
 agents:
   - lmas-orchestrator

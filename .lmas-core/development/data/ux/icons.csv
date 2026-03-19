@@ -1,0 +1,13 @@
+icon_set,style,sizes,stroke_width,grid_size,format,license,accessibility_label_pattern,color_handling,popular_alternatives
+Lucide,outline stroke,16 20 24 32 48,1.5 2,24x24,SVG,MIT,{action} icon or aria-hidden if decorative,currentColor inherits text color,Feather Icons Heroicons
+Heroicons,outline solid mini,16 20 24,1.5,24x24,SVG JSX,MIT,{action} icon with size context,currentColor for outline fill for solid,Lucide Phosphor
+Phosphor Icons,thin light regular bold fill duotone,16 20 24 32 48,1 1.5 2 3,256x256,SVG React Vue,MIT,{object} {style} icon,currentColor plus secondary opacity for duotone,Lucide Heroicons
+Material Symbols,outlined rounded sharp filled,20 24 40 48,variable via font weight,24x24,SVG font WOFF2,Apache 2.0,{action} icon following Material guidelines,Fill and weight via CSS font-variation-settings,Heroicons Lucide
+Tabler Icons,outline filled,16 20 24 32,1.5 2,24x24,SVG,MIT,{descriptive-name} icon,stroke for outline fill for filled variant,Lucide Heroicons
+Bootstrap Icons,outline fill,16 20 24 32,auto,16x16,SVG font,MIT,{name}-{style} following Bootstrap naming,currentColor for both styles,Heroicons Font Awesome
+Font Awesome,solid regular light thin duotone brands,varies with font-size,n/a via font,n/a,font SVG,Free+Pro split,screen reader text or aria-hidden,CSS color property on font element,Material Symbols Heroicons
+Remix Icon,line fill,16 20 24,1.5,24x24,SVG font,Apache 2.0,ri-{name}-{style} pattern,currentColor for line fill for filled,Lucide Phosphor
+Ionicons,outline filled sharp,auto scaling,2,512x512,SVG Web Component,MIT,{name} icon with ion-icon component,CSS custom properties --ionicon-stroke-width,Heroicons Lucide
+Radix Icons,outline only,15,1.5,15x15,SVG React,MIT,{action} icon compact style,currentColor only,Lucide Heroicons
+Feather Icons,outline stroke,24,2,24x24,SVG,MIT,{name} icon minimal style,currentColor stroke only,Lucide Heroicons
+Flagpack,flat filled,16 20 24 32,n/a,varies by ratio,SVG,MIT,{country-name} flag,Fixed colors per flag no theming,Flag Icons Twemoji Flags

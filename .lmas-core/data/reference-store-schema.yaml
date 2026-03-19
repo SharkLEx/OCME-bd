@@ -1,0 +1,69 @@
+# Reference Store Schema — LMAS Framework
+# Defines the structure for absorbed references stored in project-refs/
+#
+# Usage:
+#   - @lmas-master *absorb {source} --domain {domain} creates entries following this schema
+#   - @lmas-master *refs {domain} --search {query} queries stored references
+#   - Any agent can read references from project-refs/{domain}/*.yaml
+
+version: "1.0.0"
+store_location: "project-refs"
+
+domains:
+  design:
+    description: "Design systems, UI patterns, color palettes, typography"
+    extensions: [".yaml", ".md"]
+    index_file: "project-refs/design/_index.yaml"
+  architecture:
+    description: "Technical architecture patterns, system design"
+    extensions: [".yaml", ".md"]
+    index_file: "project-refs/architecture/_index.yaml"
+  content:
+    description: "Content strategies, copy patterns, brand voice"
+    extensions: [".yaml", ".md"]
+    index_file: "project-refs/content/_index.yaml"
+  competitive:
+    description: "Competitor analysis, market positioning"
+    extensions: [".yaml", ".md"]
+    index_file: "project-refs/competitive/_index.yaml"
+
+reference_schema:
+  required:
+    - name          # string: Human-readable reference name
+    - source        # string: URL, file path, or description of origin
+    - domain        # enum: design|architecture|content|competitive
+    - absorbed_at   # datetime: ISO 8601 timestamp
+    - absorbed_by   # string: Agent ID that performed absorption
+  optional:
+    - description   # string: Brief description of the reference
+    - tags          # list[string]: Searchable tags
+    - tokens        # object: Extracted design tokens (for design domain)
+    - patterns      # list[object]: Extracted patterns
+    - screenshots   # list[string]: Paths to visual captures
+    - confidence    # float 0-1: Confidence level of extraction
+    - ttl_days      # int: Auto-expire after N days (null = permanent)
+    - parent_ref    # string: ID of parent reference (for sub-extractions)
+    - metadata      # object: Domain-specific metadata
+
+index_schema:
+  entries:
+    - name: string
+      file: string       # relative path to .yaml file
+      source: string
+      tags: list[string]
+      absorbed_at: datetime
+      search_text: string # pre-computed searchable text
+
+query_capabilities:
+  - exact_match: "Search by name, tag, or source"
+  - fuzzy_search: "BM25 search across search_text fields"
+  - domain_filter: "Filter by domain"
+  - date_range: "Filter by absorption date"
+  - tag_intersection: "Find references matching multiple tags"
+
+lifecycle:
+  creation: "*absorb creates reference + updates index"
+  query: "*refs queries index, returns matches"
+  update: "*absorb --update {name} refreshes existing reference"
+  deletion: "*refs --delete {name} removes reference + updates index"
+  expiry: "References with ttl_days are flagged after expiry (not auto-deleted)"

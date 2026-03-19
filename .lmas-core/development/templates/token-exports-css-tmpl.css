@@ -1,0 +1,187 @@
+/*
+ * LMAS Design Token Exports — CSS Custom Properties
+ * Template ID: token-exports-css
+ * Version: 1.0.0 | Created: 2026-03-17
+ * Used by: @ux-design-expert (Switch), @dev (Neo)
+ *
+ * Generated from tokens-schema-tmpl.yaml.
+ * DO NOT edit manually — regenerate from source tokens.
+ *
+ * Usage:
+ *   color: var(--color-primary);
+ *   padding: var(--spacing-4);
+ *   font-size: var(--font-size-base);
+ */
+
+/* ==========================================================================
+   Colors — Primitive
+   ========================================================================== */
+
+:root {
+  --color-white: #FFFFFF;
+  --color-black: #000000;
+
+  --color-gray-50:  #F9FAFB;
+  --color-gray-100: #F3F4F6;
+  --color-gray-200: #E5E7EB;
+  --color-gray-300: #D1D5DB;
+  --color-gray-400: #9CA3AF;
+  --color-gray-500: #6B7280;
+  --color-gray-600: #4B5563;
+  --color-gray-700: #374151;
+  --color-gray-800: #1F2937;
+  --color-gray-900: #111827;
+
+  --color-blue-50:  #EFF6FF;
+  --color-blue-500: #3B82F6;
+  --color-blue-600: #2563EB;
+  --color-blue-700: #1D4ED8;
+
+  --color-red-50:  #FEF2F2;
+  --color-red-500: #EF4444;
+  --color-red-600: #DC2626;
+
+  --color-green-50:  #F0FDF4;
+  --color-green-500: #22C55E;
+  --color-green-600: #16A34A;
+
+  --color-amber-50:  #FFFBEB;
+  --color-amber-500: #F59E0B;
+}
+
+/* ==========================================================================
+   Colors — Semantic
+   ========================================================================== */
+
+:root {
+  --color-primary:        var(--color-blue-600);
+  --color-primary-hover:  var(--color-blue-700);
+  --color-secondary:      var(--color-gray-600);
+
+  --color-surface:        var(--color-white);
+  --color-surface-raised: var(--color-gray-50);
+  --color-background:     var(--color-gray-100);
+
+  --color-text-primary:   var(--color-gray-900);
+  --color-text-secondary: var(--color-gray-500);
+  --color-text-inverse:   var(--color-white);
+
+  --color-border:         var(--color-gray-200);
+
+  --color-error:          var(--color-red-500);
+  --color-error-bg:       var(--color-red-50);
+  --color-success:        var(--color-green-500);
+  --color-success-bg:     var(--color-green-50);
+  --color-warning:        var(--color-amber-500);
+  --color-warning-bg:     var(--color-amber-50);
+  --color-info:           var(--color-blue-500);
+  --color-info-bg:        var(--color-blue-50);
+}
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
+
+:root {
+  --font-heading: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-body:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+
+  --font-size-xs:   0.75rem;   /* 12px */
+  --font-size-sm:   0.875rem;  /* 14px */
+  --font-size-base: 1rem;      /* 16px */
+  --font-size-lg:   1.125rem;  /* 18px */
+  --font-size-xl:   1.25rem;   /* 20px */
+  --font-size-2xl:  1.5rem;    /* 24px */
+  --font-size-3xl:  1.875rem;  /* 30px */
+  --font-size-4xl:  2.25rem;   /* 36px */
+
+  --font-weight-regular: 400;
+  --font-weight-medium:  500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:    700;
+
+  --line-height-tight:   1.25;
+  --line-height-normal:  1.5;
+  --line-height-relaxed: 1.75;
+}
+
+/* ==========================================================================
+   Spacing
+   ========================================================================== */
+
+:root {
+  --spacing-0:  0px;
+  --spacing-1:  4px;
+  --spacing-2:  8px;
+  --spacing-3:  12px;
+  --spacing-4:  16px;
+  --spacing-5:  20px;
+  --spacing-6:  24px;
+  --spacing-8:  32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+  --spacing-20: 80px;
+}
+
+/* ==========================================================================
+   Borders
+   ========================================================================== */
+
+:root {
+  --border-radius-none: 0px;
+  --border-radius-sm:   4px;
+  --border-radius-md:   8px;
+  --border-radius-lg:   12px;
+  --border-radius-xl:   16px;
+  --border-radius-full: 9999px;
+
+  --border-width-thin:   1px;
+  --border-width-medium: 2px;
+  --border-width-thick:  4px;
+}
+
+/* ==========================================================================
+   Shadows
+   ========================================================================== */
+
+:root {
+  --shadow-none: none;
+  --shadow-sm:   0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md:   0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg:   0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl:   0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================================================
+   Motion
+   ========================================================================== */
+
+:root {
+  --motion-duration-instant: 0ms;
+  --motion-duration-fast:    100ms;
+  --motion-duration-normal:  200ms;
+  --motion-duration-slow:    300ms;
+  --motion-duration-slower:  500ms;
+
+  --motion-easing-default:     cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-easing-ease-in:     cubic-bezier(0.4, 0, 1, 1);
+  --motion-easing-ease-out:    cubic-bezier(0, 0, 0.2, 1);
+  --motion-easing-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-easing-spring:      cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ==========================================================================
+   Reduced Motion Override
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-instant: 0ms;
+    --motion-duration-fast:    0ms;
+    --motion-duration-normal:  0ms;
+    --motion-duration-slow:    0ms;
+    --motion-duration-slower:  0ms;
+  }
+}

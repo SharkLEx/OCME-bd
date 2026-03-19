@@ -1,6 +1,6 @@
 # PROJECT-CHECKPOINT — WEbdEX Protocol OS
 
-> Última atualização: 2026-03-19 (Epic 12 kickoff — Story 12.1 + 14.3 criadas) | Branch: `feat/epic-7-monitor-engine`
+> Última atualização: 2026-03-19 (Smith Review #2 — Triage + Remediation completa) | Branch: `feat/epic-7-monitor-engine`
 
 ---
 
@@ -15,10 +15,11 @@
 | 7 | OCME-bd Monitor Engine | ✅ Done | Em completed/ |
 | 8 | WEbdEX Orchestrator | 🟡 In Progress | 8.1–8.7 Done, 8.8–8.9 Bloqueadas |
 | 9 | bdZinho Discord v2 | ✅ Done | 9.1–9.4 Done + Deployadas |
-| 10 | WEbdEX Design System: Telegram + Monitor Engine | ✅ Done | 10.1–10.4 Done + Deployadas |
+| 10 | WEbdEX Design System: Telegram + Monitor Engine | ✅ Done | 10.1–10.5 Done + Deployadas |
 | 11 | WEbdEX Protocol OS: Automação de Conteúdo | ✅ Done | 11.1 ✅ Done + Deployada |
-| 12 | bdZinho Intelligence v3 | 🟡 In Progress | 12.1 🟡 In Progress |
+| 12 | bdZinho Intelligence v3 | 🟡 In Progress | 12.1 Ready for Review (VPS pendente), 12.2 ✅ Done |
 | 14 | Subscription Flow v2 | 🟡 In Progress | 14.3 ⏳ Backlog (paralelo ao Epic 12) |
+| 15 | LMAS Framework v5 Expansion | 🟡 In Progress | 15.1 🟡 In Progress (commit pendente) |
 
 ---
 
@@ -28,14 +29,24 @@
 |-------|--------|--------|--------|
 | 8.8 | Instagram Integration | ⏸️ Bloqueada | Aguardando credenciais Meta |
 | 8.9 | WhatsApp Integration | ⏸️ Bloqueada | Aguardando credenciais Meta |
-| 10.1 | Telegram Design Tokens + 21h Report | ✅ Done | Deploy OK |
-| 10.2 | Monitor Engine Color Migration | ✅ Done | Deploy OK |
-| 10.3 | Metrics Worker + Discord 21h Notification | ✅ Done | Workers ativos no orchestrator-discord, 508+ snapshots no PostgreSQL, ciclo 21h verificando diariamente |
-| 10.4 | Operational Utilities | ✅ Done | `check_db.py` ✅ deploy OK — DB OK, TVL $1.5M, 3756 ops |
+| 12.1 | Long-term Memory PostgreSQL para bdZinho | 🟢 Ready for Review | Código commitado, VPS deploy pendente |
+| 14.3 | Webhook On-chain Auto-ativação de Subscription | ⏳ Backlog | Paralelo ao Epic 12 |
+| 15.1 | LMAS Framework v5: Marketing Squad + New Agents | 🟡 In Progress | ~312 arquivos pendentes de commit |
 
 ---
 
 ## 🚀 Último Trabalho Realizado
+
+### Sessão 2026-03-19 (Smith Review #2 — Triage Completa)
+
+**Smith INFECTED review → Remediation por todos os agentes:**
+- Stories 10.1–10.5: status corrigido para ✅ Done + movidas para `completed/`
+- Story 12.1: status corrigido para 🟢 Ready for Review
+- Story 12.2: QA Gate PASS → ✅ Done + movida para `completed/`
+- Story 15.1 criada: formaliza LMAS framework v5 expansion (~312 arquivos pendentes commit)
+- Checkpoint atualizado com estado real do projeto
+- Smith findings: 10 reais resolvidos, 5 eram falsos positivos
+- Pendente: `@devops` commit da Story 15.1 + VPS deploy Story 12.1
 
 ### Sessão 2026-03-19 (fix Creatomate v2 — ENTREGA 100% ✅)
 

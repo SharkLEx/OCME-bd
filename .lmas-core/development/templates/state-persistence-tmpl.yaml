@@ -1,0 +1,129 @@
+# Design System State Persistence Template
+# LMAS Template — @ux-design-expert (Switch)
+# Version: 1.0.0 | Created: 2026-03-17
+# Usage: Track long-running design system processes (audits, migrations, builds).
+# Save as `.state.yaml` in the design-system working directory.
+# Agents read this file to resume work across sessions.
+
+metadata:
+  template_id: state-persistence
+  version: "1.0.0"
+  created: "2026-03-17"
+  used_by:
+    - "@ux-design-expert (Switch)"
+
+---
+
+# Overall state of the design system initiative
+project:
+  name: "{{PROJECT_NAME}}"
+  status: "{{not_started | in_progress | paused | completed}}"
+  started: "{{YYYY-MM-DD}}"
+  last_updated: "{{YYYY-MM-DD}}"
+  owner: "@ux-design-expert"
+
+# Pattern audit tracking
+audit:
+  status: "{{not_started | in_progress | completed}}"
+  started: "{{YYYY-MM-DD}}"
+  completed: "{{YYYY-MM-DD | null}}"
+  checklist_score: null  # Score from pattern-audit-checklist.md (0-10)
+  findings:
+    total_components: 0
+    total_tokens_extracted: 0
+    redundancies_found: 0
+    redundancies_resolved: 0
+  artifacts:
+    - path: "{{path to audit report}}"
+      type: "audit-report"
+      status: "{{draft | final}}"
+
+# Token extraction tracking
+token_extraction:
+  status: "{{not_started | in_progress | completed}}"
+  format: "{{w3c-dtcg | style-dictionary | custom}}"
+  categories:
+    colors:
+      total: 0
+      extracted: 0
+      status: "{{not_started | in_progress | completed}}"
+    typography:
+      total: 0
+      extracted: 0
+      status: "{{not_started | in_progress | completed}}"
+    spacing:
+      total: 0
+      extracted: 0
+      status: "{{not_started | in_progress | completed}}"
+    shadows:
+      total: 0
+      extracted: 0
+      status: "{{not_started | in_progress | completed}}"
+    borders:
+      total: 0
+      extracted: 0
+      status: "{{not_started | in_progress | completed}}"
+    motion:
+      total: 0
+      extracted: 0
+      status: "{{not_started | in_progress | completed}}"
+  export_targets:
+    - format: "css-custom-properties"
+      path: "{{output path}}"
+      generated: false
+    - format: "tailwind-config"
+      path: "{{output path}}"
+      generated: false
+
+# Migration tracking
+migration:
+  status: "{{not_started | planning | phase_1 | phase_2 | phase_3 | phase_4 | completed}}"
+  readiness_score: null  # Score from migration-readiness-checklist.md (0-10)
+  phases:
+    - id: 1
+      name: "Foundation (tokens + base styles)"
+      status: "{{not_started | in_progress | completed}}"
+      started: null
+      completed: null
+    - id: 2
+      name: "Atoms (buttons, inputs, labels, icons)"
+      status: "{{not_started | in_progress | completed}}"
+      started: null
+      completed: null
+    - id: 3
+      name: "Molecules & Organisms (composed components)"
+      status: "{{not_started | in_progress | completed}}"
+      started: null
+      completed: null
+    - id: 4
+      name: "Cleanup (remove old, finalize docs)"
+      status: "{{not_started | in_progress | completed}}"
+      started: null
+      completed: null
+  breaking_changes: []
+  rollbacks: []
+
+# Component build tracker
+components:
+  total: 0
+  completed: 0
+  in_progress: 0
+  not_started: 0
+  items:
+    - name: "{{ComponentName}}"
+      type: "{{atom | molecule | organism}}"
+      status: "{{not_started | in_progress | review | completed}}"
+      owner: "{{@agent}}"
+      quality_score: null  # Score from component-quality-checklist.md
+      accessibility_pass: null  # true | false | null
+      tests_written: false
+      storybook_ready: false
+
+# Blockers and risks
+blockers:
+  - id: "{{BLOCKER_ID}}"
+    description: "{{what is blocked}}"
+    severity: "{{low | medium | high | critical}}"
+    owner: "{{@agent}}"
+    created: "{{YYYY-MM-DD}}"
+    resolved: null

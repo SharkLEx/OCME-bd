@@ -1,0 +1,22 @@
+style,heading_font,body_font,heading_weight,body_weight,scale_ratio,line_height_heading,line_height_body,letter_spacing,mood,pairing_rationale
+modern-clean,Inter,Inter,700,400,1.250,1.2,1.6,-0.02em,Clean Professional,Single family provides visual unity with weight contrast
+editorial,Playfair Display,Source Sans 3,700,400,1.333,1.15,1.7,0em,Editorial Elegance,Serif heading with sans body creates classic editorial hierarchy
+tech-forward,Space Grotesk,DM Sans,600,400,1.250,1.2,1.6,-0.01em,Technical Innovation,Geometric pairing with monospace influence for tech products
+humanist,Nunito,Open Sans,800,400,1.200,1.25,1.65,0em,Friendly Approachable,Rounded heading with neutral body balances warmth and readability
+bold-statement,Sora,IBM Plex Sans,700,400,1.333,1.15,1.6,-0.02em,Bold Clarity,Geometric heading with humanist body blends impact and legibility
+classic-serif,Lora,Merriweather,700,400,1.200,1.3,1.75,0.01em,Traditional Trust,Two complementary serifs create consistent literary feel
+startup-fresh,Poppins,Nunito Sans,600,400,1.250,1.2,1.6,0em,Youthful Energy,Geometric roundness paired with clean neutrality
+corporate,Lexend,Roboto,600,400,1.250,1.2,1.6,-0.01em,Professional Clarity,Readability-optimized heading with universal body font
+luxury,Cormorant Garamond,Raleway,600,300,1.414,1.15,1.7,0.05em,Refined Luxury,Elegant display serif with thin sans creates premium contrast
+minimal,Outfit,Work Sans,500,400,1.200,1.25,1.6,-0.01em,Minimal Calm,Low-contrast geometric pairing for understated designs
+data-driven,JetBrains Mono,Inter,700,400,1.250,1.2,1.6,0em,Technical Precision,Monospace heading signals data context with readable body
+playful,Fredoka,Quicksand,600,400,1.250,1.25,1.65,0em,Fun Playful,Rounded heading with matching rounded body for casual products
+news-media,Bitter,Source Serif 4,700,400,1.333,1.2,1.7,0em,Authoritative News,Strong slab-serif heading with traditional serif body
+saas-dashboard,Plus Jakarta Sans,Plus Jakarta Sans,700,400,1.200,1.2,1.55,-0.01em,Dashboard Clarity,Single modern family optimized for UI density
+documentation,Fira Sans,Fira Sans,600,400,1.250,1.25,1.7,0em,Technical Documentation,Single family with excellent monospace companion available
+organic,Fraunces,Cabin,700,400,1.333,1.2,1.65,0em,Organic Character,Variable optical-size serif with friendly sans creates artisanal feel
+brutalist,Space Mono,Space Grotesk,700,400,1.414,1.15,1.5,0.05em,Raw Brutalist,Monospace heading with geometric body for raw digital aesthetic
+accessibility,Atkinson Hyperlegible,Atkinson Hyperlegible,700,400,1.250,1.3,1.75,0.01em,Accessible First,Purpose-built for maximum legibility across visual impairments
+multilingual,Noto Sans,Noto Sans,700,400,1.250,1.25,1.65,0em,Universal Multilingual,Full Unicode coverage for international products
+high-contrast,Archivo Black,Archivo,900,400,1.333,1.1,1.6,-0.02em,Impact Heavy,Ultra-bold heading with regular body maximizes visual hierarchy
+condensed,Barlow Condensed,Barlow,700,400,1.250,1.15,1.6,-0.01em,Compact Efficient,Condensed heading saves space while body stays readable

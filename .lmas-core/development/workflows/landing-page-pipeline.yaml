@@ -1,0 +1,413 @@
+# Landing Page Pipeline — Cross-Domain Workflow
+# Combines design (software-dev) and content (marketing) for landing page creation
+# ADR: ADR-CROSS-AGENT-INTEGRATION.md
+
+workflow:
+  id: landing-page-pipeline
+  name: Landing Page Pipeline
+  version: "1.0"
+  domain: hybrid  # cross-domain: software-dev + marketing
+  description: >-
+    Pipeline end-to-end para criacao de landing pages. Combina estrategia de conteudo,
+    design UX, copy, validacao SEO e implementacao. Degrada gracefully no free tier
+    substituindo agentes premium por workarounds com agentes do dev squad.
+  type: generic
+  project_types:
+    - landing-page
+    - saas-marketing
+    - product-launch
+    - lead-generation
+    - conversion-optimization
+
+  metadata:
+    elicit: true
+    confirmation_required: true
+
+  execution_modes:
+    - mode: yolo
+      description: Execucao autonoma com minima interacao
+      prompts: 0-1
+    - mode: interactive
+      description: Checkpoints de decisao em cada handoff entre fases
+      prompts: 5-10
+      default: true
+    - mode: preflight
+      description: Planejamento completo antes da execucao
+      prompts: "10-15"
+
+  phases:
+    - phase_1: Strategy & Research
+    - phase_2: Design & Structure
+    - phase_3: Content Creation & Review
+    - phase_4: Implementation
+
+  sequence:
+    - step: create_content_brief
+      id: content-brief
+      phase: 1
+      agent: content-strategist
+      action: Definir brief da landing page
+      optional: true
+      skip_condition: "tier == 'free' AND no_fallback == false"
+      notes: |
+        Content Strategist define o brief estrategico da landing page:
+        - Posicionamento e proposta de valor
+        - Publico-alvo e personas
+        - Objetivos de conversao e KPIs
+        - Mensagens-chave por secao
+        - Tom de voz e diferenciais
+
+        Free tier fallback: Morpheus assiste diretamente com o brief
+        ou usuario fornece brief manualmente.
+
+        Criterios de sucesso:
+        - [ ] Proposta de valor clara e diferenciada
+        - [ ] Personas definidas com pain points
+        - [ ] Objetivo de conversao mensuravel
+        - [ ] Mensagens-chave priorizadas (3-5)
+      outputs:
+        - content_brief
+      next: keyword-research
+
+    - step: keyword_research
+      id: keyword-research
+      phase: 1
+      agent: seo
+      action: Pesquisar keywords e intencao de busca
+      requires: content-brief
+      optional: true
+      skip_condition: "tier == 'free' OR seo_not_required == true"
+      notes: |
+        SEO Specialist (Cypher) pesquisa keywords para a landing page:
+        - Target keywords primarias e secundarias
+        - Search intent analysis (informational, transactional, navigational)
+        - Analise competitiva de SERPs
+        - Oportunidades de featured snippets
+        - Recomendacoes de meta tags e heading structure
+
+        Free tier fallback: Pular pesquisa SEO ou aplicar boas praticas gerais.
+
+        Criterios de sucesso:
+        - [ ] Keywords primarias e secundarias definidas
+        - [ ] Search intent mapeado
+        - [ ] Competidores analisados
+        - [ ] Meta tags recomendadas
+      outputs:
+        - keyword_research
+      next: landing-structure
+
+    - step: define_landing_structure
+      id: landing-structure
+      phase: 2
+      agent: ux-design-expert
+      action: Definir estrutura e hierarquia visual da landing page
+      requires: content-brief
+      notes: |
+        UX Design Expert (Sati) define a estrutura visual da landing:
+        - Secoes e content zones (hero, features, social proof, CTA, etc.)
+        - Hierarquia visual e fluxo de conversao
+        - Grid e breakpoints responsivos
+        - Placement de CTAs e elementos de conversao
+        - Micro-interacoes e scroll behavior
+
+        Entrada requerida:
+        - Content brief (se disponivel)
+        - Keyword research (se disponivel)
+
+        Criterios de sucesso:
+        - [ ] Secoes definidas com content zones
+        - [ ] Hierarquia visual documentada
+        - [ ] Fluxo de conversao mapeado
+        - [ ] CTA placement definido
+        - [ ] Breakpoints responsivos especificados
+      outputs:
+        - landing_structure
+        - visual_guidelines
+      next: style-baseline
+
+    - step: define_style_baseline
+      id: style-baseline
+      phase: 2
+      agent: ux-design-expert
+      action: Gerar baseline de estilo visual
+      requires: landing-structure
+      notes: |
+        UX Design Expert gera recomendacoes de estilo para o dominio:
+        - Paleta de cores (primaria, secundaria, neutros, semanticos)
+        - Tipografia e escala de tamanhos
+        - Espacamento e ritmo vertical
+        - Border radius, shadows, elevations
+        - Design tokens em formato DTCG
+
+        Criterios de sucesso:
+        - [ ] Paleta de cores definida com contraste acessivel
+        - [ ] Tipografia com hierarquia clara
+        - [ ] Espacamento consistente
+        - [ ] Tokens documentados
+      outputs:
+        - style_baseline
+      next: write-copy
+
+    - step: write_landing_copy
+      id: write-copy
+      phase: 3
+      agent: copywriter
+      action: Criar copy da landing page
+      requires: landing-structure
+      optional: true
+      skip_condition: "tier == 'free' AND no_fallback == false"
+      notes: |
+        Copywriter (Muse) cria o copy seguindo guidelines visuais:
+        - Respeita content zones e limites de palavras por secao
+        - Headline principal com proposta de valor
+        - Subheadlines por secao
+        - Body copy com beneficios e features
+        - CTAs primario e secundario
+        - Social proof elements (testimonials, stats)
+        - Variacoes A/B de headline e CTA
+
+        Free tier fallback: Usuario escreve copy manualmente usando
+        a estrutura e guidelines fornecidas por Sati.
+
+        Criterios de sucesso:
+        - [ ] Headline com proposta de valor clara
+        - [ ] Copy alinhado com content zones
+        - [ ] CTAs com acao e urgencia
+        - [ ] 2-3 variacoes A/B de headline
+        - [ ] Tom de voz consistente
+      outputs:
+        - landing_copy
+      next: seo-validation
+
+    - step: validate_seo
+      id: seo-validation
+      phase: 3
+      agent: seo
+      action: Validar SEO do copy
+      requires: write-copy
+      optional: true
+      skip_condition: "tier == 'free' OR seo_not_required == true"
+      notes: |
+        SEO Specialist valida otimizacao do copy:
+        - E-E-A-T compliance
+        - Keyword placement natural nas headings e body
+        - Meta title e description
+        - Schema markup recommendations
+        - Core Web Vitals considerations
+
+        Criterios de sucesso:
+        - [ ] Keywords integradas naturalmente
+        - [ ] Meta tags adequados
+        - [ ] E-E-A-T score calculado
+        - [ ] Schema markup recomendado
+      outputs:
+        - seo_score
+        - seo_recommendations
+      next: ux-validation
+
+    - step: validate_ux_patterns
+      id: ux-validation
+      phase: 3
+      agent: ux-design-expert
+      action: Validar design + copy contra best practices de UX
+      requires: write-copy
+      notes: |
+        UX Design Expert valida a combinacao de design e copy:
+        - Hierarquia visual preservada com copy real
+        - Legibilidade e escaneabilidade
+        - CTA visibility e contrast
+        - Touch targets e mobile usability
+        - Cognitive load assessment
+        - Conversion flow coherence
+
+        Criterios de sucesso:
+        - [ ] Copy nao quebra hierarquia visual
+        - [ ] CTAs visiveis e acessiveis
+        - [ ] Mobile-friendly validado
+        - [ ] Cognitive load aceitavel
+      outputs:
+        - ux_validation_report
+      next: content-review
+
+    - step: review_content
+      id: content-review
+      phase: 3
+      agent: content-reviewer
+      action: Quality gate de conteudo
+      requires: ux-validation
+      optional: true
+      skip_condition: "tier == 'free' AND no_fallback == false"
+      notes: |
+        Content Reviewer executa review em 3 camadas:
+        - Layer 1: Brand Alignment
+        - Layer 2: Legal Compliance
+        - Layer 3: Content Quality
+
+        Free tier fallback: @qa pode revisar qualidade no lugar.
+
+        Vereditos:
+        - APPROVE → segue para implementacao
+        - REVISE → volta ao copywriter com feedback
+        - REJECT → volta ao content-brief com justificativa
+
+        Criterios de sucesso:
+        - [ ] Brand alignment verificado
+        - [ ] Legal compliance OK
+        - [ ] Quality score >= 7.0
+      outputs:
+        - review_verdict
+        - quality_score
+      next: implement
+      on_revise: write-copy
+      on_reject: content-brief
+
+    - step: implement_landing_page
+      id: implement
+      phase: 4
+      agent: dev
+      action: Implementar landing page com design tokens, copy e estrutura
+      requires: content-review
+      notes: |
+        Dev (Neo) implementa a landing page:
+        - Usa estrutura de secoes definida por Sati
+        - Aplica design tokens e style baseline
+        - Integra copy aprovado
+        - Implementa responsividade (mobile-first)
+        - Adiciona meta tags e schema markup (se SEO disponivel)
+        - Configura analytics tracking
+
+        Criterios de sucesso:
+        - [ ] Todas as secoes implementadas
+        - [ ] Design tokens aplicados
+        - [ ] Copy integrado corretamente
+        - [ ] Responsivo em todos os breakpoints
+        - [ ] Performance otimizada (LCP, CLS, INP)
+      outputs:
+        - implementation
+      next: web-essentials
+
+    - step: web_essentials
+      id: web-essentials
+      phase: 4
+      agent: dev
+      action: Configurar web essentials (OG image, favicon, meta tags, robots.txt, sitemap)
+      requires: implement
+      notes: |
+        Dev (Neo) configura todos os assets e metadata essenciais para o site:
+        - OpenGraph image (1200x630px) - og:title, og:description, og:image, og:url
+        - Twitter Card - twitter:card, twitter:title, twitter:image
+        - Favicon (favicon.ico 32x32, apple-touch-icon 180x180)
+        - robots.txt na raiz
+        - sitemap.xml gerado
+        - manifest.json / site.webmanifest
+        - Meta description (150-160 chars)
+        - Canonical URL
+        - Schema markup (se SEO disponivel)
+        - HTTPS verificado
+        - 404 page customizada
+
+        Referencia: web-deployment-checklist.md
+
+        Criterios de sucesso:
+        - [ ] OpenGraph image gerada e testada
+        - [ ] Twitter Card configurado
+        - [ ] Favicon visivel na tab
+        - [ ] robots.txt presente
+        - [ ] sitemap.xml gerado
+        - [ ] Meta description definida
+        - [ ] Build de producao sem erros
+      outputs:
+        - web_essentials_report
+      next: mobile-check
+
+    - step: validate_mobile
+      id: mobile-check
+      phase: 4
+      agent: ux-design-expert
+      action: Validar design mobile-first
+      requires: implement
+      optional: true
+      notes: |
+        UX Design Expert valida a implementacao mobile:
+        - Touch targets (min 44x44px)
+        - Font sizes (min 16px body)
+        - Scroll behavior e performance
+        - CTA visibility above the fold
+        - Image optimization e lazy loading
+
+        Criterios de sucesso:
+        - [ ] Touch targets adequados
+        - [ ] Tipografia legivel em mobile
+        - [ ] CTA visivel sem scroll
+        - [ ] Performance mobile aceitavel
+      outputs:
+        - mobile_report
+
+  quality_gates:
+    content_review:
+      agent: content-reviewer
+      step: content-review
+      verdicts:
+        APPROVE: "Score >= 7.0 — copy ready for implementation"
+        REVISE: "Score 5.0-6.9 — needs improvements, back to copywriter"
+        REJECT: "Score < 5.0 — major issues, back to brief"
+      blocking: true
+      constitution_ref: "MK-II (Brand Alignment), MK-III (Legal Compliance)"
+
+  graceful_degradation:
+    free_tier:
+      description: >-
+        No free tier, agentes de marketing nao estao disponiveis.
+        O pipeline degrada gracefully mantendo o valor central.
+      behavior:
+        - "content-strategist steps → Morpheus assiste diretamente OU usuario fornece brief manualmente"
+        - "seo steps → pulados silenciosamente"
+        - "copywriter steps → usuario escreve copy usando estrutura/guidelines de Sati"
+        - "content-reviewer steps → @qa pode revisar qualidade no lugar"
+        - "ux-design-expert steps → sempre disponivel (free tier)"
+        - "dev steps → sempre disponivel (free tier)"
+      minimum_viable_pipeline: "phase_2_design → usuario escreve copy → phase_4_implementation"
+
+  error_handling:
+    strategy: retry-with-feedback
+    max_revisions: 3
+    escalation:
+      trigger: "revisions >= 3 OR verdict == 'REJECT' twice"
+      escalate_to: marketing-chief
+      action: "Review brief and landing page strategy alignment"
+
+  handoff_prompts:
+    phase_1_to_2: |
+      Brief e keywords prontos. Proximo: @ux-design-expert vai definir
+      a estrutura visual da landing page.
+    phase_2_to_3: |
+      Estrutura e estilo definidos. Proximo: @copywriter vai criar
+      o copy seguindo as guidelines visuais.
+    phase_3_to_4: |
+      Copy validado. Proximo: @dev vai implementar a landing page
+      com tokens, copy e estrutura.
+    pipeline_complete: |
+      Landing page pipeline finalizado!
+
+      Artefatos gerados:
+      - Content brief e keyword research
+      - Estrutura visual e style baseline
+      - Copy aprovado com validacao SEO
+      - Implementacao responsiva com design tokens
+
+      Proximos passos sugeridos:
+      - Configurar analytics e conversion tracking
+      - A/B testing de headlines
+      - Monitorar Core Web Vitals pos-deploy
+
+metadata:
+  author: Morpheus (LMAS Master)
+  created_date: 2026-03-17
+  version: 1.0.0
+  tags:
+    - landing-page
+    - cross-domain
+    - hybrid
+    - conversion
+    - design
+    - content

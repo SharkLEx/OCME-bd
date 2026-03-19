@@ -1,0 +1,29 @@
+domain,palette_name,primary,secondary,accent,neutral_dark,neutral_light,wcag_contrast,mood,use_case
+saas,Modern SaaS Blue,#2563EB,#3B82F6,#F59E0B,#1E293B,#F8FAFC,AAA,Professional Trust,Dashboard and admin panels
+saas,Indigo Productivity,#4F46E5,#818CF8,#10B981,#111827,#F9FAFB,AAA,Focused Clarity,Project management tools
+fintech,Fintech Trust,#0F766E,#14B8A6,#F97316,#0F172A,#F0FDF4,AAA,Secure Reliability,Banking and payments
+fintech,Wealth Dark,#1E40AF,#60A5FA,#FBBF24,#020617,#F1F5F9,AA,Premium Authority,Investment platforms
+health,Clinical Care,#0891B2,#67E8F9,#34D399,#164E63,#ECFEFF,AAA,Calm Wellness,Telemedicine apps
+health,Wellness Soft,#059669,#6EE7B7,#F472B6,#1E293B,#F0FDF4,AAA,Nurturing Vitality,Fitness and wellness apps
+ecommerce,Retail Energy,#DC2626,#F87171,#FBBF24,#1C1917,#FFF7ED,AA,Urgent Excitement,Flash sales and marketplaces
+ecommerce,Boutique Elegant,#7C3AED,#A78BFA,#F9A8D4,#1E1B4B,#FAF5FF,AAA,Curated Sophistication,Fashion and lifestyle stores
+education,EduTech Bright,#2563EB,#93C5FD,#F59E0B,#1E293B,#EFF6FF,AAA,Engaging Learning,LMS and course platforms
+education,Campus Warm,#B45309,#FCD34D,#3B82F6,#292524,#FFFBEB,AA,Inviting Knowledge,University portals
+social,Social Vibrant,#E11D48,#FB7185,#8B5CF6,#0F172A,#FFF1F2,AA,Energetic Connection,Social networking apps
+social,Community Teal,#0D9488,#5EEAD4,#F43F5E,#134E4A,#F0FDFA,AAA,Inclusive Belonging,Forum and community platforms
+gaming,Neon Arcade,#A855F7,#E879F9,#22D3EE,#0A0A0A,#1E1B4B,AA,Electric Thrill,Casual gaming platforms
+gaming,Esports Dark,#EF4444,#FCA5A5,#84CC16,#09090B,#18181B,AA,Competitive Intensity,Esports and tournaments
+enterprise,Corporate Navy,#1E3A5F,#3B82F6,#F59E0B,#0F172A,#F1F5F9,AAA,Authoritative Stability,Enterprise resource planning
+enterprise,Slate Professional,#475569,#94A3B8,#0EA5E9,#0F172A,#F8FAFC,AAA,Neutral Efficiency,Internal business tools
+luxury,Luxury Gold,#1C1917,#44403C,#D4A843,#0C0A09,#FFFBEB,AAA,Opulent Elegance,High-end product showcases
+luxury,Minimal Luxe,#171717,#525252,#C084FC,#0A0A0A,#FAFAFA,AAA,Refined Minimalism,Luxury brand portals
+startup,Startup Fresh,#7C3AED,#C084FC,#34D399,#1E1B4B,#FAF5FF,AA,Bold Innovation,Early-stage product launches
+startup,Launch Coral,#F43F5E,#FDA4AF,#06B6D4,#1C1917,#FFF1F2,AA,Playful Disruption,Landing pages and MVPs
+government,Gov Accessible,#1D4ED8,#93C5FD,#B91C1C,#111827,#F9FAFB,AAA,Trustworthy Civic,Government portals and services
+media,Media Bold,#BE123C,#FB7185,#FBBF24,#0F0F0F,#FFF1F2,AA,Dynamic Storytelling,News and content platforms
+travel,Travel Adventure,#0369A1,#38BDF8,#F97316,#0C4A6E,#F0F9FF,AAA,Wanderlust Exploration,Booking and travel planning
+food,Appetite Warm,#C2410C,#FB923C,#65A30D,#292524,#FFF7ED,AA,Savory Inviting,Restaurant and delivery apps
+fitness,Gym Power,#15803D,#4ADE80,#EAB308,#052E16,#F0FDF4,AA,Energetic Motivation,Workout and tracking apps
+travel,Luxury Travel,#78350F,#D97706,#0EA5E9,#1C1917,#FFFBEB,AAA,Premium Wanderlust,Luxury travel and concierge
+food,Organic Natural,#3F6212,#84CC16,#F59E0B,#1A2E05,#F7FEE7,AAA,Fresh Wholesome,Organic food and farm-to-table
+fitness,Yoga Calm,#7E22CE,#D8B4FE,#2DD4BF,#1E1B4B,#FAF5FF,AAA,Balanced Serenity,Yoga and meditation apps

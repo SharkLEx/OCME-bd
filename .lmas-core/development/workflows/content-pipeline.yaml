@@ -1,0 +1,295 @@
+workflow:
+  id: content-pipeline
+  name: Content Pipeline
+  version: "1.0"
+  domain: marketing
+  description: >-
+    Pipeline completo de produção de conteúdo. Automatiza o fluxo desde a estratégia
+    até a publicação com quality gates: brief → research → copy → review → approve → publish.
+    Aplicável a qualquer tipo de conteúdo (posts, emails, artigos, landing pages).
+  type: generic
+  project_types:
+    - organic-content
+    - email-marketing
+    - blog-content
+    - social-media
+    - landing-page
+
+  metadata:
+    elicit: true
+    confirmation_required: true
+
+  execution_modes:
+    - mode: yolo
+      description: Execução autônoma com mínima interação
+      prompts: 0-1
+    - mode: interactive
+      description: Checkpoints de decisão e feedback em cada handoff
+      prompts: 5-10
+      default: true
+    - mode: preflight
+      description: Planejamento completo antes da execução
+      prompts: "10-15"
+
+  phases:
+    - phase_1: Brief & Research
+    - phase_2: Content Creation
+    - phase_3: Review & Approval
+    - phase_4: Publication
+
+  sequence:
+    - step: create_brief
+      id: brief
+      phase: 1
+      agent: content-strategist
+      action: Criar content brief
+      notes: |
+        Content Strategist cria o brief para o conteúdo:
+        - Usa task create-brief com template content-brief-tmpl.md
+        - Define objetivo, público, tom, key messages
+        - Especifica canal e formato
+        - Define CTA e métricas de sucesso
+
+        Entrada requerida:
+        - Content strategy (se existir) OU brand guidelines
+        - Tópico/tema do conteúdo
+        - Canal de destino
+
+        Critérios de sucesso:
+        - [ ] Objetivo claro e mensurável
+        - [ ] Público-alvo definido
+        - [ ] Key messages priorizadas (3-5)
+        - [ ] Canal e formato especificados
+        - [ ] CTA definido
+      outputs:
+        - content_brief
+      next: research
+
+    - step: market_research
+      id: research
+      phase: 1
+      agent: content-researcher
+      action: Pesquisar mercado e concorrentes
+      requires: brief
+      optional: true
+      skip_condition: "brief.scope == 'simple' OR urgency == 'high'"
+      notes: |
+        Content Researcher pesquisa dados para embasar o conteúdo:
+        - Usa task market-research-mkt para pesquisa ampla
+        - Usa task competitor-analysis-mkt para análise competitiva
+        - Valida dados e cita fontes
+
+        Quando pular:
+        - Conteúdo simples (repost, adaptação)
+        - Urgência alta (dados já disponíveis)
+
+        Critérios de sucesso:
+        - [ ] Dados relevantes coletados
+        - [ ] Fontes verificáveis citadas
+        - [ ] Insights acionáveis identificados
+      outputs:
+        - research_report
+      next: write
+
+    - step: visual_layout_guidelines
+      id: visual_layout
+      phase: 2
+      agent: ux-design-expert
+      action: Gerar diretrizes visuais de layout para conteúdo
+      requires: brief
+      optional: true
+      skip_condition: "content.type NOT IN ['landing-page', 'email', 'infographic', 'presentation'] OR content.visual_design == false"
+      notes: |
+        UX Design Expert gera diretrizes de layout visual para conteúdo
+        que requer design (landing pages, emails, infográficos, apresentações):
+        - Estrutura de seções e content zones
+        - Hierarquia visual e espaçamento
+        - Grid e breakpoints responsivos
+        - Placement de CTAs e elementos visuais
+
+        Comando: @ux-design-expert → *landing {content.type}
+
+        Quando pular:
+        - Conteúdo que não requer design visual (blog posts, social text)
+        - Flag visual_design == false no brief
+
+        Critérios de sucesso:
+        - [ ] Estrutura de seções definida
+        - [ ] Content zones mapeadas
+        - [ ] Hierarquia visual documentada
+        - [ ] Diretrizes de CTA placement
+      outputs:
+        - layout_guidelines: "Section structure, content zones, visual hierarchy"
+      next: write
+
+    - step: write_copy
+      id: write
+      phase: 2
+      agent: copywriter
+      action: Criar copy a partir do brief
+      requires: brief
+      notes: |
+        Copywriter cria o conteúdo seguindo o brief:
+        - Usa task write-copy para conteúdo orgânico
+        - Usa task ad-copy para anúncios pagos
+        - Produz variações A/B de headline e CTA
+        - Respeita tom de voz e limites de caracteres
+
+        Entrada requerida:
+        - Content brief (do step brief)
+        - Research report (se disponível, do step research)
+        - Brand guidelines + tone of voice
+
+        Critérios de sucesso:
+        - [ ] 3-5 variações de headline
+        - [ ] Body copy alinhado com brief
+        - [ ] 2-3 variações de CTA
+        - [ ] Tom de voz consistente com guidelines
+        - [ ] Limites de caracteres respeitados
+      outputs:
+        - copy_package
+      next: seo_validation
+
+    - step: seo_validation
+      id: seo
+      phase: 2
+      agent: seo
+      action: Validar SEO do conteúdo
+      requires: write
+      optional: true
+      skip_condition: "content.channel NOT IN ['blog', 'landing-page', 'article', 'email-marketing'] OR content.type == 'social-only'"
+      notes: |
+        SEO Specialist (Cypher) valida otimização para busca:
+        - E-E-A-T compliance (Experience, Expertise, Authority, Trust)
+        - Keyword placement e densidade natural
+        - Meta title e description adequados
+        - Heading hierarchy (H1 único, ordem lógica)
+        - Internal linking suggestions
+        - Search intent alignment com target keyword
+
+        Quando pular:
+        - Conteúdo exclusivo para social media
+        - Canais não indexados por buscadores
+
+        Critérios de sucesso:
+        - [ ] E-E-A-T score calculado
+        - [ ] Keywords naturalmente incorporadas
+        - [ ] Meta tags adequados
+        - [ ] Sugestões de melhoria SEO (se aplicável)
+      outputs:
+        - seo_score
+        - seo_recommendations
+      next: review
+
+    - step: review_content
+      id: review
+      phase: 3
+      agent: content-reviewer
+      action: Revisar conteúdo (3 layers)
+      requires: write
+      notes: |
+        Content Reviewer executa review completo em 3 camadas:
+        - Layer 1: Brand Alignment (brand-alignment-checklist)
+        - Layer 2: Legal Compliance (legal-compliance-checklist) — NON-NEGOTIABLE
+        - Layer 3: Content Quality (content-quality-checklist)
+
+        Vereditos possíveis:
+        - APPROVE (score >= 7.0) → segue para aprovação
+        - REVISE (score 5.0-6.9) → volta ao copywriter com feedback
+        - REJECT (score < 5.0) → volta ao copywriter com justificativa
+
+        Critérios de sucesso:
+        - [ ] Brand alignment verificado
+        - [ ] Legal compliance verificado
+        - [ ] Quality score calculado
+        - [ ] Feedback acionável gerado
+      outputs:
+        - review_verdict
+        - quality_score
+        - feedback
+      next: approve
+      on_revise: write
+      on_reject: write
+
+    - step: approve_content
+      id: approve
+      phase: 3
+      agent: marketing-chief
+      action: Aprovar conteúdo para publicação
+      requires: review
+      condition: "review.verdict == 'APPROVE'"
+      skip_condition: "content.type == 'routine' AND quality_score >= 8"
+      notes: |
+        Marketing Chief aprova o conteúdo:
+        - Usa task approve-content
+        - Verifica brand alignment final
+        - Para conteúdo institucional ou brand-sensitive: aprovação obrigatória
+        - Para conteúdo rotina com score >= 8: pode ser auto-aprovado
+
+        Quando obrigatório:
+        - Conteúdo institucional
+        - Alteração de messaging
+        - Primeiro conteúdo de nova campanha
+        - Conteúdo com claims ou dados
+
+        Critérios de sucesso:
+        - [ ] Conteúdo alinhado com brand
+        - [ ] Aprovação registrada
+      outputs:
+        - approval_status
+      next: publish
+
+    - step: publish_content
+      id: publish
+      phase: 4
+      agent: social-media-manager
+      action: Publicar conteúdo aprovado
+      requires: approve
+      notes: |
+        Social Media Manager publica o conteúdo:
+        - Usa task publish-content
+        - Executa pre-publish-checklist
+        - Adapta formato por plataforma
+        - Configura UTM parameters
+        - Agenda ou publica imediatamente
+        - Atualiza calendário editorial
+
+        Critérios de sucesso:
+        - [ ] Pre-publish checklist passou
+        - [ ] Formato adaptado para plataforma
+        - [ ] UTM parameters configurados
+        - [ ] Calendário editorial atualizado
+        - [ ] Publicação/agendamento confirmado
+      outputs:
+        - publication_confirmation
+        - post_url
+        - tracking_params
+
+  quality_gates:
+    review_gate:
+      agent: content-reviewer
+      step: review
+      verdicts:
+        APPROVE: "Score >= 7.0 — content ready for publication"
+        REVISE: "Score 5.0-6.9 — needs improvements, back to copywriter"
+        REJECT: "Score < 5.0 — major issues, back to copywriter"
+      blocking: true
+      constitution_ref: "MK-II (Brand Alignment), MK-III (Legal Compliance)"
+
+    approval_gate:
+      agent: marketing-chief
+      step: approve
+      required_for:
+        - institutional_content
+        - brand_sensitive
+        - first_campaign_content
+        - content_with_claims
+      blocking: true
+
+  error_handling:
+    strategy: retry-with-feedback
+    max_revisions: 3
+    escalation:
+      trigger: "revisions >= 3 OR verdict == 'REJECT' twice"
+      escalate_to: marketing-chief
+      action: "Review brief and content strategy alignment"

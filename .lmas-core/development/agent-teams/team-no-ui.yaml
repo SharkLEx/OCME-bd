@@ -1,6 +1,7 @@
 bundle:
   name: Team No UI
   icon: 🔧
+  domain: software-dev
   description: Team with no UX or UI Planning.
 agents:
   - lmas-orchestrator

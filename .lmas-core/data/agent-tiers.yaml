@@ -1,0 +1,120 @@
+# Agent Tier Registry — Free vs Premium
+# Defines which agents are available in each tier.
+# Used by graceful-degradation rule to skip unavailable agents without errors.
+#
+# Tier Detection:
+#   - If .lmas-core/premium-token exists and is valid → premium tier
+#   - Otherwise → free tier
+#
+# Free = LMAS original (Software Dev Squad) + Morpheus + Squad Creator
+# Premium = Free + Marketing Squad + Smith + agentes especializados futuros
+
+version: "1.0.0"
+
+tiers:
+  free:
+    description: "LMAS original — squad completo de desenvolvimento de software + criação de agentes customizados"
+    agent_count: 13
+    agents:
+      # System (always available)
+      - lmas-master        # Morpheus — entry point, router, orchestrator
+
+      # Software Development Squad (the original 11)
+      - dev                # Neo — implementação de código
+      - qa                 # Oracle — testes e qualidade
+      - architect          # Architect — arquitetura e design técnico
+      - data-engineer      # Dozer — database design
+      - devops             # Operator — CI/CD, git push (EXCLUSIVE)
+      - pm                 # Trinity — Product Management
+      - po                 # Keymaker — Product Owner, stories/epics
+      - sm                 # Niobe — Scrum Master
+      - analyst            # Link — pesquisa e análise
+      - ux-design-expert   # Switch — UX/UI design
+      - squad-creator      # Squad Creator — criação de agentes e squads customizados
+      - checkpoint         # Checkpoint — utility agent, project state tracking
+
+    capabilities:
+      - Full software development lifecycle (SDC, QA Loop, Spec Pipeline, Brownfield)
+      - Story-driven development with all workflows
+      - Custom agent creation via @squad-creator
+      - Custom squad creation and management
+      - All development tasks, templates, checklists
+      - Git operations, CI/CD, GitHub integration
+      - Architecture decisions, database design, UX/UI
+
+  premium:
+    description: "Tudo do free + Marketing Squad completo + Smith (adversarial) + agentes especializados"
+    requires: premium-token
+    additional_agents:
+      # Marketing Squad (complete — 8 agents)
+      - marketing-chief    # Lock — Commander, brand guardian, orchestrates marketing team
+      - copywriter         # Mouse — Creator, persuasive copy for all channels
+      - content-strategist # Persephone — Strategist, editorial calendar, content pillars
+      - content-researcher # Ghost — Investigator, market research, competitor analysis
+      - content-reviewer   # Seraph — Guardian, quality gate for all content
+      - social-media-manager  # Sparks — Amplifier, publishing (EXCLUSIVE)
+      - traffic-manager    # Merovingian — Optimizer, paid media, budget (EXCLUSIVE)
+      - seo                # Cypher — Decoder, SEO audits, keywords, E-E-A-T, schema, CWV, GEO
+
+      # Universal
+      - smith              # Agent Smith — adversarial delivery verifier, cross-domain red-team
+
+    # Premium Commands on Free Agents
+    # Some free agents have premium-only commands that require premium-token.
+    # The agent itself is always available, but specific commands are gated.
+    premium_commands:
+      ux-design-expert:
+        description: "Design Intelligence + Design System Extraction (Phase 6-7)"
+        commands:
+          # Phase 6: Data-Driven Design Intelligence
+          - style
+          - palette
+          - font-pair
+          - landing
+          - chart
+          - validate-pattern
+          - mobile-check
+          - logo-brief
+          - cip-brief
+          - pitch-deck
+          - banner
+          - brand-audit
+          # Phase 7: Design System Extraction
+          - extract-design-system
+        free_commands_count: 19   # Phase 1-5 always available
+        premium_commands_count: 14 # Phase 6-7 require premium
+        degradation:
+          action: inform
+          message: "Os comandos de Design Intelligence (Phase 6-7) são parte do The Matrix AI Premium. Sati continua disponível com 19 comandos (Phase 1-5) para UX research, design systems, tokens e componentes."
+          show_once: true
+          workarounds:
+            style: "Use *research para pesquisa manual de estilos"
+            palette: "Defina paleta manualmente com base em referências"
+            font-pair: "Escolha fonts manualmente via Google Fonts"
+            landing: "Use *wireframe para criar estrutura de landing page"
+            chart: "Escolha tipo de gráfico manualmente"
+            validate-pattern: "Use *a11y-check para validação de acessibilidade"
+            mobile-check: "Verifique manualmente com browser DevTools"
+            logo-brief: "Use *research para pesquisa de logo"
+            cip-brief: "Use *research + *create-front-end-spec para identidade visual"
+            pitch-deck: "Use *wireframe para criar slides"
+            banner: "Use *wireframe para criar layout de banner"
+            brand-audit: "Use *audit para auditoria manual de padrões"
+            extract-design-system: "Use *audit + *tokenize manualmente (mais lento, menos completo)"
+
+    capabilities:
+      - Everything in free tier
+      - Full marketing digital workflow (Content Pipeline, Campaign Pipeline)
+      - SEO audits, keyword research, E-E-A-T analysis, GEO optimization
+      - Content creation pipeline (brief → research → copy → SEO → review → approve → publish)
+      - Campaign pipeline (strategy → keywords → creative → review → approve → execute)
+      - Paid media management, budget allocation, ROI reporting
+      - Brand governance, content approval pipeline
+      - Adversarial delivery verification (stress-testing entregas)
+
+# ─────────────────────────────────────────────
+# Agent Availability
+# ─────────────────────────────────────────────
+# Agents not present in the project are simply unavailable.
+# No messages, no explanations — they don't exist for this installation.
+# Morpheus handles requests for missing agents directly.

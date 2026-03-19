@@ -142,6 +142,44 @@ workflow:
         on_exhausted: escalate
 
     # ═════════════════════════════════════════════════════════════════════════════════
+    # STEP 1.5: OPTIONAL EXTENSIONS (Adversarial Review + Edge Case Hunter)
+    # ═════════════════════════════════════════════════════════════════════════════════
+
+    - step: optional_extensions
+      phase: 1.5
+      phase_name: "Optional QA Extensions"
+      agent: qa
+
+      description: >-
+        Run optional adversarial review and edge case hunting after standard review.
+        Controlled by qaExtensions flags in core-config.yaml.
+        Results are appended to the review findings, not gated separately.
+
+      optional: true
+
+      extensions:
+        - task: qa-adversarial-review.md
+          condition: "qaExtensions.adversarialReview == true"
+          description: "Cynical review seeking minimum 10 issues with severity classification"
+          inputs:
+            content: "{storyId} diff from main"
+            also_consider: "findings from standard review"
+
+        - task: qa-edge-case-hunter.md
+          condition: "qaExtensions.edgeCaseHunter == true"
+          description: "Exhaustive path enumeration reporting unhandled edge cases as JSON"
+          inputs:
+            content: "{storyId} changed files"
+
+      on_success:
+        log: "Optional extensions completed"
+        next: check_verdict
+
+      on_failure:
+        action: continue
+        fallback: "Extensions are optional — proceed to verdict check"
+
+    # ═════════════════════════════════════════════════════════════════════════════════
     # STEP 2: CHECK VERDICT (AC1)
     # ═════════════════════════════════════════════════════════════════════════════════
 

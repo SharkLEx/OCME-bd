@@ -1,0 +1,13 @@
+framework,breakpoint_xs,breakpoint_sm,breakpoint_md,breakpoint_lg,breakpoint_xl,breakpoint_2xl,approach,container_strategy,scaling_method
+Tailwind CSS v3,0px,640px,768px,1024px,1280px,1536px,mobile-first min-width,max-width per breakpoint with mx-auto,fluid with utility clamp classes
+Bootstrap 5,0px,576px,768px,992px,1200px,1400px,mobile-first min-width,fixed-width containers per breakpoint,fixed breakpoint jumps
+Material UI v5,0px,600px,900px,1200px,1536px,none,mobile-first min-width,max-width 1536px with fluid option,fluid with theme breakpoints
+Chakra UI,0px,480px,768px,992px,1280px,1536px,mobile-first min-width,max-width per breakpoint,fluid with responsive prop arrays
+Ant Design,0px,576px,768px,992px,1200px,1600px,mobile-first min-width,fixed max-width 1200px default,fluid with Col span responsive object
+Bulma,0px,none,769px,1024px,1216px,1408px,mobile-first min-width,fixed max-width per breakpoint,fluid with is-* column modifiers
+Foundation 6,0px,none,640px,1024px,1200px,1440px,mobile-first min-width,max-width 1200px centered,fluid with grid-x and cell classes
+Carbon Design,0px,320px,672px,1056px,1312px,1584px,mobile-first min-width,max-width 1584px with 16-col grid,fluid with CSS Grid and subgrid
+Fluent UI,0px,480px,640px,1024px,1366px,1920px,mobile-first min-width,fluid container with max breakpoints,fluid with responsive Stack component
+Radix / Shadcn,0px,640px,768px,1024px,1280px,1536px,mobile-first min-width,max-width per breakpoint via Tailwind,fluid with Tailwind responsive prefixes
+Custom Fluid,0px,480px,768px,1024px,1280px,1536px,mobile-first with clamp,fluid container with clamp min-preferred-max,fully fluid with CSS clamp for all values
+Custom Content,0px,none,none,none,none,none,content-based no fixed breakpoints,max-width on content containers only,container queries and flex-wrap natural breaks

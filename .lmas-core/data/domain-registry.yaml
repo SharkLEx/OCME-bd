@@ -1,0 +1,137 @@
+# LMAS Domain Registry
+# Central registry of all known domains in the framework.
+# Each domain defines its own constitution extension, authority matrix, and quality gates.
+
+version: "1.1.0"
+
+# ─────────────────────────────────────────────
+# System Agents (domain-agnostic)
+# ─────────────────────────────────────────────
+
+system_agents:
+  lmas-master:
+    name: "Morpheus"
+    description: "Entry point, domain router, framework orchestrator — analisa intenção do usuário, roteia para o domínio/equipe/agente correto, operações de framework, criação de componentes, governança"
+    agent_file: ".lmas-core/development/agents/lmas-master.md"
+    role: router+orchestrator
+    can_execute_tasks: true
+
+  smith:
+    name: "Smith"
+    description: "Universal adversarial delivery verifier — estresse-testa qualquer entrega de qualquer domínio com olhar cínico e adversarial. Acionado opcionalmente após conclusão de entregas."
+    agent_file: ".lmas-core/development/agents/smith.md"
+    role: adversarial-verifier
+    can_execute_tasks: true
+    cross_domain: true
+
+  checkpoint:
+    name: "Checkpoint"
+    description: "Utility agent — gerencia PROJECT-CHECKPOINT.md, rastreia estado do projeto entre sessões, atualiza progresso automaticamente."
+    agent_file: ".lmas-core/development/agents/checkpoint.md"
+    role: utility
+    can_execute_tasks: true
+
+# ─────────────────────────────────────────────
+# Domain Resolution
+# ─────────────────────────────────────────────
+
+resolution:
+  strategy: "team-bundle-first"
+  entry_point: lmas-master
+  chain:
+    - source: "squad config.yaml → domain field"
+    - source: "team bundle → domain field"
+    - source: "project-config.yaml → domain.active"
+    - source: "fallback → default domain"
+
+# ─────────────────────────────────────────────
+# Registered Domains
+# ─────────────────────────────────────────────
+
+domains:
+  software-dev:
+    name: "Software Development"
+    description: "Desenvolvimento de software — backend, frontend, mobile, fullstack"
+    aliases:
+      - software
+      - dev
+      - development
+      - fullstack
+    path: ".lmas-core/domains/software-dev"
+    default: true
+    team_bundles:
+      - team-all
+      - team-fullstack
+      - team-no-ui
+      - team-qa-focused
+      - team-ide-minimal
+    core_agents:
+      - dev
+      - qa
+      - devops
+      - architect
+      - data-engineer
+      - pm
+      - po
+      - sm
+      - analyst
+      - ux-design-expert
+
+  marketing:
+    name: "Marketing Digital"
+    description: "Marketing digital — copywriting, social media, tráfego pago, estratégia de conteúdo"
+    aliases:
+      - mkt
+      - content
+      - marketing-digital
+    path: ".lmas-core/domains/marketing"
+    default: false
+    team_bundles:
+      - team-marketing
+    core_agents:
+      - marketing-chief
+      - copywriter
+      - social-media-manager
+      - traffic-manager
+      - content-strategist
+      - content-researcher
+      - content-reviewer
+      - seo
+
+  # ─── Future Domains (placeholders) ───
+
+# ─────────────────────────────────────────────
+# Cross-Domain Agents
+# ─────────────────────────────────────────────
+
+cross_domain_agents:
+  - id: ux-design-expert
+    primary_domain: software-dev
+    available_in: [marketing]
+    routing_keywords:
+      - design
+      - landing page layout
+      - banner design
+      - visual guidelines
+      - UI components
+      - design system
+      - brand visual
+    rationale: "Sati's Phase 6 commands (*banner, *landing, *pitch-deck, *cip-brief, *logo-brief, *brand-audit) serve marketing needs"
+
+  # finance:
+  #   name: "Finance & Accounting"
+  #   description: "Gestão financeira, contabilidade, auditoria"
+  #   aliases: [fin, accounting, financial]
+  #   path: ".lmas-core/domains/finance"
+  #   default: false
+  #   team_bundles: []
+  #   core_agents: []
+
+  # data-ops:
+  #   name: "Data Operations"
+  #   description: "Engenharia de dados, ETL, analytics, BI"
+  #   aliases: [data, etl, analytics, bi]
+  #   path: ".lmas-core/domains/data-ops"
+  #   default: false
+  #   team_bundles: []
+  #   core_agents: []
