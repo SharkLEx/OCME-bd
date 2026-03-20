@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-20 (auto-refresh)
+> Ultima atualizacao: 2026-03-20 18:05
 
 ## Contexto Ativo
 
-**Sessão 2026-03-20 — Social Media Expansion + LiteLLM**
+**Sessão 2026-03-20 — Epic 16 QA Audit (Stories 16.1 + 16.2 concluídas)**
 Branch: `feat/epic-7-monitor-engine`
-Trabalhando: Epic 17 (X + TikTok + Instagram + WhatsApp) + Epic 18 (LiteLLM)
-Próximo: implementar 17.1 → 17.2 → 18.1 → 8.8 quando Meta aprovar
+Trabalhando: Story 16.3 (Handlers) ou 16.4 (Workers) — próxima pendente
+Próximo: Stories 16.3 → 16.4 → PR feat/epic-7-monitor-engine → main
 
 ## Decisoes Tomadas
 
@@ -25,8 +25,8 @@ Próximo: implementar 17.1 → 17.2 → 18.1 → 8.8 quando Meta aprovar
 
 | Story | Status |
 |-------|--------|
-| 16.1.story | Unknown |
-| 16.2.story | Unknown |
+| 16.1.story | ✅ Ready for Review |
+| 16.2.story | ✅ Ready for Review |
 | 16.3.story | Unknown |
 | 16.4.story | Unknown |
 | 17.1.story | Unknown |
