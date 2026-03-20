@@ -80,11 +80,42 @@ def _mock_openai():
     sys.modules.setdefault('openai', m)
 
 
+def _mock_webdex_chain():
+    """Mock webdex_chain — depende de web3 real (não disponível em tests)."""
+    m = mock.MagicMock()
+    m.web3 = mock.MagicMock()
+    m.rpc_pool = []
+    m.CONTRACTS_A = mock.MagicMock()
+    m.CONTRACTS_B = mock.MagicMock()
+    m.TOPIC_OPENPOSITION = '0x' + '0' * 64
+    m.TOPIC_TRANSFER = '0x' + '0' * 64
+    m.erc20_contract = mock.MagicMock()
+    m.get_active_wallet_map = mock.MagicMock(return_value={})
+    m.notify_cids_for_wallet = mock.MagicMock(return_value=[])
+    m.obter_preco_pol = mock.MagicMock(return_value=0.5)
+    m._is_429_error = mock.MagicMock(return_value=False)
+    sys.modules.setdefault('webdex_chain', m)
+
+
+def _mock_webdex_bot_core():
+    """Mock webdex_bot_core — depende do bot Telegram."""
+    m = mock.MagicMock()
+    m.send_html = mock.MagicMock()
+    m.esc = lambda x: str(x)
+    m.code = lambda x: f'<code>{x}</code>'
+    m.get_token_meta = mock.MagicMock(return_value={'sym': 'USDT', 'dec': 6, 'icon': '💵'})
+    m.formatar_moeda = mock.MagicMock(return_value='$0.00')
+    m._is_admin = mock.MagicMock(return_value=False)
+    sys.modules.setdefault('webdex_bot_core', m)
+
+
 _mock_telebot()
 _mock_web3()
 _mock_psycopg2()
 _mock_matplotlib()
 _mock_openai()
+_mock_webdex_chain()
+_mock_webdex_bot_core()
 
 
 # ==============================================================================
@@ -153,6 +184,27 @@ CREATE TABLE IF NOT EXISTS milestones (
     milestone_key TEXT UNIQUE,
     notified_at TEXT DEFAULT (datetime('now')),
     value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS op_owner (
+    hash TEXT,
+    log_index INTEGER,
+    wallet TEXT,
+    PRIMARY KEY (hash, log_index)
+);
+
+CREATE TABLE IF NOT EXISTS block_ts (
+    bloco INTEGER PRIMARY KEY,
+    ts INTEGER,
+    ambiente TEXT DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS user_funnel (
+    chat_id TEXT PRIMARY KEY,
+    stage TEXT DEFAULT 'new',
+    total_trades INTEGER DEFAULT 0,
+    first_trade TEXT,
+    updated_at TEXT
 );
 """
 
