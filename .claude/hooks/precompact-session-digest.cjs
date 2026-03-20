@@ -49,9 +49,53 @@ function readStdin() {
   });
 }
 
+/**
+ * Save checkpoint state before context compaction.
+ * Ensures agent work is not lost when Claude Code compresses the conversation.
+ */
+function saveCheckpointBeforeCompact(projectDir) {
+  try {
+    const fs = require('fs');
+    const checkpointPath = path.join(projectDir, 'docs', 'PROJECT-CHECKPOINT.md');
+    if (!fs.existsSync(checkpointPath)) return;
+
+    // Backup current checkpoint
+    const backupDir = path.join(projectDir, '.lmas');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    fs.copyFileSync(checkpointPath, path.join(backupDir, '.checkpoint-backup'));
+
+    // Update timestamp to mark pre-compact save
+    const content = fs.readFileSync(checkpointPath, 'utf8');
+    const date = new Date().toISOString().split('T')[0];
+    const time = new Date().toTimeString().split(' ')[0].slice(0, 5);
+    const updated = content.replace(
+      /^> Ultima atualizacao:.*$/m,
+      `> Ultima atualizacao: ${date} ${time} (pre-compact save)`
+    );
+    if (updated !== content) {
+      fs.writeFileSync(checkpointPath, updated);
+    }
+
+    // Output reminder to stdout — Claude will see this before compaction
+    process.stdout.write(
+      '\n<pre-compact-checkpoint>\n' +
+      'IMPORTANTE: O contexto esta sendo compactado. ' +
+      'Antes de continuar, atualize docs/PROJECT-CHECKPOINT.md com:\n' +
+      '- Contexto Ativo (o que estava sendo feito)\n' +
+      '- Decisoes Tomadas (escolhas feitas nesta sessao)\n' +
+      '- Proximos Passos (o que falta fazer)\n' +
+      '</pre-compact-checkpoint>\n'
+    );
+  } catch { /* silent */ }
+}
+
 /** Main hook execution pipeline. */
 async function main() {
   const input = await readStdin();
+  const projectDir = input.cwd || PROJECT_ROOT;
+
+  // Save checkpoint before compaction (Gap 4)
+  saveCheckpointBeforeCompact(projectDir);
 
   // Resolve path to the unified hook runner via __dirname (not input.cwd)
   // Same pattern as synapse-engine.cjs — robust against incorrect cwd
@@ -67,7 +111,7 @@ async function main() {
   // Build context object expected by onPreCompact
   const context = {
     sessionId: input.session_id,
-    projectDir: input.cwd || PROJECT_ROOT,
+    projectDir,
     transcriptPath: input.transcript_path,
     trigger: input.trigger || 'auto',
     hookEventName: input.hook_event_name || 'PreCompact',
@@ -76,8 +120,10 @@ async function main() {
     provider: 'claude',
   };
 
-  const { onPreCompact } = require(runnerPath);
-  await onPreCompact(context);
+  try {
+    const { onPreCompact } = require(runnerPath);
+    await onPreCompact(context);
+  } catch { /* runner may not exist in all installations */ }
 }
 
 /** Entry point runner — sets safety timeout and executes main(). */

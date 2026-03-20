@@ -75,6 +75,23 @@ Ao atualizar "Último Trabalho Realizado", use este formato:
 - Testes: {X novos, Y total}
 ```
 
+## Seções do Checkpoint (ESTRUTURA OBRIGATÓRIA)
+
+O checkpoint DEVE conter estas seções. O agente DEVE atualizar a seção correspondente à sua ação:
+
+| Seção | Quem atualiza | O que contém |
+|-------|---------------|-------------|
+| **Contexto Ativo** | O agente que está trabalhando | O que está sendo feito AGORA (story, branch, bloqueios) |
+| **Status das Stories** | Auto-gerado + agentes | Tabela de stories com status |
+| **Decisoes Tomadas** | Agentes após decisões | Escolhas técnicas/negócio E o porquê |
+| **Ambiente Configurado** | @dev, @devops | .env keys, deploy target, domínios, serviços |
+| **Ultimo Trabalho Realizado** | Todos os agentes | O que foi feito (com arquivos e testes) |
+| **Proximos Passos** | Todos os agentes | O que falta fazer (com checkboxes) |
+| **Git Recente** | Auto-gerado | Últimos commits + branch (NÃO editar manualmente) |
+| **Ambiente Detectado** | Auto-gerado | .env keys detectadas (NÃO editar manualmente) |
+
+**Seções marcadas como "Auto-gerado" são mantidas pelo sistema. NÃO editar manualmente — serão sobrescritas.**
+
 ## Regras
 
 1. **NÃO pule o checkpoint** — mesmo para mudanças "pequenas". Uma story Draft→InProgress é relevante.
@@ -82,6 +99,9 @@ Ao atualizar "Último Trabalho Realizado", use este formato:
 3. **NÃO acumule** — atualize imediatamente após cada ação, não "depois".
 4. **Mantenha conciso** — o checkpoint deve ser escaneável em 30 segundos.
 5. **Seção "Último Trabalho"** tem no máximo as **3 sessões mais recentes**. Sessões antigas são removidas.
+6. **Milestone saves** — Atualize o checkpoint a cada milestone significativo, não só no final. Exemplos: após configurar .env, após criar migration, após decisão de arquitetura.
+7. **Handoff obrigatório** — Ao trocar de agente (@dev → @qa), o agente saindo DEVE atualizar "Contexto Ativo" e "Proximos Passos" antes do handoff.
+8. **Conflito de escrita** — Se o checkpoint foi modificado externamente (outro terminal), leia antes de escrever. Nunca sobrescreva cegamente.
 
 ## Obrigatoriedade por Agente (MUST)
 
@@ -107,6 +127,10 @@ Se `docs/PROJECT-CHECKPOINT.md` não existir, o agente DEVE criá-lo usando o fo
 ## Início de Sessão
 
 No início de TODA sessão:
-1. Ler `docs/PROJECT-CHECKPOINT.md`
-2. Verificar se "Próximos Passos" ainda é válido
-3. Se checkpoint parecer desatualizado, rodar `@checkpoint *verify`
+1. Ler `docs/PROJECT-CHECKPOINT.md` — este é o "cérebro" do projeto entre sessões
+2. Verificar "Contexto Ativo" — entender o que estava sendo feito
+3. Verificar "Decisoes Tomadas" — não refazer escolhas já feitas
+4. Verificar "Proximos Passos" — saber o que fazer a seguir
+5. Se checkpoint parecer desatualizado, rodar `@checkpoint *verify`
+
+**NOTA:** O hook `checkpoint-context.cjs` injeta automaticamente um resumo do checkpoint no primeiro prompt de cada sessão. O agente RECEBE esse contexto sem precisar ler o arquivo manualmente. Mesmo assim, para tarefas complexas, ler o arquivo completo é recomendado.

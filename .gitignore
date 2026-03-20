@@ -180,6 +180,9 @@ tests/*/__fixtures__/
 # UI/UX design artifacts
 docs/ui-prompts.pdf
 
+# Media project scripts (podem conter API keys — não commitar)
+media/projects/
+
 # NOTE: docs/ internal directories are gitignored in the
 # "INTERNAL DOCS" section below. Only public docs ship.
 

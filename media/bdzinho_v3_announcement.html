@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1080">
+<title>bdZinho v3 — Announcement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --black:      #000000;
+    --dark:       #131313;
+    --pink:       #fb0491;
+    --red:        #d90048;
+    --green:      #00FFB2;
+    --cyan:       #00D4FF;
+    --white:      #ffffff;
+    --gray:       #888888;
+  }
+
+  body {
+    width: 1080px;
+    height: 1920px;
+    background: var(--black);
+    font-family: 'Syne', sans-serif;
+    color: var(--white);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Background glow */
+  body::before {
+    content: '';
+    position: absolute;
+    top: -200px;
+    right: -200px;
+    width: 700px;
+    height: 700px;
+    background: radial-gradient(circle, rgba(251,4,145,0.18) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  body::after {
+    content: '';
+    position: absolute;
+    bottom: 100px;
+    left: -150px;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(0,212,255,0.10) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 48px 64px;
+    border-bottom: 1px solid rgba(251,4,145,0.25);
+  }
+
+  .logo-wrap {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .logo-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #fb0491 0%, #d90048 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 22px;
+    color: white;
+    letter-spacing: -2px;
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 26px;
+    letter-spacing: 1px;
+    line-height: 1;
+  }
+  .logo-text span { color: var(--pink); }
+
+  .badge-beta {
+    background: rgba(251,4,145,0.15);
+    border: 1px solid rgba(251,4,145,0.4);
+    color: var(--pink);
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 8px 20px;
+    border-radius: 999px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 80px 64px 60px;
+  }
+
+  .hero-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .hero-eyebrow-line {
+    width: 60px;
+    height: 3px;
+    background: var(--pink);
+  }
+
+  .hero-eyebrow-text {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--pink);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .hero-title {
+    font-size: 96px;
+    font-weight: 800;
+    line-height: 1.0;
+    margin-bottom: 16px;
+    letter-spacing: -2px;
+  }
+  .hero-title .highlight { color: var(--pink); }
+
+  .hero-version {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 28px;
+    color: var(--pink);
+    margin-bottom: 48px;
+    letter-spacing: 2px;
+  }
+
+  .hero-tagline {
+    font-size: 38px;
+    font-weight: 800;
+    color: var(--white);
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+
+  .hero-sub {
+    font-size: 28px;
+    font-weight: 400;
+    color: var(--gray);
+    margin-bottom: 0;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(251,4,145,0.3) 30%, rgba(251,4,145,0.3) 70%, transparent 100%);
+    margin: 0 64px;
+  }
+
+  /* ── FEATURES ── */
+  .features {
+    padding: 64px 64px 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .features-label {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--gray);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .feature-card {
+    background: var(--dark);
+    border-radius: 20px;
+    padding: 36px 44px;
+    display: flex;
+    align-items: flex-start;
+    gap: 28px;
+    border-left: 4px solid transparent;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    border-radius: 20px;
+    pointer-events: none;
+  }
+
+  .feature-card.pink  { border-left-color: var(--pink); }
+  .feature-card.green { border-left-color: var(--green); }
+  .feature-card.cyan  { border-left-color: var(--cyan); }
+  .feature-card.red   { border-left-color: var(--red); }
+
+  .feature-card.pink::before  { background: linear-gradient(135deg, rgba(251,4,145,0.06) 0%, transparent 60%); }
+  .feature-card.green::before { background: linear-gradient(135deg, rgba(0,255,178,0.06) 0%, transparent 60%); }
+  .feature-card.cyan::before  { background: linear-gradient(135deg, rgba(0,212,255,0.06) 0%, transparent 60%); }
+  .feature-card.red::before   { background: linear-gradient(135deg, rgba(217,0,72,0.06) 0%, transparent 60%); }
+
+  .feature-icon {
+    font-size: 44px;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  .feature-content {}
+
+  .feature-name {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .feature-card.pink  .feature-name { color: var(--pink); }
+  .feature-card.green .feature-name { color: var(--green); }
+  .feature-card.cyan  .feature-name { color: var(--cyan); }
+  .feature-card.red   .feature-name { color: var(--red); }
+
+  .feature-desc {
+    font-size: 24px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.75);
+    line-height: 1.4;
+  }
+
+  /* ── QUOTE ── */
+  .quote-section {
+    padding: 48px 64px;
+    text-align: center;
+  }
+
+  .quote-text {
+    font-size: 34px;
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.5;
+    font-style: italic;
+  }
+  .quote-text span { color: var(--pink); }
+
+  /* ── COMING SOON ── */
+  .coming-soon {
+    padding: 0 64px 60px;
+    display: flex;
+    gap: 24px;
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 32px;
+    border-radius: 999px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border: 1px solid;
+  }
+  .pill.academy {
+    background: rgba(251,4,145,0.1);
+    border-color: rgba(251,4,145,0.35);
+    color: var(--pink);
+  }
+  .pill.hackathon {
+    background: rgba(0,212,255,0.1);
+    border-color: rgba(0,212,255,0.35);
+    color: var(--cyan);
+  }
+
+  .pill-icon { font-size: 22px; }
+  .pill-arrow { opacity: 0.6; margin-left: 4px; }
+
+  /* ── FOOTER ── */
+  .footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 40px 64px;
+    border-top: 1px solid rgba(251,4,145,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0,0,0,0.8);
+  }
+
+  .footer-logo {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .footer-logo-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #fb0491 0%, #d90048 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    color: white;
+    letter-spacing: -1px;
+  }
+
+  .footer-text {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    color: var(--gray);
+  }
+  .footer-text span { color: var(--pink); }
+
+  .footer-tag {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--gray);
+    letter-spacing: 2px;
+  }
+  .footer-tag em {
+    color: var(--pink);
+    font-style: normal;
+  }
+</style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo-wrap">
+      <div class="logo-icon">bd</div>
+      <div class="logo-text">WE<span>bd</span>EX</div>
+    </div>
+    <div class="badge-beta">BETA</div>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-eyebrow">
+      <div class="hero-eyebrow-line"></div>
+      <div class="hero-eyebrow-text">Lançamento</div>
+    </div>
+    <div class="hero-title">
+      bd<span class="highlight">Zinho</span><br>Intelligence
+    </div>
+    <div class="hero-version">v3.0</div>
+    <div class="hero-tagline">⚡ O ROBÔ EVOLUIU.</div>
+    <div class="hero-sub">Não é atualização. É uma transformação.</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- FEATURES -->
+  <div class="features">
+    <div class="features-label">O que mudou</div>
+
+    <div class="feature-card pink">
+      <div class="feature-icon">🧠</div>
+      <div class="feature-content">
+        <div class="feature-name">Memória Persistente</div>
+        <div class="feature-desc">Ele lembra de você. Histórico completo, conversa contínua.</div>
+      </div>
+    </div>
+
+    <div class="feature-card green">
+      <div class="feature-icon">⛓️</div>
+      <div class="feature-content">
+        <div class="feature-name">Tool Use On-Chain</div>
+        <div class="feature-desc">Dados reais da Polygon em tempo real durante a conversa.</div>
+      </div>
+    </div>
+
+    <div class="feature-card cyan">
+      <div class="feature-icon">🌊</div>
+      <div class="feature-content">
+        <div class="feature-name">Streaming</div>
+        <div class="feature-desc">Você vê ele pensar em tempo real.</div>
+      </div>
+    </div>
+
+    <div class="feature-card red">
+      <div class="feature-icon">🎭</div>
+      <div class="feature-content">
+        <div class="feature-name">Persona Engine</div>
+        <div class="feature-desc">Celebra wins, analítico em losses, didático com novatos.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUOTE -->
+  <div class="quote-section">
+    <div class="quote-text">
+      "Parando? <span>Nunca.</span>"
+    </div>
+  </div>
+
+  <!-- COMING SOON -->
+  <div class="coming-soon">
+    <div class="pill academy">
+      <span class="pill-icon">📚</span>
+      WEbdEX Academy
+      <span class="pill-arrow">→</span>
+    </div>
+    <div class="pill hackathon">
+      <span class="pill-icon">🏆</span>
+      Hackathon WEbdEX
+      <span class="pill-arrow">→</span>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="footer-logo">
+      <div class="footer-logo-icon">bd</div>
+      <div class="footer-text">WE<span>bd</span>EX Protocol</div>
+    </div>
+    <div class="footer-tag">— bdZinho <em>🤖</em></div>
+  </div>
+
+</body>
+</html>
