@@ -37,39 +37,45 @@ def get_protocol_context() -> str:
         conn = _conn()
         lines = ["=== DADOS REAIS DO PROTOCOLO WEbdEX (agora) ==="]
 
-        # ── TVL por ambiente ──────────────────────────────
-        tvl_rows = conn.execute(
-            """SELECT env, total_usd, ts
-               FROM fl_snapshots
-               WHERE (env, ts) IN (
-                   SELECT env, MAX(ts) FROM fl_snapshots GROUP BY env
-               )
-               ORDER BY env"""
-        ).fetchall()
+        # TVL combinado (Story 15.2 — lp_usdt_supply + lp_loop_supply)
+        try:
+            tvl_row = conn.execute(
+                """SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply), 2)
+                   FROM fl_snapshots
+                   WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)"""
+            ).fetchone()
+            tvl_total = float(tvl_row[0] or 0) if tvl_row else 0.0
+        except Exception:
+            # fallback para total_usd se colunas lp_* não existirem
+            tvl_rows = conn.execute(
+                """SELECT env, total_usd FROM fl_snapshots
+                   WHERE (env, ts) IN (SELECT env, MAX(ts) FROM fl_snapshots GROUP BY env)"""
+            ).fetchall()
+            tvl_total = sum(r[1] for r in tvl_rows) if tvl_rows else 0.0
 
-        tvl_total = 0.0
-        if tvl_rows:
-            lines.append("\nTVL (último snapshot):")
-            for env, total, ts in tvl_rows:
-                label = _ENV_LABELS.get(env, env)
-                lines.append(f"  {label}: ${total:,.0f} ({ts[:16]})")
-                tvl_total += total
-            lines.append(f"  📊 TOTAL: ${tvl_total:,.0f}")
+        if tvl_total > 0:
+            lines.append(f"\nTVL Protocolo: ${tvl_total:,.0f} USD")
 
-        # ── Operações do ciclo atual ──────────────────────
+        # ── Operações do ciclo atual (Story 15.2 — UTC correto) ──────────────
         cutoff = _ciclo_cutoff_utc()
         ops = conn.execute(
-            """SELECT COUNT(*), COALESCE(SUM(profit),0), COALESCE(SUM(fee_bd),0)
+            """SELECT COUNT(DISTINCT wallet),
+                      COUNT(CASE WHEN profit>0 THEN 1 END),
+                      COUNT(*),
+                      COALESCE(SUM(fee_bd), 0),
+                      COALESCE(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END), 0)
                FROM protocol_ops WHERE ts > ?""",
             (cutoff,)
         ).fetchone()
 
-        if ops:
-            count, profit, fee = ops
+        if ops and ops[2]:
+            p_traders, p_wins, p_total, p_bd, p_bruto = ops
+            p_wr = (p_wins / p_total * 100) if p_total > 0 else 0.0
+            ciclo_sign = "+" if p_bruto >= 0 else ""
             lines.append(f"\nCiclo atual (desde 21h BR):")
-            lines.append(f"  Operações: {count}")
-            lines.append(f"  Lucro acumulado: ${profit:,.4f}")
-            lines.append(f"  Fee BD: ${fee:,.4f}")
+            lines.append(f"  Traders: {p_traders} | Trades: {p_total}")
+            lines.append(f"  WR: {p_wr:.1f}% | P&L Bruto: {ciclo_sign}${p_bruto:,.4f}")
+            lines.append(f"  BD coletado: {p_bd:.4f}")
 
         # ── Capital dos usuários ──────────────────────────
         cap = conn.execute(
@@ -102,15 +108,26 @@ def get_status_embed_data() -> dict:
     try:
         conn = _conn()
 
-        tvl_rows = conn.execute(
-            """SELECT env, total_usd, ts FROM fl_snapshots
-               WHERE (env, ts) IN (SELECT env, MAX(ts) FROM fl_snapshots GROUP BY env)
-               ORDER BY env"""
-        ).fetchall()
+        # TVL combinado (Story 15.2)
+        try:
+            tvl_row = conn.execute(
+                """SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply), 2)
+                   FROM fl_snapshots
+                   WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)"""
+            ).fetchone()
+            tvl_total = float(tvl_row[0] or 0) if tvl_row else 0.0
+        except Exception:
+            tvl_rows_fb = conn.execute(
+                """SELECT env, total_usd FROM fl_snapshots
+                   WHERE (env, ts) IN (SELECT env, MAX(ts) FROM fl_snapshots GROUP BY env)"""
+            ).fetchall()
+            tvl_total = sum(r[1] for r in tvl_rows_fb) if tvl_rows_fb else 0.0
 
         cutoff = _ciclo_cutoff_utc()
         ops = conn.execute(
-            "SELECT COUNT(*), COALESCE(SUM(profit),0) FROM protocol_ops WHERE ts > ?",
+            """SELECT COUNT(DISTINCT wallet), COUNT(*),
+                      COALESCE(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END), 0)
+               FROM protocol_ops WHERE ts > ?""",
             (cutoff,)
         ).fetchone()
 
@@ -120,10 +137,10 @@ def get_status_embed_data() -> dict:
 
         conn.close()
         return {
-            "tvl_rows": tvl_rows or [],
-            "tvl_total": sum(r[1] for r in tvl_rows) if tvl_rows else 0,
-            "ops_count": ops[0] if ops else 0,
-            "ops_profit": ops[1] if ops else 0,
+            "tvl_rows": [],
+            "tvl_total": tvl_total if tvl_total else 0,
+            "ops_count": ops[1] if ops else 0,
+            "ops_profit": ops[2] if ops else 0,
             "cap_wallets": cap[0] if cap else 0,
             "cap_total": cap[1] if cap else 0,
         }

@@ -1,6 +1,6 @@
 # PROJECT-CHECKPOINT — WEbdEX Protocol OS
 
-> Última atualização: 2026-03-19 (Smith Review #2 — Triage + Remediation completa) | Branch: `feat/epic-7-monitor-engine`
+> Última atualização: 2026-03-20 (Stories 12.3+12.4 ✅ Done — protocol_context.py atualizado Story 15.2) | Branch: `feat/epic-7-monitor-engine`
 
 ---
 
@@ -17,9 +17,9 @@
 | 9 | bdZinho Discord v2 | ✅ Done | 9.1–9.4 Done + Deployadas |
 | 10 | WEbdEX Design System: Telegram + Monitor Engine | ✅ Done | 10.1–10.5 Done + Deployadas |
 | 11 | WEbdEX Protocol OS: Automação de Conteúdo | ✅ Done | 11.1 ✅ Done + Deployada |
-| 12 | bdZinho Intelligence v3 | 🟡 In Progress | 12.1 Ready for Review (VPS pendente), 12.2 ✅ Done |
+| 12 | bdZinho Intelligence v3 | 🟡 In Progress | 12.1 🔄 Ready for Review (VPS pendente), 12.2 ✅ Done, 12.3 ✅ Done, 12.4 ✅ Done |
 | 14 | Subscription Flow v2 | 🟡 In Progress | 14.3 ⏳ Backlog (paralelo ao Epic 12) |
-| 15 | LMAS Framework v5 Expansion | 🟡 In Progress | 15.1 🟡 In Progress (commit pendente) |
+| 15 | WEbdEX Ciclo 21h Qualidade | ✅ Done | 15.1 ✅ Done (LMAS), 15.2 ✅ Done (ciclo 21h fixes) |
 
 ---
 
@@ -29,7 +29,9 @@
 |-------|--------|--------|--------|
 | 8.8 | Instagram Integration | ⏸️ Bloqueada | Aguardando credenciais Meta |
 | 8.9 | WhatsApp Integration | ⏸️ Bloqueada | Aguardando credenciais Meta |
-| 12.1 | Long-term Memory PostgreSQL para bdZinho | 🟢 Ready for Review | Código commitado, VPS deploy pendente |
+| 12.1 | Long-term Memory PostgreSQL para bdZinho | 🔄 Ready for Review | Código completo, VPS deploy pendente |
+| 12.3 | Streaming Responses Discord | ✅ Done | Movida para completed/ |
+| 12.4 | Persona Engine | ✅ Done | Movida para completed/ |
 | 14.3 | Webhook On-chain Auto-ativação de Subscription | ⏳ Backlog | Paralelo ao Epic 12 |
 | 15.1 | LMAS Framework v5: Marketing Squad + New Agents | 🟡 In Progress | ~312 arquivos pendentes de commit |
 
