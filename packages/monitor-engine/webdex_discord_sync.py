@@ -382,63 +382,47 @@ def notify_nova_carteira(endereco: str, total_holders: int) -> None:
 
 def notify_protocolo_relatorio(
     hoje: str,
-    pol_price: float,
-    p_trades: int,
+    tvl_usd: float,
+    bd_periodo: float,
     p_traders: int,
-    p_lucro: float,
-    p_ganhos: float,
-    p_perdas: float,
-    p_wins: int,
-    p_gas_pol: float,
-    p_gas_usd: float,
-    p_bd: float,
-    bd_alltime: float,
-    proto_count: int,
+    p_wr: float,
+    p_bruto: float,
     top_traders: list,
     label: str = "Ciclo 21h",
 ) -> None:
     """Relatório completo 💎 LUCRO TOTAL DO PROTOCOLO → #relatório-diário (Discord)."""
-    p_wr     = (p_wins / p_trades * 100) if p_trades > 0 else 0.0
-    emoji    = "🟢" if p_lucro >= 0 else "🔴"
-    color    = _SUCCESS if p_lucro >= 0 else _ERROR
-    avg_gas  = (p_gas_pol / p_trades) if p_trades > 0 else 0.0
-    avg_trd  = (p_lucro / p_trades) if p_trades > 0 else 0.0
-    s_lucro  = f"+${p_lucro:.2f}" if p_lucro >= 0 else f"-${abs(p_lucro):.2f}"
-    s_ganhos = f"+${p_ganhos:.2f}"
-    s_perdas = f"$-{abs(p_perdas):.2f}"
-    s_avg    = f"+${avg_trd:.4f}" if avg_trd >= 0 else f"-${abs(avg_trd):.4f}"
+    emoji  = "🟢" if p_bruto >= 0 else "🔴"
+    color  = _SUCCESS if p_bruto >= 0 else _ERROR
+    pl_str = f"+${p_bruto:,.2f}" if p_bruto >= 0 else f"-${abs(p_bruto):,.2f}"
 
-    # Bloco traders
     desc = (
-        f"🗓️ **{label}**  |  POL: ${pol_price:.4f}\n"
+        f"🗓️ **{label}**  ·  {hoje}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💎  **TVL DO PROTOCOLO**\n"
+        f"  └─ 💰 Total: **${tvl_usd:,.0f} USD**\n\n"
         f"📈  **P&L DOS TRADERS**  *(resultado on-chain dos usuários)*\n"
-        f"  ├─ 📊 Trades: **{p_trades:,}**  👥 Traders: **{p_traders}**  WR: **{p_wr:.1f}%**\n"
-        f"  ├─ ✅ Lucros: **{s_ganhos}**  ❌ Perdas: **{s_perdas}**\n"
-        f"  └─ {emoji} Resultado: **{s_lucro} USD**  *({s_avg}/trade)*\n\n"
-        f"⛽  **GÁS CONSUMIDO** *(Transações)*\n"
-        f"  ├─ 🔴 Total POL: **{p_gas_pol:,.4f} POL**  *(~${p_gas_usd:.2f})*\n"
-        f"  └─ 📊 Média/trade: **{avg_gas:.6f} POL**\n\n"
+        f"  ├─ 👥 Traders: **{p_traders}**  ·  🎯 WR: **{p_wr:.1f}%**\n"
+        f"  └─ {emoji} Resultado bruto: **{pl_str} USD**\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
         f"💎  **RECEITA DO PROTOCOLO**  *(BD/Passe coletado on-chain)*\n"
-        f"  ├─ 🏦 Período:   **{p_bd:,.4f} BD**\n"
-        f"  └─ 📦 Acumulado: **{bd_alltime:,.4f} BD**  *(all-time indexado)*\n"
+        f"  └─ 🏦 Período: **{bd_periodo:,.4f} BD**\n"
     )
 
     # Top 5 traders
     if top_traders:
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
         desc += f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🏆  **TOP 5 TRADERS (período)**\n"
-        for i, (wallet, lucro, t_trades, bd_pago, _gas) in enumerate(top_traders):
-            short_w = f"{wallet[:6]}…{wallet[-4:]}" if len(str(wallet)) > 10 else str(wallet)
-            sg = "🟢" if (lucro or 0) >= 0 else "🔴"
-            lstr = f"+${lucro:.2f}" if (lucro or 0) >= 0 else f"-${abs(lucro):.2f}"
+        for i, row in enumerate(top_traders):
+            wallet  = str(row[0])
+            lucro   = float(row[1] or 0)
+            fee     = float(row[2] or 0) if len(row) > 2 else 0.0
+            short_w = f"{wallet[:6]}\u2026{wallet[-4:]}" if len(wallet) > 10 else wallet
+            lstr    = f"+${lucro:.2f}" if lucro >= 0 else f"-${abs(lucro):.2f}"
+            sg = "🟢" if lucro >= 0 else "🔴"
             desc += (
                 f"  {medals[i]}  `{short_w}`\n"
-                f"       {sg} **{lstr}**  ·  {t_trades:,}t  ·  💎 {bd_pago:.3f} BD\n"
+                f"       {sg} **{lstr}**  ·  💎 {fee:.3f} BD\n"
             )
-
-    desc += f"\n\n🔍 *Fonte: on-chain ({proto_count:,} ops indexadas)*\n🗓️  {hoje}  ·  POL: ${pol_price:.4f}"
 
     # Bloco CTA OCME_bd
     ocme_block = (
@@ -450,15 +434,82 @@ def notify_protocolo_relatorio(
         f"[→ Ativar OCME_bd — Beta Gratuito]({_OCME_BD_LINK})"
     )
 
-    _async_post({
+    # Síncrono: bloqueia até HTTP confirmar (3 tentativas, timeout 20s cada)
+    # Garante que set_config("ok") só ocorre após entrega real ao Discord
+    _post_webhook({
         "embeds": [{
-            "title": "💎 LUCRO TOTAL DO PROTOCOLO — WEbdEX",
+            "title": "\U0001f4a0 RELAT\u00d3RIO DO PROTOCOLO \u2014 WEbdEX",
             "description": desc + ocme_block,
             "color": color,
             "thumbnail": {"url": _BDZINHO_IMG},
-            "footer": {"text": "WEbdEX Protocol · Ciclo 21h BR · Polygon"},
+            "footer": {"text": "WEbdEX Protocol \u00b7 Ciclo 21h BR \u00b7 Polygon"},
         }]
     }, url=_WEBHOOK_RELATORIO)
+
+
+def notify_protocolo_relatorio_telegram(
+    hoje: str,
+    tvl_usd: float,
+    bd_periodo: float,
+    p_traders: int,
+    p_wr: float,
+    p_bruto: float,
+    top_traders: list,
+    label: str = "Ciclo 21h",
+) -> str:
+    """Versão Telegram HTML do relatório protocolo. Retorna string para broadcast."""
+    emoji  = "🟢" if p_bruto >= 0 else "🔴"
+    pl_str = f"+${p_bruto:,.2f}" if p_bruto >= 0 else f"-${abs(p_bruto):,.2f}"
+    msg = (
+        f"🌙 <b>RELATÓRIO DO PROTOCOLO — WEbdEX</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"💎 TVL: <b>${tvl_usd:,.0f} USD</b>\n"
+        f"👥 Traders: <b>{p_traders}</b>  ·  WR: <b>{p_wr:.1f}%</b>\n"
+        f"{emoji} P&amp;L Bruto: <b>{pl_str} USD</b>\n"
+        f"🏦 BD período: <b>{bd_periodo:,.4f} BD</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+    )
+    if top_traders:
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+        msg += "\n🏆 <b>TOP 5 TRADERS (período):</b>\n"
+        for i, row in enumerate(top_traders):
+            wallet  = str(row[0])
+            lucro   = float(row[1] or 0)
+            fee     = float(row[2] or 0) if len(row) > 2 else 0.0
+            short_w = f"{wallet[:6]}\u2026{wallet[-4:]}" if len(wallet) > 10 else wallet
+            lstr    = f"+${lucro:.2f}" if lucro >= 0 else f"-${abs(lucro):.2f}"
+            msg += (
+                f"  {medals[i]} <code>{short_w}</code>\n"
+                f"       {lstr}  ·  💎 {fee:.3f} BD\n"
+            )
+    msg += f"\n🗓️ {hoje}"
+    return msg
+
+
+def notify_protocolo_relatorio_onchain(
+    hoje: str,
+    tvl_usd: float,
+    bd_periodo: float,
+    p_traders: int,
+    p_wr: float,
+    p_bruto: float,
+) -> None:
+    """Versão compacta do relatório protocolo → #webdex-on-chain (segundo canal)."""
+    emoji  = "🟢" if p_bruto >= 0 else "🔴"
+    pl_str = f"+${p_bruto:,.0f}" if p_bruto >= 0 else f"-${abs(p_bruto):,.0f}"
+    desc = (
+        f"**{hoje}  ·  {p_traders} traders  ·  WR {p_wr:.0f}%**\n"
+        f"💎 TVL: `${tvl_usd:,.0f}` USD  ·  💰 BD: `{bd_periodo:,.2f}`\n"
+        f"{emoji} P&L Bruto: **{pl_str} USD**"
+    )
+    _async_post({
+        "embeds": [{
+            "title": "📋 Ciclo 21h — Resumo do Protocolo",
+            "description": desc,
+            "color": _SUCCESS,
+            "footer": {"text": "WEbdEX Protocol · Ciclo 21h BR · Polygon"},
+        }]
+    }, url=_WEBHOOK_ONCHAIN)
 
 
 def notify_ciclo_report(

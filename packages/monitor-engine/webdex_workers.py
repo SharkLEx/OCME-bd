@@ -25,7 +25,8 @@ from webdex_chain import (
 )
 from webdex_bot_core import send_html, _notif_worker, send_logo_photo
 from webdex_discord_sync import (
-    notify_ciclo_report, notify_protocolo_relatorio, notify_gm, _WEBHOOK_GM,
+    notify_ciclo_report, notify_protocolo_relatorio, notify_protocolo_relatorio_telegram,
+    notify_protocolo_relatorio_onchain, notify_gm, _WEBHOOK_GM,
     notify_operacoes_horario, notify_swaps_horario, notify_onchain_heartbeat,
     _WEBHOOK_OPERACOES, _WEBHOOK_SWAPS, _WEBHOOK_RELATORIO, _WEBHOOK_ONCHAIN,
     get_pulse_stats_and_reset,
@@ -180,87 +181,127 @@ def agendador_21h():
                     set_config(f"last_rep_{cid}", hoje)
                 # Relatório protocolo Discord — UMA mensagem por noite (guard de data)
                 _discord_21h_key = f"discord_21h_{hoje}"
-                if get_config(_discord_21h_key, "") != "ok":
+                _21h_val = get_config(_discord_21h_key, "")
+                # "ok" = enviado; "pending:TS" = em andamento (TTL 10 min)
+                _21h_skip = _21h_val == "ok"
+                if not _21h_skip and _21h_val.startswith("pending:"):
                     try:
-                        from webdex_chain import chain_pol_price
-                        _pol_price = chain_pol_price()
-                        _dt_lim = _ciclo_21h_since()
+                        _21h_ts = int(_21h_val.split(":", 1)[1])
+                        _21h_skip = (time.time() - _21h_ts) < 600  # 10 min TTL
+                    except (ValueError, IndexError):
+                        pass
+                if not _21h_skip:
+                    try:
+                        # Marcar em-progresso com timestamp — TTL 10 min evita deadlock em restart
+                        set_config(_discord_21h_key, f"pending:{int(time.time())}")
+                        _dt_lim_brt = _ciclo_21h_since()  # corte 21h em BRT
+                        # protocol_ops.ts é UTC; _ciclo_21h_since() retorna BRT → converter +3h
+                        _dt_lim = (
+                            datetime.strptime(_dt_lim_brt, "%Y-%m-%d %H:%M:%S") + timedelta(hours=3)
+                        ).strftime("%Y-%m-%d %H:%M:%S")
                         with DB_LOCK:
                             _pr = cursor.execute("""
-                                SELECT COUNT(*), COUNT(DISTINCT wallet),
-                                       ROUND(SUM(profit),4),
+                                SELECT COUNT(DISTINCT wallet),
                                        COUNT(CASE WHEN profit>0 THEN 1 END),
+                                       COUNT(*),
                                        ROUND(SUM(fee_bd),6),
-                                       ROUND(SUM(gas_pol),6),
-                                       ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4),
-                                       ROUND(SUM(CASE WHEN profit<0 THEN profit ELSE 0 END),4)
+                                       ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4)
                                 FROM protocol_ops WHERE ts>=?
                             """, (_dt_lim,)).fetchone()
-                            _bd_all = float(cursor.execute(
-                                "SELECT ROUND(SUM(fee_bd),4) FROM protocol_ops WHERE fee_bd>0"
-                            ).fetchone()[0] or 0)
-                            _proto_count = int(cursor.execute(
-                                "SELECT COUNT(*) FROM protocol_ops"
-                            ).fetchone()[0] or 0)
+                            _tvl_row = cursor.execute("""
+                                SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply),2)
+                                FROM fl_snapshots WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)
+                            """).fetchone()
                             _top5 = cursor.execute("""
                                 SELECT wallet,
-                                       ROUND(SUM(profit),4), COUNT(*),
-                                       ROUND(SUM(fee_bd),4), ROUND(SUM(gas_pol),4)
+                                       ROUND(SUM(profit),4),
+                                       ROUND(SUM(fee_bd),4)
                                 FROM protocol_ops WHERE ts>=?
                                 GROUP BY wallet ORDER BY SUM(profit) DESC LIMIT 5
                             """, (_dt_lim,)).fetchall()
                         if not _pr or _pr[0] is None:
                             logger.info("[agendador_21h] Sem ops no ciclo atual — pulando relatório Discord")
-                            set_config(_discord_21h_key, "ok")
+                            set_config(_discord_21h_key, "")   # resetar para retry (sem ops)
                             continue
-                        _p_trades  = int(_pr[0] or 0)
-                        _p_traders = int(_pr[1] or 0)
-                        _p_lucro   = float(_pr[2] or 0)
-                        _p_wins    = int(_pr[3] or 0)
-                        _p_bd      = float(_pr[4] or 0)
-                        _p_gas_pol = float(_pr[5] or 0)
-                        _p_ganhos  = float(_pr[6] or 0)
-                        _p_perdas  = float(_pr[7] or 0)
-                        _p_gas_usd = _p_gas_pol * _pol_price
+                        _p_traders = int(_pr[0] or 0)
+                        _p_wins    = int(_pr[1] or 0)
+                        _p_total   = int(_pr[2] or 0)
+                        _p_bd      = float(_pr[3] or 0)
+                        _p_bruto   = float(_pr[4] or 0)
+                        _p_wr      = (_p_wins / _p_total * 100) if _p_total > 0 else 0.0
+                        _tvl_usd   = float(_tvl_row[0] or 0) if _tvl_row else 0.0
+                        # Confirmar envio Discord — agora é seguro setar "ok"
                         notify_protocolo_relatorio(
                             hoje=hoje,
-                            pol_price=_pol_price,
-                            p_trades=_p_trades,
+                            tvl_usd=_tvl_usd,
+                            bd_periodo=_p_bd,
                             p_traders=_p_traders,
-                            p_lucro=_p_lucro,
-                            p_ganhos=_p_ganhos,
-                            p_perdas=_p_perdas,
-                            p_wins=_p_wins,
-                            p_gas_pol=_p_gas_pol,
-                            p_gas_usd=_p_gas_usd,
-                            p_bd=_p_bd,
-                            bd_alltime=_bd_all,
-                            proto_count=_proto_count,
+                            p_wr=_p_wr,
+                            p_bruto=_p_bruto,
                             top_traders=_top5,
                             label="Ciclo 21h",
                         )
                         set_config(_discord_21h_key, "ok")
+
+                        # ── SEGUNDO CANAL DISCORD: #webdex-on-chain (resumo compacto) ──
+                        try:
+                            notify_protocolo_relatorio_onchain(
+                                hoje=hoje,
+                                tvl_usd=_tvl_usd,
+                                bd_periodo=_p_bd,
+                                p_traders=_p_traders,
+                                p_wr=_p_wr,
+                                p_bruto=_p_bruto,
+                            )
+                        except Exception as _oc_err:
+                            logger.error(f"[agendador_21h] Onchain channel falhou: {_oc_err}")
+
+                        # ── BROADCAST TELEGRAM (mesmo modelo) ─────────────────
+                        try:
+                            _tg_msg = notify_protocolo_relatorio_telegram(
+                                hoje=hoje,
+                                tvl_usd=_tvl_usd,
+                                bd_periodo=_p_bd,
+                                p_traders=_p_traders,
+                                p_wr=_p_wr,
+                                p_bruto=_p_bruto,
+                                top_traders=_top5,
+                            )
+                            with DB_LOCK:
+                                _tg_users = cursor.execute(
+                                    "SELECT chat_id FROM users WHERE active=1"
+                                ).fetchall()
+                            _sent_broadcast = 0
+                            for (uid,) in _tg_users:
+                                send_html(uid, _tg_msg)
+                                _sent_broadcast += 1
+                            logger.info(f"[agendador_21h] Broadcast Telegram protocolo: {_sent_broadcast}/{len(_tg_users)} users (todos ativos)")
+                        except Exception as _tg_err:
+                            logger.error(f"[agendador_21h] Broadcast Telegram falhou: {_tg_err}")
+
                         # Animação bdZinho → #relatório-diário
-                        if _animate and _p_trades > 0:
-                            _ev = "relatorio_win" if _p_lucro >= 0 else "relatorio_loss"
-                            _em = "🟢" if _p_lucro >= 0 else "🔴"
-                            _pl = f"+${_p_lucro:.2f}" if _p_lucro >= 0 else f"-${abs(_p_lucro):.2f}"
-                            _wr = (_p_wins / _p_trades * 100) if _p_trades > 0 else 0.0
+                        if _animate and _p_total > 0:
+                            _ev = "relatorio_win" if _p_bruto >= 0 else "relatorio_loss"
+                            _em = "🟢" if _p_bruto >= 0 else "🔴"
+                            _pl = f"+${_p_bruto:.2f}" if _p_bruto >= 0 else f"-${abs(_p_bruto):.2f}"
+                            _wr_anim = (_p_wins / _p_total * 100) if _p_total > 0 else 0.0
                             _animate(
                                 _ev, _WEBHOOK_RELATORIO,
                                 title=f"{_em}  RELATÓRIO NOTURNO — WEbdEX PROTOCOL",
                                 description=(
                                     f"## {_em} RESULTADO DO DIA\n"
-                                    f"💎 **P&L Protocolo:** `{_pl}`\n"
-                                    f"📊 **{_p_trades:,} trades** · **{_p_traders} traders** · **WR {_wr:.0f}%**\n"
-                                    f"⛽ **Gás:** `{_p_gas_pol:.2f} POL` (~${_p_gas_usd:.2f})\n"
-                                    f"🏦 **BD coletado:** `{_p_bd:.4f} BD`\n"
+                                    f"💎 **TVL:** `${_tvl_usd:,.0f} USD`\n"
+                                    f"📈 **P&L Bruto:** `{_pl}`  ·  🎯 **WR {_wr_anim:.0f}%**\n"
+                                    f"👥 **{_p_traders} traders** · 📊 **{_p_total:,} trades**\n"
+                                    f"💰 **BD coletado:** `{_p_bd:.4f} BD`\n"
                                     f"🗓️ {hoje}"
                                 ),
-                                color=0x00FF88 if _p_lucro >= 0 else 0xFF4444,
+                                color=0x00FF88 if _p_bruto >= 0 else 0xFF4444,
                             )
                     except Exception as _de:
-                        logger.error("[agendador_21h] Discord protocolo falhou: %s", _de)
+                        logger.error("[agendador_21h] agendador_21h erro: %s", _de)
+                        if get_config(_discord_21h_key, "") != "ok":
+                            set_config(_discord_21h_key, "")  # resetar para retry
                 time.sleep(70)
         except Exception as _ae:
             logger.warning("[agendador_21h] erro no ciclo: %s", _ae)
