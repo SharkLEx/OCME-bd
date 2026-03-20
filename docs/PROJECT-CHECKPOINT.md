@@ -10,7 +10,6 @@
 
 | Story | Status |
 |-------|--------|
-| 14.3.story | Unknown |
 | 8.8.story | Unknown |
 | 8.9.story | InProgress |
 | epic-10 | Unknown |
@@ -29,6 +28,7 @@
 | 12.2b.story | Unknown |
 | 12.3.story | Unknown |
 | 12.4.story | Unknown |
+| 14.3.story | Unknown |
 | 15.1.story | Unknown |
 | 15.2.story | Unknown |
 | 8.1.story | Unknown |
