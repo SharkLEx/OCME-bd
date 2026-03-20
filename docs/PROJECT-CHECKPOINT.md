@@ -4,16 +4,41 @@
 
 ## Contexto Ativo
 
-(atualizado pelos agentes durante o trabalho)
+**Sessão 2026-03-20 — Social Media Expansion + LiteLLM**
+Branch: `feat/epic-7-monitor-engine`
+Trabalhando: Epic 17 (X + TikTok + Instagram + WhatsApp) + Epic 18 (LiteLLM)
+Próximo: implementar 17.1 → 17.2 → 18.1 → 8.8 quando Meta aprovar
+
+## Decisoes Tomadas
+
+| Decisão | Motivo |
+|---------|--------|
+| WhatsApp (8.9) → apenas configurar token | Código 100% pronto em stub, sem nova story |
+| Instagram (8.8) → bloqueada até Meta aprovar app | Não adianta implementar sem poder testar |
+| Twitter/X (17.1) → OAuth 1.0a com hmac stdlib | Evita dependência requests-oauthlib |
+| TikTok (17.2) → upload 3-step (init+PUT+poll) | Único fluxo suportado pelo Content Posting API |
+| LiteLLM stack → gpt-4o-mini + DeepSeek V3 + Groq | -60% custo, fallback automático via proxy |
+| LiteLLM → OpenAI SDK com base_url (não litellm lib) | Menos dependências, mesma funcionalidade |
+| Epic 13 (Dashboard) → adiado | Analisar após social media + LiteLLM |
 
 ## Status das Stories
 
 | Story | Status |
 |-------|--------|
+| 16.1.story | Unknown |
+| 16.2.story | Unknown |
+| 16.3.story | Unknown |
+| 16.4.story | Unknown |
+| 17.1.story | Unknown |
+| 17.2.story | Unknown |
+| 18.1.story | Unknown |
 | 8.8.story | Unknown |
 | 8.9.story | InProgress |
 | epic-10 | Unknown |
 | epic-12 | Unknown |
+| epic-16 | Unknown |
+| epic-17 | Unknown |
+| epic-18 | Unknown |
 | epic-7-ocme-bd-monitor-engine | Unknown |
 | epic-8-webdex-orchestrator | Unknown |
 | epic-9 | Unknown |
@@ -58,9 +83,8 @@ Arquivos modificados (nao commitados): 0
 (atualizado pelos agentes durante o trabalho)
 
 ## Git Recente
-
 (nenhum commit encontrado)
-
+Arquivos modificados: 0
 
 ## Ambiente Detectado
 
