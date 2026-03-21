@@ -230,8 +230,8 @@ def agendador_21h():
                         _p_bruto   = float(_pr[4] or 0)
                         _p_wr      = (_p_wins / _p_total * 100) if _p_total > 0 else 0.0
                         _tvl_usd   = float(_tvl_row[0] or 0) if _tvl_row else 0.0
-                        # Confirmar envio Discord — agora é seguro setar "ok"
-                        notify_protocolo_relatorio(
+                        # Confirmar envio Discord — guard "ok" só após entrega confirmada
+                        _rel_sent = notify_protocolo_relatorio(
                             hoje=hoje,
                             tvl_usd=_tvl_usd,
                             bd_periodo=_p_bd,
@@ -240,8 +240,12 @@ def agendador_21h():
                             p_bruto=_p_bruto,
                             top_traders=_top5,
                             label="Ciclo 21h",
+                            show_cta=True,
                         )
-                        set_config(_discord_21h_key, "ok")
+                        if _rel_sent:
+                            set_config(_discord_21h_key, "ok")
+                        else:
+                            logger.warning("[agendador_21h] webhook Discord falhou — mantendo pending para retry")
 
                         # ── SEGUNDO CANAL DISCORD: #webdex-on-chain (resumo compacto) ──
                         try:
@@ -424,7 +428,7 @@ def agendador_horario():
                             _s_tvl     = float(_tvl_row[0] or 0) if _tvl_row else 0.0
                             if _s_total > 0:
                                 _snap_label = f"Intraday {hora_str}"
-                                notify_protocolo_relatorio(
+                                _snap_sent  = notify_protocolo_relatorio(
                                     hoje=now.strftime("%Y-%m-%d"),
                                     tvl_usd=_s_tvl,
                                     bd_periodo=_s_bd,
@@ -433,6 +437,7 @@ def agendador_horario():
                                     p_bruto=_s_bruto,
                                     top_traders=[],
                                     label=_snap_label,
+                                    show_cta=False,
                                 )
                                 notify_protocolo_relatorio_onchain(
                                     hoje=now.strftime("%Y-%m-%d"),
@@ -441,9 +446,13 @@ def agendador_horario():
                                     p_traders=_s_traders,
                                     p_wr=_s_wr,
                                     p_bruto=_s_bruto,
+                                    label=_snap_label,
                                 )
-                                set_config(_snap_key, "1")
-                                logger.info("[agendador_horario] snapshot intraday %s enviado.", hora_str)
+                                if _snap_sent:
+                                    set_config(_snap_key, "1")
+                                    logger.info("[agendador_horario] snapshot intraday %s enviado.", hora_str)
+                                else:
+                                    logger.warning("[agendador_horario] snapshot intraday %s falhou — retry no próximo tick.", hora_str)
                         except Exception as _se:
                             logger.warning("[agendador_horario] snapshot intraday erro: %s", _se)
 

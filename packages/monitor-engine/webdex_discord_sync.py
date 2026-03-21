@@ -132,23 +132,27 @@ def _safe_webhook_id(url: str) -> str:
         return "#unknown"
 
 
-def _post_webhook(payload: dict, url: str) -> None:
-    """POST com retry automático em caso de rate limit (429) ou timeout."""
+def _post_webhook(payload: dict, url: str) -> bool:
+    """POST com retry automático em caso de rate limit (429) ou timeout.
+
+    Retorna True apenas quando o Discord confirma entrega (200/204).
+    False em qualquer falha — permitindo que o caller tome decisão de guard.
+    """
     if not url:
         logger.error("[discord_sync] Webhook URL vazia — mensagem descartada.")
-        return
+        return False
     for attempt in range(3):
         try:
             resp = requests.post(url, json=payload, timeout=20)
             if resp.status_code in (200, 204):
-                return
+                return True
             if resp.status_code == 429:
                 retry_after = resp.json().get("retry_after", 2.0)
                 time.sleep(float(retry_after) + 0.2)
                 continue
             logger.warning("[discord_sync] Webhook %s retornou %s: %s",
                            _safe_webhook_id(url), resp.status_code, resp.text[:200])
-            return
+            return False
         except Exception as e:
             logger.warning("[discord_sync] Tentativa %d/3 falhou: %s", attempt + 1, e)
             if attempt < 2:
@@ -156,6 +160,7 @@ def _post_webhook(payload: dict, url: str) -> None:
                 continue
             logger.error("[discord_sync] Webhook falhou após 3 tentativas: %s",
                          _safe_webhook_id(url))
+    return False
 
 
 def _async_post(payload: dict, url: str = _WEBHOOK_ONCHAIN) -> None:
@@ -389,8 +394,13 @@ def notify_protocolo_relatorio(
     p_bruto: float,
     top_traders: list,
     label: str = "Ciclo 21h",
-) -> None:
-    """Relatório completo 💎 LUCRO TOTAL DO PROTOCOLO → #relatório-diário (Discord)."""
+    show_cta: bool = True,
+) -> bool:
+    """Relatório completo 💎 LUCRO TOTAL DO PROTOCOLO → #relatório-diário (Discord).
+
+    Retorna True se o Discord confirmou entrega (200/204), False caso contrário.
+    show_cta=False suprime o bloco de CTA OCME_bd — usar em snapshots intraday.
+    """
     emoji  = "🟢" if p_bruto >= 0 else "🔴"
     color  = _SUCCESS if p_bruto >= 0 else _ERROR
     pl_str = f"+${p_bruto:,.2f}" if p_bruto >= 0 else f"-${abs(p_bruto):,.2f}"
@@ -408,7 +418,7 @@ def notify_protocolo_relatorio(
         f"  └─ 🏦 Período: **{bd_periodo:,.4f} BD**\n"
     )
 
-    # Top 5 traders
+    # Top 5 traders (omitido em snapshots intraday via top_traders=[])
     if top_traders:
         medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
         desc += f"\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🏆  **TOP 5 TRADERS (período)**\n"
@@ -424,22 +434,23 @@ def notify_protocolo_relatorio(
                 f"       {sg} **{lstr}**  ·  💎 {fee:.3f} BD\n"
             )
 
-    # Bloco CTA OCME_bd
-    ocme_block = (
-        f"\n\n─────────────────────────\n"
-        f"💡 **Tem o OCME_bd no Telegram?**\n"
-        f"Quem tem o bot ativo recebe este relatório **personalizado por carteira**,\n"
-        f"análise por trade, alertas de anomalia e acesso total ao fluxo do protocolo.\n"
-        f"**Informação é poder. Na WEbdEX, ela vem até você.**\n\n"
-        f"[→ Ativar OCME_bd — Beta Gratuito]({_OCME_BD_LINK})"
-    )
+    # CTA OCME_bd — apenas no fechamento real (show_cta=True); omitido em intraday
+    if show_cta:
+        desc += (
+            f"\n\n─────────────────────────\n"
+            f"💡 **Tem o OCME_bd no Telegram?**\n"
+            f"Quem tem o bot ativo recebe este relatório **personalizado por carteira**,\n"
+            f"análise por trade, alertas de anomalia e acesso total ao fluxo do protocolo.\n"
+            f"**Informação é poder. Na WEbdEX, ela vem até você.**\n\n"
+            f"[→ Ativar OCME_bd — Beta Gratuito]({_OCME_BD_LINK})"
+        )
 
     # Síncrono: bloqueia até HTTP confirmar (3 tentativas, timeout 20s cada)
-    # Garante que set_config("ok") só ocorre após entrega real ao Discord
-    _post_webhook({
+    # Retorna bool para que o caller condicione o guard de deduplicação
+    return _post_webhook({
         "embeds": [{
             "title": "\U0001f4a0 RELAT\u00d3RIO DO PROTOCOLO \u2014 WEbdEX",
-            "description": desc + ocme_block,
+            "description": desc,
             "color": color,
             "thumbnail": {"url": _BDZINHO_IMG},
             "footer": {"text": "WEbdEX Protocol \u00b7 Ciclo 21h BR \u00b7 Polygon"},
@@ -493,9 +504,15 @@ def notify_protocolo_relatorio_onchain(
     p_traders: int,
     p_wr: float,
     p_bruto: float,
+    label: str = "Ciclo 21h",
 ) -> None:
-    """Versão compacta do relatório protocolo → #webdex-on-chain (segundo canal)."""
+    """Versão compacta do relatório protocolo → #webdex-on-chain (segundo canal).
+
+    label="Intraday HH:00" para snapshots intraday; "Ciclo 21h" para fechamento.
+    Cor reflete resultado real: verde em lucro, vermelho em perda.
+    """
     emoji  = "🟢" if p_bruto >= 0 else "🔴"
+    color  = _SUCCESS if p_bruto >= 0 else _ERROR
     pl_str = f"+${p_bruto:,.0f}" if p_bruto >= 0 else f"-${abs(p_bruto):,.0f}"
     desc = (
         f"**{hoje}  ·  {p_traders} traders  ·  WR {p_wr:.0f}%**\n"
@@ -504,9 +521,9 @@ def notify_protocolo_relatorio_onchain(
     )
     _async_post({
         "embeds": [{
-            "title": "📋 Ciclo 21h — Resumo do Protocolo",
+            "title": f"📋 {label} — Resumo do Protocolo",
             "description": desc,
-            "color": _SUCCESS,
+            "color": color,
             "footer": {"text": "WEbdEX Protocol · Ciclo 21h BR · Polygon"},
         }]
     }, url=_WEBHOOK_ONCHAIN)
