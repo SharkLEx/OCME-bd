@@ -331,6 +331,18 @@ def agendador_horario():
                 hora_str  = now.strftime("%H:00")
                 two_h_ago = (now - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")
 
+                # ── Cleanup: chaves snap2h_* de dias anteriores (F-08) ──
+                _snap_today = f"snap2h_{now.strftime('%Y-%m-%d')}"
+                with DB_LOCK:
+                    try:
+                        cursor.execute(
+                            "DELETE FROM config WHERE chave LIKE 'snap2h_%' AND chave < ?",
+                            (_snap_today,)
+                        )
+                        conn.commit()
+                    except Exception:
+                        pass
+
                 # ── Operações: query protocol_ops (últimas 2h) ──────────
                 with DB_LOCK:
                     rows = cursor.execute(

@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-21 (Stories 16.3 + 16.4 concluídas — 255 testes passando)
+> Ultima atualizacao: 2026-03-21 01:34 (pre-compact save)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-21 — Epic 16 QA Audit COMPLETO (Stories 16.1–16.4 ✅)**
-Branch: `feat/epic-7-monitor-engine`
-Trabalhando: Epic 16 concluído — 255/255 testes passando
-Próximo: PR feat/epic-7-monitor-engine → main (via @devops)
+**Sessão 2026-03-21 — Stories 15.3 + 15.4 + Smith INFECTED→corrigido ✅**
+Branch: `main` (entregas diretamente em main)
+Trabalhando: Fixes críticos F-01→F-04 do Smith — deploy VPS confirmado
+Próximo: Story 15.4 testes unitários (@qa, F-07 pendente) + F-08 cleanup config table
 
 ## Decisoes Tomadas
 
@@ -25,10 +25,12 @@ Próximo: PR feat/epic-7-monitor-engine → main (via @devops)
 
 | Story | Status |
 |-------|--------|
-| 16.1.story | ✅ Ready for Review |
-| 16.2.story | ✅ Ready for Review |
-| 16.3.story | ✅ Ready for Review |
-| 16.4.story | ✅ Ready for Review |
+| 15.3.story | Unknown |
+| 15.4.story | Unknown |
+| 16.1.story | Unknown |
+| 16.2.story | Unknown |
+| 16.3.story | Unknown |
+| 16.4.story | Unknown |
 | 17.1.story | Unknown |
 | 17.2.story | Unknown |
 | 18.1.story | Unknown |
