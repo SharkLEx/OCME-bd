@@ -1,13 +1,15 @@
 """
 test_relatorio_21h.py — Dispara relatorio protocolo + animação bdZinho UMA VEZ (teste manual).
 Uso: docker exec ocme-monitor python scripts/test_relatorio_21h.py
+
+Story 15.3: assinatura atualizada para nova notify_protocolo_relatorio (pós 15.2)
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
+from datetime import datetime, timedelta
 from webdex_db import DB_LOCK, conn, cursor, get_config, now_br, _ciclo_21h_since
 from webdex_discord_sync import notify_protocolo_relatorio, _WEBHOOK_RELATORIO
-from webdex_chain import chain_pol_price
 
 try:
     from webdex_discord_animate import animate_and_post as _animate
@@ -15,83 +17,82 @@ except Exception:
     _animate = None
 
 hoje = now_br().strftime("%Y-%m-%d")
-pol_price = chain_pol_price()
-dt_lim = _ciclo_21h_since()
 
-print(f"[teste] hoje={hoje}  pol={pol_price:.4f}  ciclo desde={dt_lim}")
+# protocol_ops.ts é UTC — converter corte BRT→UTC (+3h)
+_dt_lim_brt = _ciclo_21h_since()
+dt_lim = (
+    datetime.strptime(_dt_lim_brt, "%Y-%m-%d %H:%M:%S") + timedelta(hours=3)
+).strftime("%Y-%m-%d %H:%M:%S")
+
+print(f"[teste] hoje={hoje}  ciclo BRT={_dt_lim_brt}  ciclo UTC={dt_lim}")
 
 with DB_LOCK:
     pr = cursor.execute("""
-        SELECT COUNT(*), COUNT(DISTINCT wallet),
-               ROUND(SUM(profit),4),
+        SELECT COUNT(DISTINCT wallet),
                COUNT(CASE WHEN profit>0 THEN 1 END),
+               COUNT(*),
                ROUND(SUM(fee_bd),6),
-               ROUND(SUM(gas_pol),6),
-               ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4),
-               ROUND(SUM(CASE WHEN profit<0 THEN profit ELSE 0 END),4)
+               ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4)
         FROM protocol_ops WHERE ts>=?
     """, (dt_lim,)).fetchone()
-    bd_all = float(cursor.execute(
-        "SELECT ROUND(SUM(fee_bd),4) FROM protocol_ops WHERE fee_bd>0"
-    ).fetchone()[0] or 0)
-    proto_count = int(cursor.execute(
-        "SELECT COUNT(*) FROM protocol_ops"
-    ).fetchone()[0] or 0)
+
+    tvl_row = cursor.execute("""
+        SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply),2)
+        FROM fl_snapshots WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)
+    """).fetchone()
+
     top5 = cursor.execute("""
-        SELECT wallet, ROUND(SUM(profit),4), COUNT(*),
-               ROUND(SUM(fee_bd),4), ROUND(SUM(gas_pol),4)
+        SELECT wallet,
+               ROUND(SUM(profit),4),
+               ROUND(SUM(fee_bd),4)
         FROM protocol_ops WHERE ts>=?
         GROUP BY wallet ORDER BY SUM(profit) DESC LIMIT 5
     """, (dt_lim,)).fetchall()
 
-p_trades  = int(pr[0] or 0)
-p_traders = int(pr[1] or 0)
-p_lucro   = float(pr[2] or 0)
-p_wins    = int(pr[3] or 0)
-p_bd      = float(pr[4] or 0)
-p_gas_pol = float(pr[5] or 0)
-p_ganhos  = float(pr[6] or 0)
-p_perdas  = float(pr[7] or 0)
-p_gas_usd = p_gas_pol * pol_price
+p_traders = int(pr[0] or 0)
+p_wins    = int(pr[1] or 0)
+p_total   = int(pr[2] or 0)
+p_bd      = float(pr[3] or 0)
+p_bruto   = float(pr[4] or 0)
+p_wr      = (p_wins / p_total * 100) if p_total > 0 else 0.0
+tvl_usd   = float(tvl_row[0] or 0) if tvl_row else 0.0
 
-print(f"[teste] trades={p_trades} traders={p_traders} lucro={p_lucro:.2f} ganhos={p_ganhos:.2f} perdas={p_perdas:.2f}")
-print(f"[teste] gas_pol={p_gas_pol:.4f} bd={p_bd:.4f} bd_alltime={bd_all:.4f} proto={proto_count}")
+print(f"[teste] traders={p_traders} total={p_total} wins={p_wins} wr={p_wr:.1f}% bruto={p_bruto:.2f} bd={p_bd:.4f} tvl={tvl_usd:.0f}")
+
+if p_total == 0:
+    print("[teste] ⚠️ Sem ops no ciclo atual — relatório não enviado.")
+    sys.exit(0)
 
 notify_protocolo_relatorio(
     hoje=hoje,
-    pol_price=pol_price,
-    p_trades=p_trades,
+    tvl_usd=tvl_usd,
+    bd_periodo=p_bd,
     p_traders=p_traders,
-    p_lucro=p_lucro,
-    p_ganhos=p_ganhos,
-    p_perdas=p_perdas,
-    p_wins=p_wins,
-    p_gas_pol=p_gas_pol,
-    p_gas_usd=p_gas_usd,
-    p_bd=p_bd,
-    bd_alltime=bd_all,
-    proto_count=proto_count,
+    p_wr=p_wr,
+    p_bruto=p_bruto,
     top_traders=top5,
     label="Ciclo 21h",
 )
 print("[teste] ✅ Relatório Discord enviado!")
 
 # Animação bdZinho
-if _animate and p_trades > 0:
-    ev = "relatorio_win" if p_lucro >= 0 else "relatorio_loss"
-    em = "🟢" if p_lucro >= 0 else "🔴"
-    pl = f"+${p_lucro:.2f}" if p_lucro >= 0 else f"-${abs(p_lucro):.2f}"
-    wr = (p_wins / p_trades * 100) if p_trades > 0 else 0.0
+if _animate and p_total > 0:
+    ev = "relatorio_win" if p_bruto >= 0 else "relatorio_loss"
+    em = "🟢" if p_bruto >= 0 else "🔴"
+    pl = f"+${p_bruto:.2f}" if p_bruto >= 0 else f"-${abs(p_bruto):.2f}"
     _animate(
         ev, _WEBHOOK_RELATORIO,
         title=f"{em}  RELATÓRIO NOTURNO — WEbdEX PROTOCOL",
         description=(
             f"## {em} RESULTADO DO DIA\n"
-            f"💎 **P&L Protocolo:** `{pl}`\n"
-            f"📊 **Trades:** {p_trades:,}  |  **WR:** {wr:.1f}%\n"
-            f"👥 **Traders únicos:** {p_traders}"
+            f"💎 **TVL:** `${tvl_usd:,.0f} USD`\n"
+            f"📈 **P&L Bruto:** `{pl}`  ·  🎯 **WR {p_wr:.0f}%**\n"
+            f"👥 **{p_traders} traders** · 📊 **{p_total:,} trades**\n"
+            f"💰 **BD coletado:** `{p_bd:.4f} BD`\n"
+            f"🗓️ {hoje}"
         ),
+        color=0x00FF88 if p_bruto >= 0 else 0xFF4444,
     )
     print(f"[teste] 🎬 Animação bdZinho disparada ({ev})")
 else:
-    print("[teste] ⚠️ Sem animação (sem trades ou módulo indisponível)")
+    print("[teste] ⚠️ Sem animação (módulo indisponível)")
