@@ -66,6 +66,9 @@ COPY monitor-engine/webdex_config.py \
 # Handlers do bot
 COPY monitor-engine/webdex_handlers/ ./webdex_handlers/
 
+# Scripts de teste e utilitários manuais (Story 15.3)
+COPY monitor-engine/scripts/ ./scripts/
+
 # ── Pacotes modulares (Epic 7) ──────────────────────────────────────────────
 COPY monitor-cli/   ./monitor_cli/
 COPY monitor-db/    ./monitor_db/
