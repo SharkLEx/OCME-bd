@@ -25,7 +25,11 @@ from webdex_chain import (
 )
 from webdex_bot_core import send_html, _notif_worker, send_logo_photo
 from webdex_discord_sync import (
+<<<<<<< HEAD
     notify_ciclo_report, notify_protocolo_relatorio, notify_protocolo_relatorio_telegram,
+=======
+    notify_protocolo_relatorio, notify_protocolo_relatorio_telegram,
+>>>>>>> feat/epic-7-monitor-engine
     notify_protocolo_relatorio_onchain, notify_gm, _WEBHOOK_GM,
     notify_operacoes_horario, notify_swaps_horario, notify_onchain_heartbeat,
     _WEBHOOK_OPERACOES, _WEBHOOK_SWAPS, _WEBHOOK_RELATORIO, _WEBHOOK_ONCHAIN,
