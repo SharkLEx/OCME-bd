@@ -25,11 +25,7 @@ from webdex_chain import (
 )
 from webdex_bot_core import send_html, _notif_worker, send_logo_photo
 from webdex_discord_sync import (
-<<<<<<< HEAD
-    notify_ciclo_report, notify_protocolo_relatorio, notify_protocolo_relatorio_telegram,
-=======
     notify_protocolo_relatorio, notify_protocolo_relatorio_telegram,
->>>>>>> feat/epic-7-monitor-engine
     notify_protocolo_relatorio_onchain, notify_gm, _WEBHOOK_GM,
     notify_operacoes_horario, notify_swaps_horario, notify_onchain_heartbeat,
     _WEBHOOK_OPERACOES, _WEBHOOK_SWAPS, _WEBHOOK_RELATORIO, _WEBHOOK_ONCHAIN,
@@ -395,6 +391,61 @@ def agendador_horario():
                             ),
                             0x00FFB2 if pnl_2h >= 0 else 0xFF4444,
                         )
+
+                # ── Snapshot Intraday 2h → #relatório-diário + #webdex-on-chain ──
+                # Story 15.4: skip hora 21 (agendador_21h cobre o fechamento)
+                if now.hour != 21:
+                    _snap_key = f"snap2h_{now.strftime('%Y-%m-%d')}_{now.hour}"
+                    if not get_config(_snap_key):
+                        try:
+                            _dt_lim_brt = _ciclo_21h_since()
+                            _dt_lim_utc = (
+                                datetime.strptime(_dt_lim_brt, "%Y-%m-%d %H:%M:%S") + timedelta(hours=3)
+                            ).strftime("%Y-%m-%d %H:%M:%S")
+                            with DB_LOCK:
+                                _s_row = cursor.execute("""
+                                    SELECT COUNT(DISTINCT wallet),
+                                           COUNT(CASE WHEN profit>0 THEN 1 END),
+                                           COUNT(*),
+                                           ROUND(SUM(fee_bd),6),
+                                           ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4)
+                                    FROM protocol_ops WHERE ts>=?
+                                """, (_dt_lim_utc,)).fetchone()
+                                _tvl_row = cursor.execute("""
+                                    SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply),2)
+                                    FROM fl_snapshots WHERE ts=(SELECT MAX(ts) FROM fl_snapshots)
+                                """).fetchone()
+                            _s_traders = int(_s_row[0] or 0)
+                            _s_wins    = int(_s_row[1] or 0)
+                            _s_total   = int(_s_row[2] or 0)
+                            _s_bd      = float(_s_row[3] or 0)
+                            _s_bruto   = float(_s_row[4] or 0)
+                            _s_wr      = (_s_wins / _s_total * 100) if _s_total > 0 else 0.0
+                            _s_tvl     = float(_tvl_row[0] or 0) if _tvl_row else 0.0
+                            if _s_total > 0:
+                                _snap_label = f"Intraday {hora_str}"
+                                notify_protocolo_relatorio(
+                                    hoje=now.strftime("%Y-%m-%d"),
+                                    tvl_usd=_s_tvl,
+                                    bd_periodo=_s_bd,
+                                    p_traders=_s_traders,
+                                    p_wr=_s_wr,
+                                    p_bruto=_s_bruto,
+                                    top_traders=[],
+                                    label=_snap_label,
+                                )
+                                notify_protocolo_relatorio_onchain(
+                                    hoje=now.strftime("%Y-%m-%d"),
+                                    tvl_usd=_s_tvl,
+                                    bd_periodo=_s_bd,
+                                    p_traders=_s_traders,
+                                    p_wr=_s_wr,
+                                    p_bruto=_s_bruto,
+                                )
+                                set_config(_snap_key, "1")
+                                logger.info("[agendador_horario] snapshot intraday %s enviado.", hora_str)
+                        except Exception as _se:
+                            logger.warning("[agendador_horario] snapshot intraday erro: %s", _se)
 
                 logger.info(
                     "[agendador_horario] %s — %d ops, %d swaps",
