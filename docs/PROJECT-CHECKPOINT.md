@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-21 10:45 (pre-compact save)
+> Ultima atualizacao: 2026-03-21 (auto-refresh)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-21 (tarde 2) — Story 15.3 ✅ + Docker API Proxy VPS ✅ + Traefik HTTPS ✅**
+**Sessão 2026-03-21 (tarde 3) — HTTPS ✅ fix via rxuos9 + get_user_portfolio bug fix ✅**
 Branch: `feat/epic-7-monitor-engine`
-Status: 15.3 Ready for Review. Docker API proxy v1.24→v1.47 resolveu Traefik vs Docker 29.3.0. Routing interno OK (200), HTTPS 520 pendente Cloudflare dashboard.
-Pendente: Cloudflare SSL → "Full" (não strict) | Discord RESUME | commit + push
+Status: HTTPS 200 em n8n/grafana/api via *.rxuos9.easypanel.host (cert LE wildcard, sem Cloudflare). Portfolio bug corrigido no VPS.
+Pendente: commit + push (docker-compose.yml + .env não estão no repo local)
 
 ## Decisoes Tomadas
 
@@ -160,10 +160,12 @@ Arquivos locais modificados:
 
 ## Proximos Passos
 
-- [ ] Alex: Cloudflare dashboard → SSL mode "Full" para webdex.app (resolve 520)
-- [ ] commit + push: Dockerfile, 15.3.story.md, PROJECT-CHECKPOINT.md
-- [ ] Discord RESUME investigation (orchestrator-discord py-cord config)
+- [x] HTTPS 520 → RESOLVIDO: subdomínios *.rxuos9.easypanel.host (n8n 200, grafana 200, api 200)
+- [x] get_user_portfolio bug → CORRIGIDO no VPS (fl_snapshots sem coluna wallet)
+- [ ] commit + push: PROJECT-CHECKPOINT.md (docker-compose/env são VPS-only)
+- [ ] Discord RESUME — comportamento normal py-cord, sem ação necessária
 - [ ] Continuar roadmap stories (Epic 17 X/TikTok, Epic 18 LiteLLM, ou outra prioridade)
+- [ ] Opcional: apontar webdex.app → rxuos9 hosts via Cloudflare redirect/CNAME (quando Alex quiser)
 
 ## Git Recente
 (nenhum commit encontrado)
