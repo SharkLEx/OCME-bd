@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-20 18:05
+> Ultima atualizacao: 2026-03-21 (Stories 16.3 + 16.4 concluídas — 255 testes passando)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-20 — Epic 16 QA Audit (Stories 16.1 + 16.2 concluídas)**
+**Sessão 2026-03-21 — Epic 16 QA Audit COMPLETO (Stories 16.1–16.4 ✅)**
 Branch: `feat/epic-7-monitor-engine`
-Trabalhando: Story 16.3 (Handlers) ou 16.4 (Workers) — próxima pendente
-Próximo: Stories 16.3 → 16.4 → PR feat/epic-7-monitor-engine → main
+Trabalhando: Epic 16 concluído — 255/255 testes passando
+Próximo: PR feat/epic-7-monitor-engine → main (via @devops)
 
 ## Decisoes Tomadas
 
@@ -27,8 +27,8 @@ Próximo: Stories 16.3 → 16.4 → PR feat/epic-7-monitor-engine → main
 |-------|--------|
 | 16.1.story | ✅ Ready for Review |
 | 16.2.story | ✅ Ready for Review |
-| 16.3.story | Unknown |
-| 16.4.story | Unknown |
+| 16.3.story | ✅ Ready for Review |
+| 16.4.story | ✅ Ready for Review |
 | 17.1.story | Unknown |
 | 17.2.story | Unknown |
 | 18.1.story | Unknown |
@@ -74,9 +74,35 @@ Próximo: Stories 16.3 → 16.4 → PR feat/epic-7-monitor-engine → main
 
 ## Ultimo Trabalho Realizado
 
-(nenhum commit encontrado)
+### Sessão 2026-03-21
 
-Arquivos modificados (nao commitados): 0
+**Epic 16 — QA Audit Monitor Engine COMPLETO** (255/255 testes passando):
+
+**Story 16.3 — Handlers (22+20+15=57 testes):**
+- `test_user_handlers.py` — touch_user, set_user_active, upsert_user, ai_can_use, LGPD
+- `test_admin_handlers.py` — _is_admin, is_admin_chat, _get_admin_chat_ids, esc, barra_progresso
+- `test_reports.py` — _ciclo_21h_label, _profit_emoji, formatar_moeda, period_to_hours
+
+**Story 16.4 — Workers (19+20+13=52 testes):**
+- `test_subscription_worker.py` — wallet locks, _persist_subscription ON CONFLICT, _get_chat_id_for_wallet
+- `test_notification_engine.py` — cooldown, _post_embed, _check_milestones, _check_new_holders
+- `test_creatomate_worker.py` — gerar_video_ciclo, poll timeout, graceful degradation
+
+**Fixes aplicados:**
+- `_real_wbc()` helper: remove mock webdex_bot_core, importa real + patch ADMIN_USER_IDS=[123456789]
+- `_ensure_subscriptions()`: DROP+CREATE com schema correto (wallet_address) + ALTER TABLE ADD COLUMN subscription_expires
+- `_safe_unlink()`: gc.collect() antes de os.unlink para Windows PermissionError
+- TestTouchUser: adaptado para UPDATE-only (não INSERT) behavior real
+
+Arquivos modificados:
+- `packages/monitor-engine/tests/test_user_handlers.py`
+- `packages/monitor-engine/tests/test_admin_handlers.py`
+- `packages/monitor-engine/tests/test_reports.py`
+- `packages/monitor-engine/tests/test_subscription_worker.py`
+- `packages/monitor-engine/tests/test_notification_engine.py`
+- `packages/monitor-engine/tests/test_creatomate_worker.py`
+- `docs/stories/active/16.3.story.md` → ✅ Ready for Review
+- `docs/stories/active/16.4.story.md` → ✅ Ready for Review
 
 ## Proximos Passos
 
