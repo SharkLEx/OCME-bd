@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-21 01:34 (pre-compact save)
+> Ultima atualizacao: 2026-03-21 (auto-refresh)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-21 — Stories 15.3 + 15.4 + Smith INFECTED→corrigido ✅**
-Branch: `main` (entregas diretamente em main)
-Trabalhando: Fixes críticos F-01→F-04 do Smith — deploy VPS confirmado
-Próximo: Story 15.4 testes unitários (@qa, F-07 pendente) + F-08 cleanup config table
+**Sessão 2026-03-21 — Story 15.4 + Smith F-01→F-08 TODOS COMPLETOS ✅**
+Branch: `main`
+Status: TUDO feito — F-07 (34 testes) + F-08 (cleanup snap2h_*) commitados
+Pendente: Deploy `webdex_workers.py` ao VPS (VPS inacessível no momento — timeout SSH)
 
 ## Decisoes Tomadas
 

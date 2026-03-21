@@ -54,6 +54,13 @@ COPY monitor-engine/webdex_config.py \
      monitor-engine/webdex_swapbook_notify.py \
      monitor-engine/webdex_network_notify.py \
      monitor-engine/webdex_creatomate.py \
+     monitor-engine/subscription_worker.py \
+     monitor-engine/notification_engine.py \
+     monitor-engine/protocol_context.py \
+     monitor-engine/webdex_tools.py \
+     monitor-engine/creatomate_worker.py \
+     monitor-engine/metrics_worker.py \
+     monitor-engine/webdex_ai_memory.py \
      ./
 
 # Handlers do bot
