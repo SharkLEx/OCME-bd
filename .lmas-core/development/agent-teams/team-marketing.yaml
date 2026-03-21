@@ -1,0 +1,83 @@
+bundle:
+  name: Team Marketing
+  icon: "\U0001F3AF"
+  domain: marketing
+  description: Marketing squad — copywriting, social media, paid traffic, content strategy, research, and quality review.
+
+agents:
+  - marketing-chief       # Orchestrator — brand guardian, strategy approval
+  - copywriter            # Content creation — copy, scripts, headlines
+  - social-media-manager  # Publishing — scheduling, posting, community
+  - traffic-manager       # Paid media — budget, targeting, optimization
+  - content-strategist    # Strategy — editorial calendar, positioning
+  - content-researcher    # Research — market analysis, trends, competitors
+  - content-reviewer      # Quality — editorial review, brand check, legal
+
+workflows:
+  - content-pipeline.yaml    # Brief → Draft → Review → Approve → Publish
+  - campaign-pipeline.yaml   # Strategy → Creative → Execution → Optimization
+
+purpose: |
+  This team handles the full marketing content lifecycle:
+
+  1. **Strategy Phase** (@content-strategist):
+     - Define editorial calendar and content pillars
+     - Align with brand positioning and business goals
+     - Plan campaigns and content distribution
+
+  2. **Research Phase** (@content-researcher):
+     - Market and competitor analysis
+     - Trend identification and audience insights
+     - Data gathering for content creation
+
+  3. **Creation Phase** (@copywriter):
+     - Write copy for all platforms and formats
+     - Create variations for A/B testing
+     - Adapt tone per platform guidelines
+
+  4. **Review Phase** (@content-reviewer):
+     - Brand alignment check
+     - Legal compliance review
+     - Content quality scoring
+
+  5. **Publishing Phase** (@social-media-manager):
+     - Schedule and publish approved content
+     - Community management and engagement
+     - Performance monitoring
+
+  6. **Paid Media Phase** (@traffic-manager):
+     - Budget allocation and bidding strategy
+     - Campaign targeting and optimization
+     - ROI tracking and reporting
+
+when_to_use:
+  - When planning and executing marketing campaigns
+  - When creating content for social media, blog, or ads
+  - When managing paid traffic and budget allocation
+  - When conducting market research for content strategy
+  - When ensuring brand consistency across channels
+
+quality_gates:
+  pre_publish:
+    trigger: Content marked ready for review
+    agent: content-reviewer
+    checks:
+      - Brand alignment checklist
+      - Legal compliance checklist
+      - Content quality score >= 7/10
+    threshold: All checks PASS
+
+  pre_campaign:
+    trigger: Campaign ready for launch
+    agent: marketing-chief
+    checks:
+      - Strategy alignment review
+      - Budget approval
+      - All content pieces approved
+    threshold: Marketing chief signoff
+
+notes:
+  - All agents follow Marketing Domain Constitution (MK-I through MK-IV)
+  - Quality gates are content-focused, not code-focused
+  - Brand guidelines are the source of truth for content quality
+  - Legal compliance is NON-NEGOTIABLE for all published content

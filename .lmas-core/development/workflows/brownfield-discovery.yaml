@@ -5,7 +5,7 @@ workflow:
   description: >-
     Comprehensive multi-agent discovery workflow for existing projects.
     Includes specialist validation cycles and executive awareness report.
-    Designed for projects migrating from Lovable, v0.dev, or legacy codebases.
+    Designed for projects migrating from Lovable, v0.dev, or legacy codebases. Design iteration now uses Paper MCP instead of external AI tools.
   type: brownfield
   project_types:
     - technical-debt-resolution
@@ -110,8 +110,18 @@ workflow:
       creates: docs/frontend/frontend-spec.md
       elicit: true
       duration_estimate: "30-45 min"
+      pre_step:
+        description: "Optional: Run *extract-design-system to auto-extract existing tokens before manual analysis"
+        command: "*extract-design-system {project_path} --depth deep"
+        optional: true
+        output: "design-system/MASTER.md, tokens.css, tailwind.config.ts"
       notes: |
         @ux-design-expert analisa o frontend:
+
+        PRE-STEP RECOMENDADO:
+        Antes da análise manual, rodar *extract-design-system para extrair
+        automaticamente tokens, cores, tipografia e componentes existentes.
+        Isso acelera a fase de coleta e garante que nenhum token seja perdido.
 
         ANÁLISE:
         - Componentes UI existentes
@@ -872,7 +882,7 @@ workflow:
 
   decision_guidance:
     when_to_use:
-      - Migrando projeto de Lovable/v0.dev
+      - Migrando projeto de Lovable/v0.dev (design iteration via Paper MCP)
       - Auditoria completa de codebase
       - Planejamento de modernização
       - Assessment antes de investimento

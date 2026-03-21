@@ -62,30 +62,41 @@ async function getModeBadge(projectRoot = process.cwd()) {
 }
 
 /**
- * Set permission mode
+ * Set permission mode (global or per-domain)
  * @param {string} modeName - Mode name (explore, ask, auto)
+ * @param {string} [domain] - Optional domain for per-domain mode
  * @param {string} projectRoot - Project root path
  * @returns {Promise<Object>} Mode info
  */
-async function setMode(modeName, projectRoot = process.cwd()) {
+async function setMode(modeName, domain = null, projectRoot = process.cwd()) {
   const mode = new PermissionMode(projectRoot);
-  return mode.setMode(modeName);
+  await mode.load();
+  return mode.setMode(modeName, domain);
 }
 
 /**
- * Cycle permission mode: ask -> auto -> explore -> ask
- * Used by the *yolo command across all agents.
+ * Get exec mode selection menu (Morpheus-style).
+ * Used by the *exec command when no mode is specified.
+ * @param {string} [domain] - Optional active domain context
  * @param {string} projectRoot - Project root path
- * @returns {Promise<Object>} New mode info with badge
+ * @returns {Promise<string>} Markdown formatted menu
  */
-async function cycleMode(projectRoot = process.cwd()) {
+async function getExecMenu(domain = null, projectRoot = process.cwd()) {
   const mode = new PermissionMode(projectRoot);
-  const info = await mode.cycleMode();
-  return {
-    ...info,
-    badge: mode.getBadge(),
-    message: `Permission mode changed to: ${info.name} ${mode.getBadge()}`,
-  };
+  await mode.load();
+  return PermissionMode.getExecMenu(domain, mode.domainModes);
+}
+
+/**
+ * Get mode for a specific domain
+ * @param {string} domain - Domain name
+ * @param {string} projectRoot - Project root path
+ * @returns {Promise<Object>} Mode info with domain context
+ */
+async function getModeForDomain(domain, projectRoot = process.cwd()) {
+  const mode = new PermissionMode(projectRoot);
+  await mode.load();
+  return mode.getModeInfoForDomain(domain);
 }
 
 /**
@@ -134,6 +145,7 @@ module.exports = {
   checkOperation,
   getModeBadge,
   setMode,
-  cycleMode,
+  getExecMenu,
+  getModeForDomain,
   enforcePermission,
 };

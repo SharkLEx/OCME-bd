@@ -1,6 +1,7 @@
 bundle:
   name: Team IDE Minimal
   icon: ⚡
+  domain: software-dev
   description: Only the bare minimum for the IDE PO SM dev qa cycle.
 agents:
   - po

@@ -1,0 +1,81 @@
+version: '3.9'
+
+# ==============================================================================
+# docker-compose.yml — OCME bd Monitor Engine
+# Story 7.7 — @devops
+# ==============================================================================
+
+services:
+  monitor:
+    build:
+      context: ..
+      dockerfile: monitor-engine/Dockerfile
+      target: runtime
+    container_name: ocme-monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${METRICS_PORT:-9090}:9090"
+    volumes:
+      - monitor_data:/app/data
+      - monitor_logs:/app/logs
+    environment:
+      - DB_PATH=/app/data/webdex_v5_final.db
+      - DATA_DIR=/app/data
+      - METRICS_PORT=9090
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '3'
+
+  # CLI companion (run on-demand: docker compose run --rm cli status)
+  cli:
+    build:
+      context: ..
+      dockerfile: monitor-engine/Dockerfile
+      target: runtime
+    container_name: ocme-cli
+    env_file:
+      - .env
+    volumes:
+      - monitor_data:/app/data
+    environment:
+      - DB_PATH=/app/data/webdex_v5_final.db
+    entrypoint: ["python", "-m", "monitor_cli"]
+    profiles:
+      - cli
+
+  # Backup diário do SQLite (roda automaticamente em produção)
+  backup:
+    image: alpine:3.19
+    container_name: ocme-backup
+    restart: unless-stopped
+    volumes:
+      - monitor_data:/data:ro
+      - monitor_backups:/backups
+    command: >
+      sh -c "
+        echo 'Backup service iniciado';
+        while true; do
+          DATE=$$(date +%Y%m%d_%H%M);
+          cp /data/webdex_v5_final.db /backups/webdex_$$DATE.db 2>/dev/null && echo \"Backup OK: webdex_$$DATE.db\" || echo 'Backup: DB ainda não existe, aguardando...';
+          find /backups -name '*.db' -mtime +7 -delete 2>/dev/null;
+          sleep 86400;
+        done
+      "
+
+volumes:
+  monitor_data:
+    driver: local
+  monitor_logs:
+    driver: local
+  monitor_backups:
+    driver: local

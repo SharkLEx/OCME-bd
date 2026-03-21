@@ -1,0 +1,23 @@
+# Banco de dados SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Logs
+*.log
+webdex.log
+
+# Ambiente
+.env
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -84,6 +84,22 @@ The goal is quality delivery, not just checking boxes.]]
    - [ ] User-facing documentation updated, if changes impact users.
    - [ ] Technical documentation (e.g., READMEs, system diagrams) updated if significant architectural changes were made.
 
+
+8. **Web Essentials (Se story envolve site/landing page):**
+
+   [[LLM: Se a story envolve qualquer pagina web publica, valide estes itens. Se nao envolve web, marque N/A.]]
+
+   - [ ] OpenGraph image gerada (1200x630px) e og:title, og:description, og:image definidos
+   - [ ] Twitter Card configurado (summary_large_image)
+   - [ ] Favicon presente e visivel na tab do browser
+   - [ ] Meta description definida (150-160 chars)
+   - [ ] robots.txt presente na raiz
+   - [ ] sitemap.xml gerado
+   - [ ] Canonical URL definida
+   - [ ] 404 page customizada
+   - [ ] HTTPS ativo
+   - [ ] Referencia: web-deployment-checklist.md para checklist completo
+
 ## Final Confirmation
 
 [[LLM: FINAL DOD SUMMARY

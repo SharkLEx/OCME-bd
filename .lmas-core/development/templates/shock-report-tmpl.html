@@ -1,0 +1,321 @@
+<!--
+  LMAS Shock Report Template
+  Template ID: shock-report
+  Version: 1.0.0 | Created: 2026-03-17
+  Used by: @ux-design-expert (Switch)
+
+  Purpose: Visual "chaos report" showing design system inconsistencies,
+  redundancies, and ROI of consolidation. Designed to create urgency
+  for design system investment.
+
+  Replace {{PLACEHOLDERS}} with actual data.
+  Open directly in a browser — no build step needed.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Design System Shock Report — {{PROJECT_NAME}}</title>
+  <style>
+    :root {
+      --color-bg: #0f172a;
+      --color-surface: #1e293b;
+      --color-surface-raised: #334155;
+      --color-text: #f1f5f9;
+      --color-text-muted: #94a3b8;
+      --color-danger: #ef4444;
+      --color-warning: #f59e0b;
+      --color-success: #22c55e;
+      --color-primary: #3b82f6;
+      --color-accent: #8b5cf6;
+      --radius: 12px;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font);
+      background: var(--color-bg);
+      color: var(--color-text);
+      line-height: 1.6;
+      padding: 2rem;
+    }
+
+    .container { max-width: 1100px; margin: 0 auto; }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding: 2rem;
+      border-bottom: 2px solid var(--color-danger);
+    }
+    header h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: 0.5rem; }
+    header .subtitle { color: var(--color-text-muted); font-size: 1.1rem; }
+    header .date { color: var(--color-text-muted); font-size: 0.875rem; margin-top: 0.5rem; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 3rem;
+    }
+    .stat-card {
+      background: var(--color-surface);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      text-align: center;
+      border: 1px solid transparent;
+    }
+    .stat-card.danger { border-color: var(--color-danger); }
+    .stat-card.warning { border-color: var(--color-warning); }
+    .stat-card.info { border-color: var(--color-primary); }
+    .stat-number {
+      font-size: 3rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      line-height: 1;
+      margin-bottom: 0.25rem;
+    }
+    .stat-card.danger .stat-number { color: var(--color-danger); }
+    .stat-card.warning .stat-number { color: var(--color-warning); }
+    .stat-card.info .stat-number { color: var(--color-primary); }
+    .stat-label { color: var(--color-text-muted); font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    section { margin-bottom: 3rem; }
+    section h2 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--color-surface-raised);
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+    .comparison-card {
+      background: var(--color-surface);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+    }
+    .comparison-card h3 { font-size: 1rem; margin-bottom: 1rem; color: var(--color-text-muted); }
+    .comparison-card .sample {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+    }
+    .color-swatch {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: flex-end;
+      justify-content: center;
+      font-size: 0.625rem;
+      color: white;
+      padding: 2px;
+      font-family: var(--font-mono);
+    }
+
+    .bar-chart { margin-top: 1rem; }
+    .bar-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      gap: 0.75rem;
+    }
+    .bar-label { width: 140px; font-size: 0.875rem; color: var(--color-text-muted); text-align: right; }
+    .bar-track {
+      flex: 1;
+      height: 24px;
+      background: var(--color-surface-raised);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding-left: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      color: var(--color-bg);
+    }
+
+    .roi-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    .roi-table th, .roi-table td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--color-surface-raised);
+    }
+    .roi-table th {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-text-muted);
+    }
+    .roi-table .positive { color: var(--color-success); font-weight: 600; }
+    .roi-table .negative { color: var(--color-danger); font-weight: 600; }
+
+    .verdict {
+      text-align: center;
+      padding: 2rem;
+      background: var(--color-surface);
+      border-radius: var(--radius);
+      border: 2px solid var(--color-accent);
+    }
+    .verdict h2 { border: none; margin-bottom: 0.5rem; color: var(--color-accent); }
+    .verdict p { color: var(--color-text-muted); max-width: 600px; margin: 0 auto; }
+
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: var(--color-text-muted);
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Design System Shock Report</h1>
+      <div class="subtitle">{{PROJECT_NAME}} — Visual Chaos Assessment</div>
+      <div class="date">Generated: {{DATE}} | Auditor: @ux-design-expert (Switch)</div>
+    </header>
+
+    <!-- Headline Stats -->
+    <div class="stats-grid">
+      <div class="stat-card danger">
+        <div class="stat-number">{{UNIQUE_COLORS}}</div>
+        <div class="stat-label">Unique Colors Found</div>
+      </div>
+      <div class="stat-card danger">
+        <div class="stat-number">{{DUPLICATE_COMPONENTS}}</div>
+        <div class="stat-label">Duplicate Components</div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-number">{{SPACING_VALUES}}</div>
+        <div class="stat-label">Spacing Values in Use</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-number">{{FONT_COMBOS}}</div>
+        <div class="stat-label">Font Size Combinations</div>
+      </div>
+    </div>
+
+    <!-- Side-by-Side: Current vs Proposed -->
+    <section>
+      <h2>Color Chaos: Current vs Proposed</h2>
+      <div class="comparison-grid">
+        <div class="comparison-card">
+          <h3>Current ({{CURRENT_COLOR_COUNT}} colors)</h3>
+          <div class="sample">
+            <!-- Repeat for each sampled color -->
+            <div class="color-swatch" style="background:{{HEX_1}}">{{HEX_1}}</div>
+            <div class="color-swatch" style="background:{{HEX_2}}">{{HEX_2}}</div>
+            <div class="color-swatch" style="background:{{HEX_3}}">{{HEX_3}}</div>
+            <div class="color-swatch" style="background:{{HEX_4}}">{{HEX_4}}</div>
+          </div>
+          <p style="color:var(--color-danger);font-size:0.875rem">{{CURRENT_COLOR_COUNT}} unique values across {{CSS_FILES_COUNT}} files</p>
+        </div>
+        <div class="comparison-card">
+          <h3>Proposed ({{PROPOSED_COLOR_COUNT}} tokens)</h3>
+          <div class="sample">
+            <div class="color-swatch" style="background:var(--color-primary, #3b82f6)">primary</div>
+            <div class="color-swatch" style="background:var(--color-success, #22c55e)">success</div>
+            <div class="color-swatch" style="background:var(--color-warning, #f59e0b)">warning</div>
+            <div class="color-swatch" style="background:var(--color-danger, #ef4444)">danger</div>
+          </div>
+          <p style="color:var(--color-success);font-size:0.875rem">{{PROPOSED_COLOR_COUNT}} semantic tokens, {{REDUCTION_PERCENT}}% reduction</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Redundancy Analysis -->
+    <section>
+      <h2>Component Redundancy</h2>
+      <div class="bar-chart">
+        <div class="bar-row">
+          <div class="bar-label">Buttons</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{BUTTONS_PERCENT}}%;background:var(--color-danger)">{{BUTTON_VARIANTS}} variants</div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Cards</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{CARDS_PERCENT}}%;background:var(--color-warning)">{{CARD_VARIANTS}} variants</div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Inputs</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{INPUTS_PERCENT}}%;background:var(--color-warning)">{{INPUT_VARIANTS}} variants</div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Modals</div>
+          <div class="bar-track"><div class="bar-fill" style="width:{{MODALS_PERCENT}}%;background:var(--color-primary)">{{MODAL_VARIANTS}} variants</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROI Calculation -->
+    <section>
+      <h2>ROI of Consolidation</h2>
+      <table class="roi-table">
+        <thead>
+          <tr><th>Metric</th><th>Current</th><th>After Consolidation</th><th>Impact</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>CSS Bundle Size</td>
+            <td>{{CURRENT_CSS_SIZE}}</td>
+            <td>{{PROPOSED_CSS_SIZE}}</td>
+            <td class="positive">-{{CSS_REDUCTION}}%</td>
+          </tr>
+          <tr>
+            <td>Component Count</td>
+            <td>{{CURRENT_COMPONENT_COUNT}}</td>
+            <td>{{PROPOSED_COMPONENT_COUNT}}</td>
+            <td class="positive">-{{COMPONENT_REDUCTION}}%</td>
+          </tr>
+          <tr>
+            <td>Dev Time per Feature</td>
+            <td>{{CURRENT_DEV_TIME}}</td>
+            <td>{{PROPOSED_DEV_TIME}}</td>
+            <td class="positive">-{{TIME_REDUCTION}}%</td>
+          </tr>
+          <tr>
+            <td>Design Inconsistencies</td>
+            <td>{{CURRENT_INCONSISTENCIES}}</td>
+            <td>{{PROPOSED_INCONSISTENCIES}}</td>
+            <td class="positive">-{{INCONSISTENCY_REDUCTION}}%</td>
+          </tr>
+          <tr>
+            <td>Migration Effort</td>
+            <td>—</td>
+            <td>{{MIGRATION_HOURS}} hours</td>
+            <td class="negative">one-time cost</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- Verdict -->
+    <div class="verdict">
+      <h2>Verdict</h2>
+      <p>{{VERDICT_TEXT — e.g., "Critical design debt. Consolidation will reduce CSS by X%, eliminate Y duplicate components, and save Z hours per sprint."}}</p>
+    </div>
+
+    <footer>
+      Generated by LMAS @ux-design-expert (Switch) | The Matrix AI Framework
+    </footer>
+  </div>
+</body>
+</html>

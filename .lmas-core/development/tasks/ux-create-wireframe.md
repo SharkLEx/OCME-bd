@@ -529,7 +529,7 @@ All artifacts saved to: `outputs/wireframes/{project}/`
 - `*research` - Use personas and insights to inform design
 
 **Next Steps:**
-- `*generate-ui-prompt` - Convert wireframes to AI prompts for v0/Lovable
+- `*build` - Build components in Paper (visual mode) or as code (text mode)
 - `*build` - Implement components from inventory
 - `*create-front-end-spec` - Create detailed specifications
 
@@ -546,30 +546,12 @@ Updates `.state.yaml` with:
 
 After creating wireframes, generate prompts for AI tools:
 
-**v0.dev Prompt Template:**
-```
-Create a [Component Name] component with:
-- [Feature 1]
-- [Feature 2]
-- [Feature 3]
+**Visual Design (Paper MCP):**
+If Paper is active, wireframes are rendered directly on canvas via `write_html`.
+Use `*build` to convert wireframe components into production React code.
 
-Style: [Modern/Minimal/Bold]
-Colors: [Primary/Secondary colors]
-Framework: React + TypeScript + Tailwind CSS
-Accessibility: WCAG AA compliant
-```
-
-**Lovable Prompt Template:**
-```
-Build a [Screen Name] page featuring:
-- [Section 1 description]
-- [Section 2 description]
-- [Section 3 description]
-
-Layout: [Grid/Flex/Stack]
-Mobile-responsive: Yes
-Dark mode: [Yes/No]
-```
+**Text Mode (No Paper):**
+Wireframes are output as markdown specs. Use `*build` to generate React/Tailwind code.
 
 ---
 

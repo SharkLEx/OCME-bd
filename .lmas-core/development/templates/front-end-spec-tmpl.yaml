@@ -1,0 +1,139 @@
+# Front-End Specification Template
+# LMAS Template — @ux-design-expert (Switch)
+# Version: 1.0.0 | Created: 2026-03-17
+# Usage: Generate a frontend spec for a new feature, page, or component system.
+# Fill {{PLACEHOLDERS}} with actual values. Remove unused sections.
+
+metadata:
+  template_id: front-end-spec
+  version: "1.0.0"
+  created: "2026-03-17"
+  used_by:
+    - "@ux-design-expert (Switch)"
+    - "@architect (Architect)"
+    - "@dev (Neo)"
+
+---
+
+spec:
+  title: "{{FEATURE_NAME}}"
+  version: "{{SPEC_VERSION}}"
+  date: "{{DATE}}"
+  author: "@ux-design-expert"
+  status: "{{Draft | InReview | Approved}}"
+  story_ref: "{{STORY_ID}}"
+
+overview:
+  description: "{{Brief description of the frontend feature or page}}"
+  user_goal: "{{What the user achieves with this feature}}"
+  scope:
+    includes:
+      - "{{What is in scope}}"
+    excludes:
+      - "{{What is explicitly out of scope}}"
+
+design_tokens:
+  color_palette:
+    primary: "{{var(--color-primary)}}"
+    secondary: "{{var(--color-secondary)}}"
+    surface: "{{var(--color-surface)}}"
+    error: "{{var(--color-error)}}"
+    success: "{{var(--color-success)}}"
+  typography:
+    heading_font: "{{var(--font-heading)}}"
+    body_font: "{{var(--font-body)}}"
+    scale:
+      - { name: "h1", size: "{{var(--font-size-2xl)}}", weight: "700", line_height: "1.2" }
+      - { name: "h2", size: "{{var(--font-size-xl)}}", weight: "600", line_height: "1.3" }
+      - { name: "body", size: "{{var(--font-size-base)}}", weight: "400", line_height: "1.5" }
+      - { name: "caption", size: "{{var(--font-size-sm)}}", weight: "400", line_height: "1.4" }
+  spacing:
+    unit: "{{4px | 8px}}"
+    scale: [4, 8, 12, 16, 24, 32, 48, 64]
+  borders:
+    radius: { sm: "{{4px}}", md: "{{8px}}", lg: "{{16px}}", full: "9999px" }
+  shadows:
+    - { level: "sm", value: "{{0 1px 2px rgba(0,0,0,0.05)}}" }
+    - { level: "md", value: "{{0 4px 6px rgba(0,0,0,0.1)}}" }
+    - { level: "lg", value: "{{0 10px 15px rgba(0,0,0,0.15)}}" }
+
+components:
+  - name: "{{ComponentName}}"
+    type: "{{atom | molecule | organism}}"
+    description: "{{Purpose of this component}}"
+    props:
+      - { name: "variant", type: "string", default: "'default'", options: ["default", "primary", "secondary"] }
+      - { name: "size", type: "string", default: "'md'", options: ["sm", "md", "lg"] }
+      - { name: "disabled", type: "boolean", default: "false" }
+    states:
+      - "default"
+      - "hover"
+      - "focus"
+      - "active"
+      - "disabled"
+    accessibility:
+      role: "{{ARIA role}}"
+      keyboard: "{{Enter to activate, Escape to dismiss}}"
+      aria_labels: "{{Required ARIA attributes}}"
+
+layouts:
+  - name: "{{LayoutName}}"
+    type: "{{page | section | modal}}"
+    description: "{{Layout purpose}}"
+    grid:
+      columns: "{{12}}"
+      gutter: "{{var(--spacing-4)}}"
+      max_width: "{{1280px}}"
+    regions:
+      - { name: "header", span: "12", sticky: true }
+      - { name: "sidebar", span: "3", collapsible: true }
+      - { name: "main", span: "9" }
+      - { name: "footer", span: "12" }
+
+interactions:
+  - trigger: "{{user action}}"
+    response: "{{UI response}}"
+    animation: "{{transition type and duration}}"
+    feedback: "{{loading state, success, error}}"
+
+responsive_behavior:
+  breakpoints:
+    mobile: "< 640px"
+    tablet: "640px - 1023px"
+    desktop: ">= 1024px"
+  adaptations:
+    - breakpoint: "mobile"
+      changes:
+        - "{{Sidebar collapses to bottom sheet}}"
+        - "{{Grid switches to single column}}"
+    - breakpoint: "tablet"
+      changes:
+        - "{{Sidebar becomes overlay}}"
+    - breakpoint: "desktop"
+      changes:
+        - "{{Full layout with persistent sidebar}}"
+
+accessibility:
+  level: "{{AA | AAA}}"
+  requirements:
+    - "All interactive elements keyboard accessible"
+    - "Color contrast meets WCAG {{AA 4.5:1 | AAA 7:1}}"
+    - "Screen reader announces dynamic content changes"
+    - "Focus management on route changes"
+  testing:
+    - "axe-core automated scan"
+    - "Keyboard-only navigation test"
+    - "Screen reader walkthrough (NVDA/VoiceOver)"
+
+tech_stack:
+  framework: "{{React | Next.js | Vue}}"
+  styling: "{{Tailwind CSS | CSS Modules | styled-components}}"
+  state_management: "{{Zustand | Redux | Context}}"
+  testing: "{{Jest + Testing Library | Vitest | Playwright}}"
+
+dependencies:
+  internal:
+    - "{{design-system package}}"
+    - "{{shared hooks package}}"
+  external:
+    - { name: "{{library}}", version: "{{^x.y.z}}", purpose: "{{why needed}}" }

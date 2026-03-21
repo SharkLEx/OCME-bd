@@ -1,13 +1,20 @@
 /**
- * Permission Mode System
+ * Permission Mode System (Exec Modes)
  *
- * Controls agent autonomy level with 3 modes:
- * - explore: Read-only, safe exploration
- * - ask: Confirm before changes (default)
- * - auto: Full autonomy (yolo mode)
+ * Controls agent autonomy level with 3 execution modes:
+ * - explore (SAFETY): Read-only, safe observation
+ * - ask (INTERATIVO): Confirm before changes, guided execution
+ * - auto (AUTO): Full autonomy, agents operate freely
+ *
+ * Supports per-domain modes (multi-tenant):
+ * - Global default: permissions.mode
+ * - Per-domain: permissions.domains.{domain} (overrides global)
+ * - Example: dev squad AUTO, marketing squad INTERATIVO
+ *
+ * Morpheus persona: "I can only show you the door. You're the one that has to walk through it."
  *
  * @module permissions/permission-mode
- * @version 1.0.0
+ * @version 2.1.0
  * @inspired-by Craft Agents OSS
  */
 
@@ -17,15 +24,16 @@ const yaml = require('js-yaml');
 
 class PermissionMode {
   /**
-   * Available permission modes with their configurations
+   * Available execution modes with their configurations
    */
   static MODES = {
     explore: {
-      name: 'Explore',
-      icon: '🔍',
+      name: 'SAFETY',
+      icon: '🛡️',
       color: 'blue',
-      description: 'Read-only mode - safe exploration',
-      shortDescription: 'Safe browsing',
+      description: 'Observe. Aprenda. Quando estiver pronto, saberá o que fazer.',
+      shortDescription: 'Somente leitura',
+      morpheus: 'Você ainda não está pronto. Observe a Matrix antes de agir.',
       permissions: {
         read: true,
         write: false,
@@ -34,11 +42,12 @@ class PermissionMode {
       },
     },
     ask: {
-      name: 'Ask',
-      icon: '⚠️',
+      name: 'INTERATIVO',
+      icon: '💬',
       color: 'yellow',
-      description: 'Confirm before changes - balanced approach',
-      shortDescription: 'Confirm changes',
+      description: 'A escolha é sua, mas eu estarei aqui para guiar cada passo.',
+      shortDescription: 'Confirma antes de agir',
+      morpheus: 'Eu posso te mostrar a porta. Você é quem tem que atravessá-la.',
       permissions: {
         read: true,
         write: 'confirm',
@@ -47,11 +56,12 @@ class PermissionMode {
       },
     },
     auto: {
-      name: 'Auto',
+      name: 'AUTO',
       icon: '⚡',
       color: 'green',
-      description: 'Full autonomy - trust mode',
-      shortDescription: 'Full speed',
+      description: 'Autonomia total — sem limites, sem hesitação.',
+      shortDescription: 'Autonomia total',
+      morpheus: 'Você está pronto. A Matrix é sua.',
       permissions: {
         read: true,
         write: true,
@@ -62,14 +72,15 @@ class PermissionMode {
   };
 
   /**
-   * Mode cycle order for quick toggle
+   * Valid mode keys
    */
-  static MODE_CYCLE = ['explore', 'ask', 'auto'];
+  static MODE_KEYS = ['explore', 'ask', 'auto'];
 
   constructor(projectRoot = process.cwd()) {
     this.projectRoot = projectRoot;
     this.configPath = path.join(projectRoot, '.lmas', 'config.yaml');
-    this.currentMode = 'ask'; // default
+    this.currentMode = 'ask'; // global default
+    this.domainModes = {}; // per-domain overrides { 'software-dev': 'auto', 'marketing': 'ask' }
     this._loaded = false;
   }
 
@@ -85,10 +96,20 @@ class PermissionMode {
       const config = yaml.load(configContent) || {};
       this.currentMode = config.permissions?.mode || 'ask';
 
-      // Validate mode
+      // Validate global mode
       if (!PermissionMode.MODES[this.currentMode]) {
         console.warn(`Invalid mode "${this.currentMode}" in config, defaulting to "ask"`);
         this.currentMode = 'ask';
+      }
+
+      // Load per-domain modes
+      const domains = config.permissions?.domains || {};
+      for (const [domain, mode] of Object.entries(domains)) {
+        if (PermissionMode.MODES[mode]) {
+          this.domainModes[domain] = mode;
+        } else {
+          console.warn(`Invalid mode "${mode}" for domain "${domain}", ignoring`);
+        }
       }
     } catch (_error) {
       // Config doesn't exist or is invalid, use default
@@ -100,40 +121,44 @@ class PermissionMode {
   }
 
   /**
-   * Set permission mode
-   * @param {string} mode - Mode name (explore, ask, auto)
+   * Set permission mode (global or per-domain)
+   * @param {string} mode - Mode name (explore, ask, auto) or alias
+   * @param {string} [domain] - Optional domain name for per-domain mode
    * @returns {Promise<Object>} Mode info
    */
-  async setMode(mode) {
-    // Handle aliases
-    if (mode === 'yolo') mode = 'auto';
-    if (mode === 'safe') mode = 'explore';
-    if (mode === 'balanced') mode = 'ask';
+  async setMode(mode, domain = null) {
+    // Handle aliases (PT-BR and EN)
+    const aliases = {
+      autonomo: 'auto',
+      autonomia: 'auto',
+      safe: 'explore',
+      safety: 'explore',
+      seguro: 'explore',
+      seguranca: 'explore',
+      balanced: 'ask',
+      interativo: 'ask',
+      interactive: 'ask',
+      guiado: 'ask',
+    };
+    mode = aliases[mode] || mode;
 
     if (!PermissionMode.MODES[mode]) {
       const validModes = Object.keys(PermissionMode.MODES).join(', ');
       throw new Error(`Invalid mode: "${mode}". Valid modes: ${validModes}`);
     }
 
-    this.currentMode = mode;
+    if (domain) {
+      // Per-domain mode
+      this.domainModes[domain] = mode;
+      await this._saveToConfig(null, domain, mode);
+    } else {
+      // Global mode
+      this.currentMode = mode;
+      await this._saveToConfig(mode);
+    }
+
     this._loaded = true;
-
-    // Save to config
-    await this._saveToConfig(mode);
-
-    return this.getModeInfo();
-  }
-
-  /**
-   * Cycle to next mode
-   * @returns {Promise<Object>} New mode info
-   */
-  async cycleMode() {
-    await this.load();
-    const currentIndex = PermissionMode.MODE_CYCLE.indexOf(this.currentMode);
-    const nextIndex = (currentIndex + 1) % PermissionMode.MODE_CYCLE.length;
-    const nextMode = PermissionMode.MODE_CYCLE[nextIndex];
-    return this.setMode(nextMode);
+    return domain ? this.getModeInfoForDomain(domain) : this.getModeInfo();
   }
 
   /**
@@ -149,21 +174,69 @@ class PermissionMode {
   }
 
   /**
-   * Get mode badge for display in greeting
-   * @returns {string} Formatted badge like "[⚠️ Ask]"
+   * Get mode for a specific domain (falls back to global)
+   * @param {string} domain - Domain name (e.g., 'software-dev', 'marketing')
+   * @returns {string} Mode key (explore, ask, auto)
    */
-  getBadge() {
-    const mode = PermissionMode.MODES[this.currentMode];
+  getModeForDomain(domain) {
+    if (domain && this.domainModes[domain]) {
+      return this.domainModes[domain];
+    }
+    return this.currentMode;
+  }
+
+  /**
+   * Get mode info for a specific domain
+   * @param {string} domain - Domain name
+   * @returns {Object} Mode info with name, icon, description, permissions, domain
+   */
+  getModeInfoForDomain(domain) {
+    const modeKey = this.getModeForDomain(domain);
+    const mode = PermissionMode.MODES[modeKey];
+    return {
+      mode: modeKey,
+      domain,
+      isOverride: !!this.domainModes[domain],
+      ...mode,
+    };
+  }
+
+  /**
+   * Get all domain mode overrides
+   * @returns {Object} Map of domain → mode info
+   */
+  getDomainModes() {
+    const result = {};
+    for (const [domain, modeKey] of Object.entries(this.domainModes)) {
+      const mode = PermissionMode.MODES[modeKey];
+      result[domain] = { mode: modeKey, ...mode };
+    }
+    return result;
+  }
+
+  /**
+   * Get mode badge for display in greeting
+   * @param {string} [domain] - Optional domain for domain-specific badge
+   * @returns {string} Formatted badge like "[⚡ AUTO]" or "[⚡ AUTO/software-dev]"
+   */
+  getBadge(domain = null) {
+    const modeKey = domain ? this.getModeForDomain(domain) : this.currentMode;
+    const mode = PermissionMode.MODES[modeKey];
+    if (domain && this.domainModes[domain]) {
+      return `[${mode.icon} ${mode.name}/${domain}]`;
+    }
     return `[${mode.icon} ${mode.name}]`;
   }
 
   /**
    * Check if an operation is allowed
    * @param {string} operation - Operation type (read, write, execute, delete)
+   * @param {string} [domain] - Optional domain for domain-specific check
    * @returns {Object} { allowed: boolean|'confirm', reason?: string, message?: string }
    */
-  canPerform(operation) {
-    const mode = PermissionMode.MODES[this.currentMode];
+  canPerform(operation, domain = null) {
+    const modeKey = domain ? this.getModeForDomain(domain) : this.currentMode;
+    const mode = PermissionMode.MODES[modeKey];
     const permission = mode.permissions[operation];
 
     if (permission === true) {
@@ -211,38 +284,82 @@ class PermissionMode {
    * Get help text for modes
    * @returns {string} Markdown formatted help
    */
-  static getHelp() {
-    let help = '## Permission Modes\n\n';
-    help += '| Mode | Icon | Description | Writes | Executes |\n';
-    help += '|------|------|-------------|--------|----------|\n';
+  /**
+   * Get exec mode selection menu (Morpheus-style)
+   * @returns {string} Markdown formatted selection menu
+   */
+  /**
+   * Get exec mode selection menu (Morpheus-style)
+   * @param {string} [domain] - Optional domain context for showing current domain mode
+   * @param {Object} [domainModes] - Current domain mode overrides
+   * @returns {string} Markdown formatted selection menu
+   */
+  static getExecMenu(domain = null, domainModes = {}) {
+    let menu = '## 👑 Modo de Execução\n\n';
+    menu += '*"Eu não posso te dizer o que a Matrix é. Você tem que ver por si mesmo."*\n\n';
 
-    for (const [key, mode] of Object.entries(PermissionMode.MODES)) {
+    const entries = Object.entries(PermissionMode.MODES);
+    entries.forEach(([, mode], index) => {
+      menu += `**${index + 1}. ${mode.icon} ${mode.name}** — ${mode.shortDescription}\n`;
+      menu += `   *${mode.morpheus}*\n\n`;
+    });
+
+    if (domain) {
+      menu += `**Domínio ativo:** ${domain}\n`;
+      menu += 'Escolha um modo (1-3) ou diga o nome. Aplica apenas ao domínio ativo.\n';
+    } else {
+      menu += 'Escolha um modo (1-3) ou diga o nome.\n';
+    }
+
+    // Show current domain overrides if any exist
+    const overrides = Object.entries(domainModes);
+    if (overrides.length > 0) {
+      menu += '\n**Modos por domínio:**\n';
+      for (const [d, modeKey] of overrides) {
+        const mode = PermissionMode.MODES[modeKey];
+        if (mode) {
+          menu += `- ${d}: ${mode.icon} ${mode.name}\n`;
+        }
+      }
+    }
+
+    return menu;
+  }
+
+  static getHelp() {
+    let help = '## Modos de Execução (*exec)\n\n';
+    help += '| Modo | Ícone | Descrição | Escrita | Execução |\n';
+    help += '|------|-------|-----------|---------|----------|\n';
+
+    for (const [, mode] of Object.entries(PermissionMode.MODES)) {
       const writes =
-        mode.permissions.write === true ? '✅' : mode.permissions.write === 'confirm' ? '⚠️' : '❌';
+        mode.permissions.write === true ? '✅' : mode.permissions.write === 'confirm' ? '💬' : '❌';
       const executes =
         mode.permissions.execute === true
           ? '✅'
           : mode.permissions.execute === 'confirm'
-            ? '⚠️'
+            ? '💬'
             : '❌';
-      help += `| ${key} | ${mode.icon} | ${mode.shortDescription} | ${writes} | ${executes} |\n`;
+      help += `| ${mode.name} | ${mode.icon} | ${mode.shortDescription} | ${writes} | ${executes} |\n`;
     }
 
-    help += '\n**Commands:**\n';
-    help += '- `*mode` - Show current mode\n';
-    help += '- `*mode explore` - Switch to read-only mode\n';
-    help += '- `*mode ask` - Switch to confirm mode (default)\n';
-    help += '- `*mode auto` - Switch to full autonomy\n';
-    help += '- `*yolo` - Alias for `*mode auto`\n';
+    help += '\n**Comandos:**\n';
+    help += '- `*exec` — Mostra menu de seleção de modo\n';
+    help += '- `*exec auto` — Autonomia total\n';
+    help += '- `*exec interativo` — Confirma antes de agir\n';
+    help += '- `*exec safety` — Somente leitura\n';
 
     return help;
   }
 
   /**
-   * Save mode to config file
+   * Save mode to config file (global or per-domain)
+   * @param {string|null} globalMode - Global mode to set (null to skip)
+   * @param {string|null} domain - Domain name for per-domain mode (null for global)
+   * @param {string|null} domainMode - Domain-specific mode (required if domain is set)
    * @private
    */
-  async _saveToConfig(mode) {
+  async _saveToConfig(globalMode, domain = null, domainMode = null) {
     let config = {};
 
     // Try to read existing config
@@ -255,7 +372,15 @@ class PermissionMode {
 
     // Update permissions section
     config.permissions = config.permissions || {};
-    config.permissions.mode = mode;
+
+    if (globalMode) {
+      config.permissions.mode = globalMode;
+    }
+
+    if (domain && domainMode) {
+      config.permissions.domains = config.permissions.domains || {};
+      config.permissions.domains[domain] = domainMode;
+    }
 
     // Ensure .lmas directory exists
     const lmasDir = path.dirname(this.configPath);

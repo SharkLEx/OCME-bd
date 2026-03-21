@@ -1,0 +1,249 @@
+# Design System Review — Post-Migration Quality Pipeline
+# Runs after design system build/migration to ensure quality
+# ADR: ADR-CROSS-AGENT-INTEGRATION.md
+
+workflow:
+  id: design-system-review
+  name: Design System Review
+  version: "1.0"
+  domain: software-dev
+  description: >-
+    Pipeline de revisao de qualidade pos-migracao de Design System. Encadeia documentacao,
+    auditoria de acessibilidade, quality gate e revisao adversarial opcional para garantir
+    que o design system atende padroes de qualidade antes de publicacao.
+  type: quality
+  project_types:
+    - design-system
+    - component-library
+    - pattern-library
+    - ui-migration
+    - design-token-update
+
+  metadata:
+    elicit: true
+    confirmation_required: true
+
+  execution_modes:
+    - mode: yolo
+      description: Execucao autonoma com minima interacao
+      prompts: 0-1
+    - mode: interactive
+      description: Checkpoints de decisao e feedback em cada handoff
+      prompts: 3-6
+      default: true
+    - mode: preflight
+      description: Planejamento completo antes da execucao
+      prompts: "6-10"
+
+  phases:
+    - phase_1: Documentation & Accessibility
+    - phase_2: Quality Gate
+    - phase_3: Adversarial Review (Optional)
+
+  sequence:
+    - step: generate_pattern_library
+      id: generate-docs
+      phase: 1
+      agent: ux-design-expert
+      action: Gerar documentacao do Pattern Library
+      notes: |
+        UX Design Expert (Sati) gera documentacao completa:
+        - Documenta cada componente com props, variantes e estados
+        - Cria exemplos de uso e code snippets
+        - Gera guia de estilo visual com tokens
+        - Documenta composicoes (molecules, organisms)
+        - Changelog de componentes modificados
+
+        Criterios de sucesso:
+        - [ ] Todos os componentes documentados
+        - [ ] Exemplos de codigo funcionais
+        - [ ] Guia de estilo atualizado
+        - [ ] Composicoes documentadas
+      outputs:
+        - pattern_library_docs
+        - component_api_reference
+      next: a11y-audit
+
+    - step: accessibility_audit
+      id: a11y-audit
+      phase: 1
+      agent: ux-design-expert
+      action: Auditoria de acessibilidade WCAG AA/AAA
+      requires: generate-docs
+      notes: |
+        UX Design Expert executa auditoria WCAG 2.1 AA com checks AAA seletivos:
+        - Contraste de cores (4.5:1 texto normal, 3:1 texto grande e UI)
+        - Navegacao por teclado (tab order, focus visible, skip links)
+        - Atributos ARIA e roles semanticos
+        - Screen reader compatibility
+        - Focus states e indicadores visuais
+        - Motion e animation preferences (prefers-reduced-motion)
+        - Touch target sizes (min 44x44px)
+
+        Criterios de sucesso:
+        - [ ] Zero violacoes criticas WCAG AA
+        - [ ] Contraste de cores aprovado
+        - [ ] Navegacao por teclado funcional
+        - [ ] ARIA labels corretos
+        - [ ] Remediation plan para violacoes menores
+      outputs:
+        - a11y_audit_report
+        - violations_list
+        - remediation_plan
+      next: roi-calculation
+
+    - step: calculate_roi
+      id: roi-calculation
+      phase: 1
+      agent: ux-design-expert
+      action: Calcular ROI do Design System
+      requires: a11y-audit
+      optional: true
+      skip_condition: "roi_not_required == true"
+      notes: |
+        UX Design Expert calcula retorno sobre investimento:
+        - Tempo economizado em desenvolvimento (horas/mes)
+        - Reducao de inconsistencias visuais (% antes vs depois)
+        - Velocidade de entrega de features novas
+        - Custo de manutencao reduzido
+        - Metricas de reuso de componentes
+        - Adoption rate por equipe
+
+        Metricas a calcular:
+        - [ ] Horas dev economizadas/mes
+        - [ ] % de reuso de componentes
+        - [ ] Tempo medio para nova feature
+        - [ ] Reducao de bugs visuais
+      outputs:
+        - roi_report
+        - savings_metrics
+      next: qa-review
+
+    - step: qa_review
+      id: qa-review
+      phase: 2
+      agent: qa
+      action: Quality gate review dos deliverables do design system
+      requires: a11y-audit
+      notes: |
+        QA (Oracle) executa quality gate review:
+        - Verifica completude da documentacao
+        - Valida que auditoria a11y cobriu todos os componentes
+        - Checa consistencia entre tokens e implementacao
+        - Verifica que remediation plan eh acionavel
+        - Valida ROI report (se disponivel) contra metricas reais
+
+        Vereditos:
+        - PASS → segue para revisao adversarial (opcional)
+        - CONCERNS → segue com ressalvas documentadas
+        - FAIL → retorna a documentacao para correcoes
+
+        Criterios de sucesso:
+        - [ ] Documentacao completa e consistente
+        - [ ] Auditoria a11y abrangente
+        - [ ] Tokens e implementacao alinhados
+        - [ ] Remediation plan acionavel
+      outputs:
+        - qa_verdict
+        - qa_feedback
+      next: smith-verify
+      on_fail: generate-docs
+
+    - step: adversarial_verification
+      id: smith-verify
+      phase: 3
+      agent: smith
+      action: Verificacao adversarial do design system
+      requires: qa-review
+      optional: true
+      skip_condition: "qa_verdict == 'PASS' AND skip_adversarial == true"
+      notes: |
+        Smith executa verificacao adversarial procurando:
+        - Edge cases nao cobertos (empty states, overflow, truncation)
+        - Gaps de acessibilidade nao detectados na auditoria
+        - Inconsistencias sutis entre componentes
+        - Falhas de responsividade em breakpoints intermediarios
+        - Problemas de performance com muitos componentes renderizados
+        - Vulnerabilidades de CSS injection ou XSS via props
+
+        Criterios de sucesso:
+        - [ ] Edge cases documentados
+        - [ ] Nenhuma inconsistencia critica encontrada
+        - [ ] Performance validada sob carga
+        - [ ] Seguranca de props verificada
+      outputs:
+        - smith_verdict
+        - adversarial_findings
+
+    - workflow_end:
+      action: pipeline_complete
+      notes: |
+        Pipeline de revisao do Design System completo!
+
+        Artefatos gerados:
+        - Documentacao do Pattern Library
+        - Relatorio de acessibilidade WCAG AA
+        - ROI report e metricas de savings (se calculado)
+        - QA gate verdict
+        - Smith adversarial findings (se executado)
+
+        Proximos passos sugeridos:
+        - Remediar violacoes de a11y identificadas
+        - Publicar nova versao do Design System
+        - Compartilhar metricas de ROI com stakeholders
+        - Agendar proxima revisao periodica
+
+  quality_gates:
+    qa_gate:
+      agent: qa
+      step: qa-review
+      verdicts:
+        PASS: "All checks passed — design system ready for release"
+        CONCERNS: "Minor issues noted — proceed with documented concerns"
+        FAIL: "Critical issues found — return to documentation phase"
+      blocking: true
+
+  error_handling:
+    strategy: retry-with-feedback
+    max_revisions: 2
+    escalation:
+      trigger: "qa_verdict == 'FAIL' twice OR smith finds critical vulnerability"
+      escalate_to: architect
+      action: "Review design system architecture and quality standards"
+
+  handoff_prompts:
+    phase_1_to_2: |
+      Documentacao, acessibilidade e ROI completos.
+      Proximo: @qa vai revisar a qualidade da entrega.
+    phase_2_to_3: |
+      QA gate concluido ({{verdict}}).
+      Proximo: @smith pode fazer verificacao adversarial (opcional).
+    pipeline_complete: |
+      Revisao do Design System finalizada!
+
+      Resumo:
+      - Documentacao: {{docs_status}}
+      - Acessibilidade: {{a11y_status}} ({{violation_count}} violacoes)
+      - ROI: {{roi_value}}
+      - QA Gate: {{qa_verdict}}
+      - Smith: {{smith_status}}
+
+  decision_guidance:
+    when_to_use:
+      - Apos migracao de Design System
+      - Release de nova versao do Pattern Library
+      - Auditoria periodica de qualidade (trimestral)
+      - Validacao pre-producao de componentes
+      - Geracao de metricas para stakeholders
+
+metadata:
+  author: Morpheus (LMAS Master)
+  created_date: 2026-03-17
+  version: 1.0.0
+  tags:
+    - design-system
+    - quality-assurance
+    - accessibility
+    - documentation
+    - roi
+    - adversarial-review

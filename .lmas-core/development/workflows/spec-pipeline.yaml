@@ -300,6 +300,41 @@ workflow:
         error: "Failed to write specification"
 
     # ═════════════════════════════════════════════════════════════════════════════════
+    # PHASE 4b: UX SPEC VALIDATION (optional)
+    # ═════════════════════════════════════════════════════════════════════════════════
+
+    - step: ux_validate_spec
+      phase: "4b"
+      phase_name: "UX Spec Validation"
+      agent: ux-design-expert
+
+      description: >-
+        Validate specification from UX/usability perspective.
+        Ensures UI components, user flows, and interaction patterns are feasible and well-designed.
+
+      task: ux-validate-spec.md
+
+      optional: true
+
+      skip_if: "spec.has_ui_components == false OR complexity.result === 'SIMPLE'"
+
+      inputs:
+        storyId: "{storyId}"
+        spec_path: "docs/stories/{storyId}/spec/spec.md"
+
+      outputs:
+        - ux-validation-report.md
+
+      on_success:
+        log: "✅ UX validation complete: docs/stories/{storyId}/spec/ux-validation-report.md"
+        next: critique
+
+      on_issues:
+        action: return_to_spec
+        pass: [ux-validation-report.md]
+        log: "⚠️ UX issues found — returning to @pm with UX feedback"
+
+    # ═════════════════════════════════════════════════════════════════════════════════
     # PHASE 5: CRITIQUE SPECIFICATION
     # ═════════════════════════════════════════════════════════════════════════════════
 

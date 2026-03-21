@@ -154,3 +154,225 @@ workflows:
         task: brownfield-create-epic.md
         output: Epic + stories ready for development
         condition: QA gate APPROVED
+
+  # 5. Content Pipeline — MARKETING CONTENT PRODUCTION
+  - id: content-pipeline
+    name: Content Pipeline
+    description: Content production pipeline with SEO validation
+    chain:
+      - step: 1
+        agent: "@content-strategist"
+        command: "*brief"
+        task: create-brief.md
+        output: Content brief
+        condition: Content topic defined
+      - step: 2
+        agent: "@content-researcher"
+        command: "*market-research"
+        task: market-research-mkt.md
+        output: Research report
+        condition: Research needed (skip if simple)
+      - step: 3
+        agent: "@copywriter"
+        command: "*write-copy"
+        task: write-copy.md
+        output: Copy package
+        condition: Brief ready
+      - step: 4
+        agent: "@seo"
+        command: "*content {url}"
+        task: seo-content.md
+        output: SEO score + recommendations
+        condition: "Content is blog/landing-page/article"
+        optional: true
+      - step: 5
+        agent: "@content-reviewer"
+        command: "*review-content"
+        task: review-content.md
+        output: APPROVE/REVISE/REJECT verdict
+        condition: Copy ready
+      - step: 6
+        agent: "@marketing-chief"
+        command: "*approve-content"
+        task: approve-content.md
+        output: Approval status
+        condition: Review verdict is APPROVE
+      - step: 7
+        agent: "@social-media-manager"
+        command: "*publish"
+        task: publish-content.md
+        output: Publication confirmation
+        condition: Content approved
+
+  # 6. Campaign Pipeline — PAID MEDIA
+  - id: campaign-pipeline
+    name: Campaign Pipeline
+    description: Paid media campaign pipeline with organic keyword alignment
+    chain:
+      - step: 1
+        agent: "@content-strategist"
+        command: "*content-strategy"
+        task: create-content-strategy.md
+        output: Campaign strategy
+        condition: Campaign objective defined
+      - step: 2
+        agent: "@seo"
+        command: "*keywords {topic}"
+        task: seo-keywords.md
+        output: Keyword data (paid + organic alignment)
+        condition: Search campaign
+        optional: true
+      - step: 3
+        agent: "@content-researcher"
+        command: "*competitor-analysis"
+        task: competitor-analysis-mkt.md
+        output: Competitor analysis
+        condition: Competitive intel needed
+      - step: 4
+        agent: "@traffic-manager"
+        command: "*campaign-plan"
+        task: campaign-plan.md
+        output: Campaign plan
+        condition: Strategy ready
+      - step: 5
+        agent: "@copywriter"
+        command: "*ad-copy"
+        task: ad-copy.md
+        output: Ad creative package
+        condition: Campaign plan ready
+      - step: 6
+        agent: "@content-reviewer"
+        command: "*review-content"
+        task: review-content.md
+        output: APPROVE/REVISE verdict
+        condition: Creative ready
+      - step: 7
+        agent: "@marketing-chief"
+        command: "*approve-campaign"
+        task: approve-campaign.md
+        output: Campaign approved
+        condition: "Review APPROVE AND budget > R$1.000"
+
+  # --- Cross-Agent Integration Chains (ADR-CROSS-AGENT-INTEGRATION) ---
+
+  # Design-First Development (greenfield UI projects)
+  - id: design-first-development
+    name: Design-First Development
+    domain: software-dev
+    description: "Greenfield UI workflow starting with design intelligence"
+    chain:
+      - agent: ux-design-expert
+        command: "*research"
+        output: "user research insights"
+      - agent: ux-design-expert
+        command: "*style {domain}"
+        output: "complete style baseline (palette, typography, spacing)"
+      - agent: ux-design-expert
+        command: "*wireframe"
+        output: "visual wireframe in Paper (or markdown if Paper unavailable)"
+      - agent: architect
+        command: "*create-front-end-architecture"
+        output: "frontend architecture doc"
+      - agent: ux-design-expert
+        command: "*setup"
+        output: "design system structure initialized"
+      - agent: dev
+        command: "*develop"
+        output: "implementation"
+
+  # Design System Review Loop (post-migration quality)
+  - id: design-system-review
+    name: Design System Review Loop
+    domain: software-dev
+    description: "Quality review after design system migration or build"
+    chain:
+      - agent: ux-design-expert
+        command: "*document"
+        output: "pattern library documentation"
+      - agent: ux-design-expert
+        command: "*a11y-check"
+        output: "WCAG compliance report"
+      - agent: qa
+        command: "*review"
+        output: "quality gate verdict"
+      - agent: smith
+        command: "*verify"
+        output: "adversarial review (optional)"
+        optional: true
+
+  # Landing Page Pipeline (cross-domain: software-dev + marketing)
+  - id: landing-page-pipeline
+    name: Landing Page Pipeline
+    domain: hybrid
+    description: "Cross-domain workflow for landing pages combining design, content, SEO, and implementation"
+    chain:
+      - agent: content-strategist
+        command: "*brief"
+        output: "content brief with positioning"
+        domain: marketing
+      - agent: ux-design-expert
+        command: "*landing {type}"
+        output: "section structure, visual guidelines, layout"
+        domain: software-dev
+      - agent: seo
+        command: "*keywords {topic}"
+        output: "target keywords and search intent"
+        domain: marketing
+      - agent: copywriter
+        command: "*write-copy"
+        output: "copy within visual guidelines"
+        domain: marketing
+      - agent: ux-design-expert
+        command: "*validate-pattern landing-page"
+        output: "UX validation of combined result"
+        domain: software-dev
+      - agent: content-reviewer
+        command: "*review"
+        output: "content quality gate"
+        domain: marketing
+      - agent: dev
+        command: "*develop"
+        output: "implementation"
+        domain: software-dev
+
+  # UX Handoff Suggestions (for SDC integration via handoff mechanism)
+  - id: sdc-ux-handoff
+    name: SDC UX Design Suggestion
+    domain: software-dev
+    description: "When PO validates a frontend story, suggest UX design prep before dev"
+    trigger:
+      from_agent: po
+      last_command: "validate-story"
+      condition: "story.tags includes frontend OR story.tags includes ui OR story.tags includes design"
+    suggestions:
+      - agent: ux-design-expert
+        command: "*style {story.domain}"
+        rationale: "Get design token baseline before implementation"
+      - agent: ux-design-expert
+        command: "*wireframe"
+        rationale: "Create visual wireframe in Paper for story UI requirements"
+      - agent: dev
+        command: "*develop"
+        rationale: "Proceed directly to development (skip UX prep)"
+
+  # Design System Extraction → Migration (brownfield)
+  - id: design-system-extraction-migration
+    name: Design System Extraction to Migration
+    domain: software-dev
+    description: "Extract existing design system, then plan migration"
+    chain:
+      - agent: ux-design-expert
+        command: "*extract-design-system {source}"
+        output: "MASTER.md + tokens.css + tailwind.config.ts"
+      - agent: ux-design-expert
+        command: "*audit {path}"
+        output: "pattern inventory and redundancies"
+      - agent: ux-design-expert
+        command: "*consolidate"
+        output: "consolidated patterns"
+      - agent: ux-design-expert
+        command: "*tokenize"
+        output: "design tokens extracted"
+      - agent: ux-design-expert
+        command: "*migrate"
+        output: "4-phase migration strategy"

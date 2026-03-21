@@ -1,12 +1,14 @@
 bundle:
   name: Team QA-Focused
   icon: 🔍
+  domain: software-dev
   description: Quality-focused team that orchestrates code review, testing, and deployment validation using CodeRabbit integration. Ideal for pre-PR reviews, deployment gates, and comprehensive quality assurance.
 
 agents:
   - dev                # Pre-commit CodeRabbit reviews, development quality
   - qa                 # Automated and manual QA, story validation
   - github-devops      # PR quality gates, deployment safety checks
+  - smith              # Adversarial delivery verification (optional, cross-domain)
 
 workflows:
   - code-quality-gate.yaml          # Unified quality validation (lint, tests, CodeRabbit)

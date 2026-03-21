@@ -33,6 +33,22 @@ web-bundles/
 # System files
 .DS_Store
 Thumbs.db
+
+# Python artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# SQLite databases (dados de produção — nunca commitar)
+*.db
+*.db-shm
+*.db-wal
+
+# Monitor engine — arquivos gerados / logs / debug
+packages/monitor-engine/bot_stderr.txt
+packages/monitor-engine/webdex_handlers/dash_imgs/
+packages/monitor-engine/*.log
+packages/monitor-engine/webdex.err.log
 nul                           # Windows temporary file
 
 # Private keys and certificates
@@ -163,6 +179,9 @@ tests/*/__fixtures__/
 
 # UI/UX design artifacts
 docs/ui-prompts.pdf
+
+# Media project scripts (podem conter API keys — não commitar)
+media/projects/
 
 # NOTE: docs/ internal directories are gitignored in the
 # "INTERNAL DOCS" section below. Only public docs ship.

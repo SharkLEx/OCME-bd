@@ -1,0 +1,23 @@
+# WEbdEX Monitor Engine — Dependências Python
+# Instale com: pip install -r requirements.txt
+
+# Blockchain
+web3>=6.0.0,<7.0.0
+
+# Telegram Bot
+pyTelegramBotAPI>=4.14.0,<5.0.0
+
+# HTTP
+requests>=2.31.0,<3.0.0
+
+# Configuração
+python-dotenv>=1.0.0,<2.0.0
+
+# Gráficos
+matplotlib>=3.7.0,<4.0.0
+
+# Timezone Windows (necessário para zoneinfo no Windows)
+tzdata
+
+# PostgreSQL — long-term memory (Story 12.1)
+psycopg2-binary>=2.9.0,<3.0.0

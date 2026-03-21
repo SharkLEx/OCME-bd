@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://lmas.dev/schemas/domain-constitution.json",
+  "title": "LMAS Domain Constitution Extension",
+  "description": "Schema for domain-specific constitution extensions that complement the base constitution.",
+  "type": "object",
+  "required": ["domain", "articles", "authority_matrix", "quality_gates", "deliverable_format"],
+  "properties": {
+    "domain": {
+      "type": "object",
+      "required": ["id", "name", "version", "extends"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]+$",
+          "description": "Kebab-case domain identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable domain name"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semver version of this domain constitution"
+        },
+        "extends": {
+          "type": "string",
+          "enum": ["base"],
+          "description": "Must extend the base constitution"
+        }
+      }
+    },
+    "articles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "severity", "description", "rules"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Z]+-[IVX]+$",
+            "description": "Article ID with domain prefix (e.g., SD-I, MK-II)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Article name"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["NON-NEGOTIABLE", "MUST", "SHOULD"],
+            "description": "How strictly this article is enforced"
+          },
+          "description": {
+            "type": "string",
+            "description": "Full description of the article"
+          },
+          "rules": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" },
+            "description": "List of rules (prefixed with MUST/MUST NOT/SHOULD/SHOULD NOT/EXCEPTION)"
+          },
+          "gate": {
+            "type": "object",
+            "description": "Automated gate configuration for this article",
+            "properties": {
+              "task": { "type": "string" },
+              "checklist": { "type": "string" },
+              "tool": { "type": "string" },
+              "action": {
+                "type": "string",
+                "enum": ["BLOCK", "WARN", "INFO"]
+              },
+              "condition": { "type": "string" }
+            },
+            "required": ["action"]
+          },
+          "example": {
+            "type": "object",
+            "description": "Optional example of correct/incorrect usage",
+            "properties": {
+              "correct": { "type": "string" },
+              "incorrect": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "authority_matrix": {
+      "type": "object",
+      "description": "Domain-specific exclusive authorities",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["exclusive_to", "description"],
+        "properties": {
+          "exclusive_to": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ],
+            "description": "Agent(s) with exclusive authority"
+          },
+          "description": { "type": "string" },
+          "severity": {
+            "type": "string",
+            "enum": ["NON-NEGOTIABLE", "MUST", "SHOULD"]
+          }
+        }
+      }
+    },
+    "quality_gates": {
+      "type": "object",
+      "description": "Domain-specific quality gate configuration",
+      "properties": {
+        "layer1_automated": { "type": "object" },
+        "layer1_content": { "type": "object" },
+        "layer2_review": { "type": "object" },
+        "layer3_signoff": { "type": "object" }
+      }
+    },
+    "deliverable_format": {
+      "type": "object",
+      "required": ["type", "required_sections", "tracking"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Deliverable type (story, brief, requisition, etc.)"
+        },
+        "template": { "type": "string" },
+        "required_sections": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "tracking": {
+          "type": "object",
+          "properties": {
+            "method": { "type": "string" },
+            "status_flow": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "workflow": { "type": "string" }
+      }
+    },
+    "conventions": {
+      "type": "object",
+      "description": "Domain-specific conventions and standards"
+    }
+  }
+}

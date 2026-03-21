@@ -1,0 +1,16 @@
+element_type,radius_value,radius_token,border_width,border_style,border_color_token,use_case,accessibility_note
+button-sm,6px,rounded-md,1px,solid,border-primary,Small action buttons and tags,Focus ring must be visible outside border radius
+button-lg,8px,rounded-lg,1px,solid,border-primary,Large CTA buttons and primary actions,Min 44px touch target independent of radius
+input,6px,rounded-md,1px,solid,border-input,Text inputs selects and textareas,Border color must have 3:1 contrast ratio with background
+input-error,6px,rounded-md,2px,solid,border-destructive,Input fields in error state,Never rely on border color alone for error indication
+card,12px,rounded-xl,1px,solid,border-card,Content cards and panels,Ensure card border visible in both light and dark modes
+card-interactive,12px,rounded-xl,1px,solid,border-card-hover,Hoverable and clickable cards,Focus-visible outline must not be clipped by overflow hidden
+modal,16px,rounded-2xl,0px,none,none,Modal dialogs and bottom sheets,Border radius should not clip close button or content
+badge,9999px,rounded-full,1px,solid,border-badge,Status badges tags and chips,Text inside pill shapes needs extra horizontal padding
+avatar,9999px,rounded-full,2px,solid,border-avatar-ring,User avatars and profile pictures,Ring provides separation from background for low-contrast images
+tooltip,8px,rounded-lg,0px,none,none,Tooltips and popovers,Arrow element must align with border radius
+divider,0px,rounded-none,1px,solid,border-separator,Horizontal and vertical content dividers,Ensure 3:1 contrast for decorative separators that convey grouping
+table-cell,0px,rounded-none,1px,solid,border-table,Table cell borders and grid lines,Header cells use slightly thicker bottom border for hierarchy
+toggle-track,9999px,rounded-full,2px,solid,border-toggle,Toggle switch track and thumb,Off state border must have sufficient contrast without relying on color
+skeleton,8px,rounded-lg,0px,none,none,Skeleton loading placeholder shapes,Match target component radius for seamless transition
+container,8px,rounded-lg,1px,dashed,border-dashed,Upload zones empty states and drop targets,Dashed border signals interactivity and must have 3:1 contrast

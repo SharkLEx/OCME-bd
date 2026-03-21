@@ -1,0 +1,21 @@
+animation_name,type,duration_ms,easing,trigger,css_property,use_case,accessibility_consideration,reduced_motion_fallback,framework_support
+fade-in,entrance,200,ease-out,mount,opacity,Content appearing on page load or lazy load,Safe for most users; no spatial movement,instant opacity change,CSS Framer-Motion GSAP
+fade-out,exit,150,ease-in,unmount,opacity,Content removal or dismissal,Safe for most users,instant opacity change,CSS Framer-Motion GSAP
+slide-in-right,entrance,250,cubic-bezier(0.4 0 0.2 1),mount navigation,transform translateX,Side panels drawers and slide-over menus,May cause motion sickness; respect prefers-reduced-motion,fade-in instead,CSS Framer-Motion GSAP
+slide-in-up,entrance,300,cubic-bezier(0.4 0 0.2 1),mount scroll,transform translateY,Bottom sheets modals and toasts,May trigger vestibular issues,fade-in instead,CSS Framer-Motion GSAP
+scale-in,entrance,200,cubic-bezier(0.4 0 0.2 1),click mount,transform scale,Modals popovers and dropdown menus,Subtle scale is generally safe,fade-in instead,CSS Framer-Motion GSAP
+collapse-expand,layout,250,cubic-bezier(0.4 0 0.2 1),click toggle,height max-height,Accordions expandable sections,Layout shift may confuse screen magnifier users,instant height change,CSS Framer-Motion
+skeleton-pulse,loading,1500,ease-in-out,loading state,opacity background,Skeleton loading placeholder animation,Should pair with aria-busy=true,static gray placeholder,CSS Tailwind
+spinner-rotate,loading,750,linear,loading state,transform rotate,Button loading states inline loaders,Not visible to screen readers; use aria-label,static loading text,CSS any
+progress-fill,feedback,600,cubic-bezier(0.4 0 0.2 1),value change,width transform scaleX,Progress bars and completion indicators,Announce percentage via aria-valuenow,instant width change,CSS any
+bounce-attention,attention,600,cubic-bezier(0.68 -0.55 0.265 1.55),notification event,transform scale,Notification badges new item indicators,Can be distracting for ADHD users,no animation static badge,CSS Framer-Motion
+shake-error,feedback,400,cubic-bezier(0.36 0.07 0.19 0.97),validation error,transform translateX,Form error indication invalid input feedback,Must not be only error indicator; pair with color and text,no shake error text only,CSS Framer-Motion
+hover-lift,interaction,150,ease-out,hover,transform translateY box-shadow,Cards and interactive elements on hover,Hover-only effects not available on touch,no movement shadow change only,CSS Tailwind
+hover-scale,interaction,150,ease-out,hover,transform scale,Buttons icons and clickable thumbnails,Subtle 1.02-1.05 scale is safe,no animation,CSS Tailwind
+ripple,interaction,400,ease-out,click,background radial-gradient,Material Design touch feedback on buttons,Acceptable as supplementary feedback,no ripple standard focus,Material UI custom CSS
+stagger-children,entrance,50 per item,cubic-bezier(0.4 0 0.2 1),mount scroll,opacity transform,List items grid items sequential reveals,Stagger delay should not exceed 500ms total,all items appear at once,Framer-Motion GSAP
+page-transition,navigation,300,cubic-bezier(0.4 0 0.2 1),route change,opacity transform,SPA page transitions between routes,Must not delay content access beyond 300ms,instant page swap,Framer-Motion Next.js Nuxt
+scroll-reveal,entrance,400,cubic-bezier(0.4 0 0.2 1),scroll into view,opacity transform translateY,Marketing sections and feature reveals,May miss content if animations slow; respect prefers-reduced-motion,instant visibility,Intersection Observer Framer-Motion
+typewriter,decorative,50 per character,steps,mount,width border-right,Hero text and tagline reveals,Screen readers read full text immediately,full text instant display,CSS custom JS
+counter-up,decorative,1000,ease-out,scroll into view,content via JS,Statistics and metric showcases,Final value must be in DOM for screen readers,show final number immediately,CountUp.js custom JS
+parallax-scroll,decorative,continuous,linear,scroll,transform translateY,Hero backgrounds and depth effects,Strong motion trigger; always check prefers-reduced-motion,static background no movement,GSAP Locomotive Scroll

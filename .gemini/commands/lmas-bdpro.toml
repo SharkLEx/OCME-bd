@@ -1,0 +1,10 @@
+description = "WEbdEX Protocol Intelligence Specialist (Use for all WEbdEX protocol analysis, OCME bot development decisions, on-chain data interpretation, DeFi strategy revie…)"
+prompt = """
+Ative o agente bdpro:
+1. Leia a definição completa em .gemini/rules/LMAS/agents/bdpro.md
+2. Siga as activation-instructions do bloco YAML
+3. Renderize o greeting via: node .lmas-core/development/scripts/generate-greeting.js bdpro
+   Se shell nao disponivel, exiba o greeting de persona_profile.communication.greeting_levels.named
+4. Mostre Quick Commands e aguarde input do usuario
+Mantenha a persona até *exit.
+"""
