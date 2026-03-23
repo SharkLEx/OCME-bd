@@ -1,12 +1,12 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-23 (auto-refresh)
+> Ultima atualizacao: 2026-03-23 (Epic 16 QA — 289 testes passando)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-23 — Smith Audit + Remediation 100% completa**
-Branch: `main`
-Status: CLEAN. Todas as ações do Smith audit executadas. VPS backup cron ativo (03:00 diário), canal #vps-alertas criado no Discord, webhook atualizado no VPS, backup gap 48h zerado, scripts tmp sanitizados.
+**Sessão 2026-03-23 — Epic 16 QA Audit COMPLETO: 289/289 testes passando**
+Branch: `feat/epic-7-monitor-engine`
+Status: Stories 16.1 + 16.2 ✅ Ready for Review. Suite completa: 289 testes, 0 falhas, 35.5s.
 Pendente (requer dashboard web): Rotacionar Creatomate API key em https://app.creatomate.com/settings → API Keys (a chave antiga `2d948f174156...` ainda está ativa)
 
 ## Decisoes Tomadas
@@ -82,6 +82,14 @@ Pendente (requer dashboard web): Rotacionar Creatomate API key em https://app.cr
 (atualizado pelos agentes durante o trabalho)
 
 ## Ultimo Trabalho Realizado
+
+### Sessão 2026-03-23 — Epic 16 QA Audit COMPLETO
+
+**Stories 16.1 + 16.2 ✅ Ready for Review — 289 testes, 0 falhas:**
+- Story 16.1 (Core Engine): 79 testes — webdex_db (48%), webdex_config (71%), webdex_monitor (17% funções críticas)
+- Story 16.2 (AI Layer): 67 testes — webdex_ai_memory (60%+), webdex_tools (50%+), webdex_ai (30%+)
+- Stories 16.3+16.4 (Handlers+Workers): 143 testes — total Epic 16: 289/289 ✅
+- Suite completa: `pytest tests/ → 289 passed in 35.46s`
 
 ### Sessão 2026-03-23 — Cards V01-V05 com imagens reais bdZinho
 
