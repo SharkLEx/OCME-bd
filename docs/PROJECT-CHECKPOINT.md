@@ -4,10 +4,10 @@
 
 ## Contexto Ativo
 
-**Sessão 2026-03-23 — Smith Audit + Remediation completa**
+**Sessão 2026-03-23 — Smith Audit + Remediation 100% completa**
 Branch: `main`
-Status: Smith audit concluído (INFECTED→CONTAINED). Credenciais removidas dos tmp scripts. PNGs + creatomate_renders.json commitados. Commit: `24106f9`.
-Pendente (Alex faz): 1) Rotacionar Creatomate API key no dashboard · 2) Criar #vps-alertas no Discord + atualizar /etc/vps-alerts.conf · 3) Rodar ocme-update no VPS + adicionar cron diário 03:00
+Status: CLEAN. Todas as ações do Smith audit executadas. VPS backup cron ativo (03:00 diário), canal #vps-alertas criado no Discord, webhook atualizado no VPS, backup gap 48h zerado, scripts tmp sanitizados.
+Pendente (requer dashboard web): Rotacionar Creatomate API key em https://app.creatomate.com/settings → API Keys (a chave antiga `2d948f174156...` ainda está ativa)
 
 ## Decisoes Tomadas
 
