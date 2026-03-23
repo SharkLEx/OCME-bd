@@ -27,56 +27,66 @@ Pendente (requer dashboard web): Rotacionar Creatomate API key em https://app.cr
 
 ## Status das Stories
 
-| Story | Status |
-|-------|--------|
-| 15.3.story | Unknown |
-| 15.4.story | Unknown |
-| 16.1.story | Unknown |
-| 16.2.story | Unknown |
-| 16.3.story | Unknown |
-| 16.4.story | Unknown |
-| 17.1.story | Unknown |
-| 17.2.story | Unknown |
-| 18.1.story | Unknown |
-| 19.1.story | Unknown |
-| 19.2.story | Unknown |
-| 19.3.story | Unknown |
-| 8.8.story | Unknown |
-| 8.9.story | InProgress |
-| epic-10 | Unknown |
-| epic-12 | Unknown |
-| epic-16 | Unknown |
-| epic-17 | Unknown |
-| epic-18 | Unknown |
-| epic-19 | Unknown |
-| epic-7-ocme-bd-monitor-engine | Unknown |
-| epic-8-webdex-orchestrator | Unknown |
-| epic-9 | Unknown |
-| 10.1.story | Unknown |
-| 10.2.story | Unknown |
-| 10.3.story | Unknown |
-| 10.4.story | Unknown |
-| 10.5.story | Unknown |
-| 11.1.story | Unknown |
-| 12.1.story | Unknown |
-| 12.2.story | Unknown |
-| 12.2b.story | Unknown |
-| 12.3.story | Unknown |
-| 12.4.story | Unknown |
-| 14.3.story | Unknown |
-| 15.1.story | Unknown |
-| 15.2.story | Unknown |
-| 8.1.story | Unknown |
-| 8.2.story | Unknown |
-| 8.3.story | Unknown |
-| 8.4.story | Unknown |
-| 8.5.story | Unknown |
-| 8.6.story | Unknown |
-| 8.7.story | Unknown |
-| 9.1.story | Unknown |
-| 9.2.story | Unknown |
-| 9.3.story | Unknown |
-| 9.4.story | Unknown |
+<!-- GROOMING 2026-03-23 — não editar manualmente, use @po *grooming para atualizar -->
+> Total: **39 stories + 9 epics** | ✅ Done: 21 | 🟢 RfR: 11 | 🟡 InProgress: 3 | ⏳ Backlog: 2 | 🔵 Blocked: 2 | ❌ Cancelada: 1
+
+### Epics (grooming 2026-03-23)
+
+| Ref | Estado | Nota |
+|-----|--------|------|
+| epic-7 | ✅ Done | Branch deletada, work in main |
+| epic-8 | 🟡 InProgress | 7/9 done, 8.8 blocked Meta, 8.9 pendente |
+| epic-9 | ✅ Done | 4/4 Done |
+| epic-10 | 🟡 InProgress | 10.1 stale InProgress, 10.2-10.5 Done |
+| epic-12 | ✅ Done | Todas Done, deploy 2026-03-20 |
+| epic-16 | 🟢 RfR | 4/4 Ready for Review, 289 testes |
+| epic-17 | ⏳ Backlog | Criadas, aguardando priorização |
+| epic-18 | ❌ Cancelada | OpenRouter já resolve |
+| epic-19 | 🟢 RfR | 3/3 RfR, deploy VPS ativo |
+
+### Backlog Geral (grooming 2026-03-23)
+
+| Ref | Título Resumido | Estado |
+|-----|-----------------|--------|
+| 8.1 | Telegram Bot Core | ✅ Done |
+| 8.2 | Monitor On-Chain | ✅ Done |
+| 8.3 | Comandos /status | ✅ Done |
+| 8.4 | Dados reais /status | ✅ Done |
+| 8.5 | Relatório automático | ✅ Done |
+| 8.6 | Notificações holders | ✅ Done |
+| 8.7 | Sentinela alertas | ✅ Done |
+| 8.8 | Instagram webhook | 🔵 Blocked — aguarda Meta |
+| 8.9 | WhatsApp webhook | 🟡 InProgress |
+| 9.1 | Discord embed rich | ✅ Done |
+| 9.2 | Discord slash commands | ✅ Done |
+| 9.3 | Discord AI responses | ✅ Done |
+| 9.4 | Discord deploy | ✅ Done |
+| 10.1 | Design Tokens + 21h | 🟡 InProgress (stale) |
+| 10.2 | bdZinho v3 visual | ✅ Done |
+| 10.3 | Cards OCME_bd V01-V05 | ✅ Done |
+| 10.4 | Creatomate MP4 | ✅ Done |
+| 10.5 | VPS hardening | ✅ Done |
+| 11.1 | Creatomate 21h video | ✅ Done |
+| 12.1 | bdZinho persona engine | ✅ Done |
+| 12.2 | Tool Use Discord | 🟢 RfR |
+| 12.2b | Tool Use Discord fix | ✅ Done |
+| 12.3 | protocol_context TVL fix | ✅ Done |
+| 12.4 | Smith hardening | ✅ Done |
+| 14.3 | Relatório 21h v2 | ✅ Done |
+| 15.1 | LMAS Framework v5 | 🟡 InProgress (stale) |
+| 15.2 | Ciclo 21h race fix | ✅ Done |
+| 15.3 | Script test_relatorio_21h | 🟢 RfR |
+| 15.4 | Docker API Proxy + Traefik | 🟢 RfR |
+| 16.1 | QA Core Engine (79t) | 🟢 RfR |
+| 16.2 | QA AI Layer (67t) | 🟢 RfR |
+| 16.3 | QA Handlers (57t) | 🟢 RfR |
+| 16.4 | QA Workers (52t) | 🟢 RfR |
+| 17.1 | Twitter/X posting | ⏳ Backlog |
+| 17.2 | TikTok posting | ⏳ Backlog |
+| 18.1 | LiteLLM Proxy | ❌ Cancelada |
+| 19.1 | Monitor v4 Sub | 🟢 RfR |
+| 19.2 | Worker thread v4 | 🟢 RfR |
+| 19.3 | Relatório 2h Discord | 🟢 RfR |
 
 ## Decisoes Tomadas
 
