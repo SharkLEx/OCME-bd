@@ -26,7 +26,7 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-logger = logging.getLogger("webdex.v4_monitor")
+logger = logging.getLogger("WEbdEX")
 
 V4_SUBACCOUNT   = "0x7c5241688eCd253ca3D13172620be22902a4414c"
 V4_MANAGER      = "0x9b4314878f58C3Ca53EC0087AcC8c9A30DF773E0"
