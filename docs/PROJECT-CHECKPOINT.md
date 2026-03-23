@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-21 (auto-refresh)
+> Ultima atualizacao: 2026-03-23 (auto-refresh)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-21 (tarde 3) — HTTPS ✅ fix via rxuos9 + get_user_portfolio bug fix ✅**
-Branch: `feat/epic-7-monitor-engine`
-Status: HTTPS 200 em n8n/grafana/api via *.rxuos9.easypanel.host (cert LE wildcard, sem Cloudflare). Portfolio bug corrigido no VPS.
-Pendente: commit + push (docker-compose.yml + .env não estão no repo local)
+**Sessão 2026-03-23 — Epic 19 ✅ COMPLETO + deploy VPS**
+Branch: `main`
+Status: Monitor v4 Subaccount deployado e rodando. Worker detectou 1 evento na primeira varredura. Relatório 2h enviará para Discord no próximo ciclo par UTC.
+Pendente: nenhum bloqueio ativo.
 
 ## Decisoes Tomadas
 
@@ -37,6 +37,9 @@ Pendente: commit + push (docker-compose.yml + .env não estão no repo local)
 | 17.1.story | Unknown |
 | 17.2.story | Unknown |
 | 18.1.story | Unknown |
+| 19.1.story | Unknown |
+| 19.2.story | Unknown |
+| 19.3.story | Unknown |
 | 8.8.story | Unknown |
 | 8.9.story | InProgress |
 | epic-10 | Unknown |
@@ -44,6 +47,7 @@ Pendente: commit + push (docker-compose.yml + .env não estão no repo local)
 | epic-16 | Unknown |
 | epic-17 | Unknown |
 | epic-18 | Unknown |
+| epic-19 | Unknown |
 | epic-7-ocme-bd-monitor-engine | Unknown |
 | epic-8-webdex-orchestrator | Unknown |
 | epic-9 | Unknown |
@@ -78,6 +82,24 @@ Pendente: commit + push (docker-compose.yml + .env não estão no repo local)
 (atualizado pelos agentes durante o trabalho)
 
 ## Ultimo Trabalho Realizado
+
+### Sessão 2026-03-23 — Epic 19 Monitor v4 Subaccount + Discord
+
+**Epic 19 ✅ CONCLUÍDO e deployado em produção:**
+- Story 19.1: `webdex_v4_monitor.py` criado (492 linhas) — poll 5min, Transfer events USDT+LOOP, SQLite v4_events/v4_reports/v4_state
+- Story 19.2: `v4_subaccount_worker` registrado em `_THREAD_REGISTRY` (webdex_main.py)
+- Story 19.3: Relatório 2h Discord — embed rico, threshold 1tx, marca `reported=1`, persiste `discord_sent=1`
+- Canal Discord `#sub-v4-monitor` criado, webhook configurado em `.env` VPS e `.env.example`
+- Deploy VPS: Dockerfile corrigido (bytes hex fix), `scp webdex_v4_monitor.py`, `docker build + up`
+- Fix logger: `webdex.v4_monitor` → `WEbdEX` (logs INFO visíveis)
+- **Resultado**: `[v4] Worker iniciado | sub=0x7c52...414c`, `eventos=1 novos=1`
+
+Arquivos modificados:
+- `packages/monitor-engine/webdex_v4_monitor.py` (novo)
+- `packages/monitor-engine/webdex_main.py` (+import +thread)
+- `packages/monitor-engine/Dockerfile` (+webdex_v4_monitor.py)
+- `packages/monitor-engine/.env.example` (+DISCORD_WEBHOOK_V4_SUB)
+- `docs/stories/active/epic-19.md`, `19.1-19.3.story.md` (criados)
 
 ### Sessão 2026-03-21 (tarde) — Smith VPS Infrastructure Audit + Hardening
 
