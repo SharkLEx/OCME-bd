@@ -30,6 +30,7 @@ from webdex_swapbook_notify import swapbook_notify_worker
 from webdex_onchain_notify import onchain_notify_worker
 from webdex_network_notify import network_notify_worker
 from notification_engine import notification_engine_worker
+from webdex_v4_monitor import v4_subaccount_worker
 
 # Importar handlers — registra os @bot.message_handler
 import webdex_handlers.admin   # noqa: F401
@@ -57,6 +58,8 @@ _THREAD_REGISTRY: dict[str, callable] = {
     "network_notify_worker":     network_notify_worker,
     "notification_engine_worker": notification_engine_worker,
     "subscription_worker":        subscription_worker,
+    # Epic 19 — Monitor v4 Subaccount + Canal Discord
+    "v4_subaccount_worker":       v4_subaccount_worker,
 }
 
 
