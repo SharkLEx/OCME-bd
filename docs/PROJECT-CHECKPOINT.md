@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-23 17:55 (pre-compact save)
+> Ultima atualizacao: 2026-03-23 (auto-refresh)
 
 ## Contexto Ativo
 
 **Sessão 2026-03-23 — Design System WEbdEX + OCME_bd Série Visual**
-Branch: `feat/epic-7-monitor-engine`
-Status: Cards V01–V05 finalizados com imagens reais bdZinho. Prontos para Creatomate render.
-Pendente (Alex): Cloudflare SSL "Full" para webdex.app + Discord webhook VPS alerts.
+Branch: `main`
+Status: Cards V01–V05 finalizados com imagens reais bdZinho + commit push feito. Infra VPS OK (webhook configurado, SSL não necessário). Pronto para próxima prioridade.
+Pendente: Vídeo bdZinho v3 render final · Roadmap Epic 17/18
 
 ## Decisoes Tomadas
 
@@ -236,10 +236,13 @@ Arquivos locais modificados:
 
 - [x] HTTPS 520 → RESOLVIDO: subdomínios *.rxuos9.easypanel.host (n8n 200, grafana 200, api 200)
 - [x] get_user_portfolio bug → CORRIGIDO no VPS (fl_snapshots sem coluna wallet)
-- [ ] commit + push: PROJECT-CHECKPOINT.md (docker-compose/env são VPS-only)
+- [x] Discord webhook VPS alerts → JÁ CONFIGURADO em /etc/vps-alerts.conf, cron ativo */15min
+- [x] Cloudflare SSL → NÃO NECESSÁRIO (Alex não usa Cloudflare; *.rxuos9 já funciona)
+- [x] Cards V01-V05 OCME_bd → DONE com imagens reais bdZinho, previews gerados, commit push feito
 - [ ] Discord RESUME — comportamento normal py-cord, sem ação necessária
-- [ ] Continuar roadmap stories (Epic 17 X/TikTok, Epic 18 LiteLLM, ou outra prioridade)
-- [ ] Opcional: apontar webdex.app → rxuos9 hosts via Cloudflare redirect/CNAME (quando Alex quiser)
+- [x] Vídeo bdZinho v3 → PNG renderizado + postado no Discord (#conquistas) com copy aprovada
+- [x] Creatomate renders V01-V05 → MP4 10s Ken Burns, URLs em creatomate_renders.json
+- [ ] Continuar roadmap stories (Epic 17 X/TikTok, ou outra prioridade)
 
 ## Git Recente
 (nenhum commit encontrado)

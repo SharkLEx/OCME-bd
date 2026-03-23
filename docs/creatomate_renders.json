@@ -1,0 +1,32 @@
+[
+  {
+    "label": "V01 — O OCME_bd",
+    "cdnUrl": "https://cdn.discordapp.com/attachments/1483080167688765566/1485757997492994099/card_v01.png?ex=69c30776&is=69c1b5f6&hm=d927c1ae3521dde8789af17dc6b60491bd2f23eb9cb63891d987e702d974cf7c&",
+    "videoUrl": "https://f002.backblazeb2.com/file/creatomate-c8xg3hsxdu/2a25e368-c3ae-4f05-8354-7b4967f8a443.mp4",
+    "renderId": "2a25e368-c3ae-4f05-8354-7b4967f8a443"
+  },
+  {
+    "label": "V02 — Monitoramento 24/7",
+    "cdnUrl": "https://cdn.discordapp.com/attachments/1483080167688765566/1485758028635439274/card_v02.png?ex=69c3077e&is=69c1b5fe&hm=a386368ff4da76717d77b2f196443bb4bbf88c5efa61e1b68d7cbdd75768e858&",
+    "videoUrl": "https://f002.backblazeb2.com/file/creatomate-c8xg3hsxdu/755301ec-ed25-4f77-b006-72e0d0e88280.mp4",
+    "renderId": "755301ec-ed25-4f77-b006-72e0d0e88280"
+  },
+  {
+    "label": "V03 — Seus Dados na Palma",
+    "cdnUrl": "https://cdn.discordapp.com/attachments/1483080167688765566/1485758057932783677/card_v03.png?ex=69c30785&is=69c1b605&hm=3f47f8215b0ac149dbcef9c332b5e209f8e13db2a84187f3fb1b9593df2b6563&",
+    "videoUrl": "https://f002.backblazeb2.com/file/creatomate-c8xg3hsxdu/471899e0-4218-412b-ab31-b5c8b9f92c26.mp4",
+    "renderId": "471899e0-4218-412b-ab31-b5c8b9f92c26"
+  },
+  {
+    "label": "V04 — Dois Ambientes",
+    "cdnUrl": "https://cdn.discordapp.com/attachments/1483080167688765566/1485758112010080367/card_v04.png?ex=69c30791&is=69c1b611&hm=167c237c6fdf9efae1929691e8ac0aba4246b17fb0552a52e7191d4272246a66&",
+    "videoUrl": "https://f002.backblazeb2.com/file/creatomate-c8xg3hsxdu/436fd218-71a7-424e-83ac-cf5c71edf00f.mp4",
+    "renderId": "436fd218-71a7-424e-83ac-cf5c71edf00f"
+  },
+  {
+    "label": "V05 — Ciclo 21h Resultados",
+    "cdnUrl": "https://cdn.discordapp.com/attachments/1483080167688765566/1485758160638836776/card_v05.png?ex=69c3079d&is=69c1b61d&hm=7ab6bf9b37c377f539e3b473838b2cf0acf6f6942b7bbaf95a6f7851e55643b8&",
+    "videoUrl": "https://f002.backblazeb2.com/file/creatomate-c8xg3hsxdu/ec615710-e805-4353-bde0-a5dd1e470e6c.mp4",
+    "renderId": "ec615710-e805-4353-bde0-a5dd1e470e6c"
+  }
+]
