@@ -1,6 +1,6 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-23 (Epic 16 QA — 289 testes passando)
+> Ultima atualizacao: 2026-03-23 (auto-refresh)
 
 ## Contexto Ativo
 
