@@ -332,6 +332,83 @@ def _build_report_embed(period_start: datetime, period_end: datetime,
     }
 
 
+def _flush_daily_report(conn: sqlite3.Connection, day_start: datetime, day_end: datetime) -> None:
+    """
+    Relatório diário completo às 21h BRT (00h UTC).
+    Agrega TODAS as txs das últimas 24h — independente de já terem sido
+    reportadas nos ciclos 2h — e envia embed rico no Discord.
+    """
+    start_iso = day_start.strftime("%Y-%m-%d %H:%M:%S")
+    end_iso   = day_end.strftime("%Y-%m-%d %H:%M:%S")
+
+    rows = conn.execute("""
+        SELECT event_type, token_sym, amount_usd, tx_hash
+        FROM v4_events
+        WHERE ts BETWEEN ? AND ?
+        ORDER BY ts ASC
+    """, (start_iso, end_iso)).fetchall()
+
+    if not rows:
+        logger.info("[v4] Relatório diário: sem txs nas últimas 24h — pulando")
+        return
+
+    BRT = timezone(timedelta(hours=-3))
+    label_start = day_start.astimezone(BRT).strftime("%d/%m %H:%M")
+    label_end   = day_end.astimezone(BRT).strftime("%d/%m %H:%M")
+
+    # Agregar por token e direção
+    agg: dict = {}
+    for event_type, token_sym, amount_usd, _ in rows:
+        key = (token_sym, event_type)
+        agg[key] = agg.get(key, 0.0) + amount_usd
+
+    in_usdt  = agg.get(("USDT", "deposit"),    0.0)
+    out_usdt = agg.get(("USDT", "withdrawal"), 0.0)
+    in_loop  = agg.get(("LOOP", "deposit"),    0.0)
+    out_loop = agg.get(("LOOP", "withdrawal"), 0.0)
+    liquido  = (in_usdt + in_loop) - (out_usdt + out_loop)
+    total_txs = len(rows)
+
+    # Maior tx do dia
+    biggest = max(rows, key=lambda r: r[2])
+    arrow = "+" if biggest[0] == "deposit" else "-"
+    biggest_str = f"{arrow}${biggest[2]:,.2f} {biggest[1]} (`{biggest[3][:8]}...`)"
+
+    color = 0x2ECC71 if liquido >= 0 else 0xE74C3C
+
+    embed = {
+        "title": "🗓️ Resumo Diário | SubAccount v4 WEbdEX",
+        "description": (
+            f"**{label_start} → {label_end} BRT**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        "color": color,
+        "fields": [
+            {"name": "🔵 Entradas USDT",  "value": f"`+${in_usdt:,.4f}`",   "inline": True},
+            {"name": "🟣 Entradas LOOP",  "value": f"`+${in_loop:,.4f}`",   "inline": True},
+            {"name": "\u200b",             "value": "\u200b",                 "inline": True},
+            {"name": "🔴 Saídas USDT",    "value": f"`-${out_usdt:,.4f}`",  "inline": True},
+            {"name": "🔴 Saídas LOOP",    "value": f"`-${out_loop:,.4f}`",  "inline": True},
+            {"name": "\u200b",             "value": "\u200b",                 "inline": True},
+            {
+                "name": "💰 Saldo Líquido do Dia",
+                "value": f"**`{'+'if liquido>=0 else ''}{liquido:,.4f} USD`**",
+                "inline": True
+            },
+            {"name": "📦 Total Operações", "value": f"`{total_txs} txs`",   "inline": True},
+            {"name": "🏆 Maior Tx",        "value": biggest_str,              "inline": True},
+        ],
+        "footer": {
+            "text": f"Sub: {V4_SUBACCOUNT[:6]}...{V4_SUBACCOUNT[-4:]} | Polygon | Relatório 24h"
+        },
+        "timestamp": day_end.isoformat(),
+    }
+
+    sent = _send_discord_report({"embeds": [embed]})
+    logger.info("[v4] Relatório diário: %d txs | +$%.4f | -$%.4f | Discord=%s",
+                total_txs, in_usdt + in_loop, out_usdt + out_loop, "OK" if sent else "FAIL")
+
+
 def _send_discord_report(embed_payload: dict) -> bool:
     """Envia embed para o webhook Discord. Retorna True se OK."""
     if not WEBHOOK_URL:
@@ -419,7 +496,8 @@ def v4_subaccount_worker() -> None:
     with DB_LOCK:
         _ensure_v4_schema(conn_v4)
 
-    last_report_ts = None
+    last_report_ts  = None
+    last_daily_date = None   # date (UTC) do último relatório diário enviado
 
     while True:
         try:
@@ -485,6 +563,17 @@ def v4_subaccount_worker() -> None:
                 with DB_LOCK:
                     _flush_report(conn_v4, period_start_naive, period_end_naive)
                 last_report_ts = period_end_naive.timestamp()
+
+            # ---- 3. Relatório diário às 21h BRT (00h UTC) ----
+            if now.hour == 0 and now.minute < 6:  # janela 00:00–00:05 UTC
+                today_utc = now.date()
+                if last_daily_date != today_utc:
+                    day_end_dt   = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                    day_start_dt = day_end_dt - timedelta(hours=24)
+                    with DB_LOCK:
+                        _flush_daily_report(conn_v4, day_start_dt, day_end_dt)
+                    last_daily_date = today_utc
+                    logger.info("[v4] Relatório diário enviado para %s", today_utc)
 
         except Exception as e:
             logger.error("[v4] Worker erro inesperado: %s", e, exc_info=True)
