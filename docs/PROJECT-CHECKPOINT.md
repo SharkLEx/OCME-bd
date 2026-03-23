@@ -1,12 +1,12 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-23 (auto-refresh)
+> Ultima atualizacao: 2026-03-23 17:50 (pre-compact save)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-23 ✅ COMPLETA — relatório 21h + infra RPC**
-Branch: `main` (push `179b29a`)
-Status: Tudo deployado e rodando. Zero erros no container. Próxima: roadmap (Epic 17/18).
+**Sessão 2026-03-23 — Design System WEbdEX + OCME_bd Série Visual**
+Branch: `feat/epic-7-monitor-engine`
+Status: Cards V01–V05 finalizados com imagens reais bdZinho. Prontos para Creatomate render.
 Pendente (Alex): Cloudflare SSL "Full" para webdex.app + Discord webhook VPS alerts.
 
 ## Decisoes Tomadas
@@ -82,6 +82,39 @@ Pendente (Alex): Cloudflare SSL "Full" para webdex.app + Discord webhook VPS ale
 (atualizado pelos agentes durante o trabalho)
 
 ## Ultimo Trabalho Realizado
+
+### Sessão 2026-03-23 — Cards V01-V05 com imagens reais bdZinho
+
+**Imagens reais integradas nos 5 HTML cards (zero IA externa):**
+- V01 ← `post_149_operador-da-tecnologia_01.jpg` (bdZinho arms open, orquestrando)
+- V02 ← `post_145_automação_01.jpg` (bdZinho no cockpit, monitorando)
+- V03 ← `post_147_SubAccount_story_01.jpg` (bdZinho explicando estrutura blockchain)
+- V04 ← `post_148_ambiente-financeiro_01.jpg` (bdZinho entre ambientes, círculo central)
+- V05 ← `post_144_historico_01.jpg` (bdZinho com dashboard de performance)
+- Imagens copiadas para `assets/`, CSS ajustado com `drop-shadow` glow por cor do card
+- Previews gerados via Playwright em `previews/V01-V05-bdzinho-real.png`
+
+Arquivos criados/modificados:
+- `media/projects/ocmc-apresentacao/assets/` (5 imagens bdZinho copiadas)
+- `media/projects/ocmc-apresentacao/cards/V01..V05.html` (img tags reais)
+- `media/projects/ocmc-apresentacao/previews/V01-V05-bdzinho-real.png` (renders)
+
+### Sessão 2026-03-23 — Design System WEbdEX + Série OCME_bd Visual
+
+**Design workflow executado por Sati + Smith (zero IA externa):**
+- `docs/MASTER.md` criado — Brand book WEbdEX unificado (14 seções)
+- `media/bdzinho_v3_announcement.html` refinado — quote + closing CTA adicionados
+- `media/projects/ocmc-apresentacao/STYLE-GUIDE.md` criado — guide V01-V05
+- `media/projects/ocmc-apresentacao/cards/V01-V05` criados — 5 HTML cards 1080×1920px
+- Fix OCMC_bd → OCME_bd em README + V01/V02/V04/V05 scripts + cores README
+
+Arquivos criados/modificados:
+- `docs/MASTER.md` (novo)
+- `media/bdzinho_v3_announcement.html` (modificado)
+- `media/projects/ocmc-apresentacao/STYLE-GUIDE.md` (novo)
+- `media/projects/ocmc-apresentacao/cards/V01..V05.html` (5 novos)
+- `media/projects/ocmc-apresentacao/README.md` (fix naming + cores)
+- `media/projects/ocmc-apresentacao/scripts/V01,V02,V04,V05.md` (fix naming)
 
 ### Sessão 2026-03-23 — Fixes relatório 21h (TVL + ciclo + Smith audit)
 
