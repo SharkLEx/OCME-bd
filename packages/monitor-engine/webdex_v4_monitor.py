@@ -54,7 +54,7 @@ except ImportError:
     # fallback para testes isolados
     DB_LOCK = threading.Lock()
     DB_PATH = os.getenv("DB_PATH", "webdex_v5_final.db")
-    RPC_URL = os.getenv("RPC_URL", "https://rpc.ankr.com/polygon")
+    RPC_URL = os.getenv("RPC_URL", "https://1rpc.io/matic")
     RPC_FALLBACK = os.getenv("RPC_FALLBACK", "https://polygon-bor-rpc.publicnode.com")
     from web3 import Web3
 
@@ -129,7 +129,7 @@ def _make_w3(rpc: str) -> Web3:
 
 def _get_w3() -> Optional[Web3]:
     """Retorna Web3 conectado, tentando RPC_URL e RPC_FALLBACK."""
-    for rpc in [RPC_URL, RPC_FALLBACK, "https://rpc.ankr.com/polygon"]:
+    for rpc in [RPC_URL, RPC_FALLBACK, "https://polygon.drpc.org"]:
         if not rpc:
             continue
         try:

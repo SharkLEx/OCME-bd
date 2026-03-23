@@ -142,9 +142,9 @@ TELEGRAM_TOKEN = (os.getenv("TELEGRAM_TOKEN") or "").strip()
 
 _RPC_PUBLICOS = [
     "https://polygon-rpc.com",
-    "https://rpc.ankr.com/polygon",
-    "https://polygon-bor-rpc.publicnode.com",
     "https://1rpc.io/matic",
+    "https://polygon-bor-rpc.publicnode.com",
+    "https://polygon.drpc.org",
 ]
 RPC_URL      = (os.getenv("RPC_URL") or "").strip()      or _RPC_PUBLICOS[0]
 RPC_CAPITAL  = (os.getenv("RPC_CAPITAL") or "").strip()  or _RPC_PUBLICOS[1]
