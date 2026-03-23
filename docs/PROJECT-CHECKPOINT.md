@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-23 16:09 (pre-compact save)
+> Ultima atualizacao: 2026-03-23 (auto-refresh)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-23 — Fixes relatório 21h (TVL + ciclo timing + Smith audit)**
-Branch: `feat/epic-7-monitor-engine`
-Status: 4 fixes Smith aplicados em `webdex_workers.py`. TVL fix em `protocol_context.py` e `test_relatorio_21h.py`.
-Pendente: SCP para VPS (`webdex_workers.py` + `protocol_context.py`) + commit/push.
+**Sessão 2026-03-23 ✅ COMPLETA — relatório 21h + infra RPC**
+Branch: `main` (push `179b29a`)
+Status: Tudo deployado e rodando. Zero erros no container. Próxima: roadmap (Epic 17/18).
+Pendente (Alex): Cloudflare SSL "Full" para webdex.app + Discord webhook VPS alerts.
 
 ## Decisoes Tomadas
 
