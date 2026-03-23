@@ -4,10 +4,10 @@
 
 ## Contexto Ativo
 
-**Sessão 2026-03-23 — Design System WEbdEX + OCME_bd Série Visual**
+**Sessão 2026-03-23 — Smith Audit + Remediation completa**
 Branch: `main`
-Status: Cards V01–V05 finalizados com imagens reais bdZinho + commit push feito. Infra VPS OK (webhook configurado, SSL não necessário). Pronto para próxima prioridade.
-Pendente: Vídeo bdZinho v3 render final · Roadmap Epic 17/18
+Status: Smith audit concluído (INFECTED→CONTAINED). Credenciais removidas dos tmp scripts. PNGs + creatomate_renders.json commitados. Commit: `24106f9`.
+Pendente (Alex faz): 1) Rotacionar Creatomate API key no dashboard · 2) Criar #vps-alertas no Discord + atualizar /etc/vps-alerts.conf · 3) Rodar ocme-update no VPS + adicionar cron diário 03:00
 
 ## Decisoes Tomadas
 
