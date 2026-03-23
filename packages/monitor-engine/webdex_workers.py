@@ -114,20 +114,23 @@ def agendador_21h():
                     rows = cursor.execute("SELECT chat_id FROM users WHERE active=1").fetchall()
                 # Acumuladores para o relatório agregado Discord
                 _agg_liq = 0.0; _agg_gas = 0.0; _agg_trades = 0; _agg_wins = 0
+                # Ciclo que fechou: de ontem 21h → hoje 21h (computado uma vez antes do loop)
+                _ciclo_fim = datetime.strptime(_ciclo_21h_since(), "%Y-%m-%d %H:%M:%S")
+                dt_lim = (_ciclo_fim - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+                dt_fim = _ciclo_fim.strftime("%Y-%m-%d %H:%M:%S")  # limite superior BRT (anti double-count)
                 for (cid,) in rows:
                     if get_config(f"last_rep_{cid}", "") == hoje:
                         continue
                     u = get_user(cid)
                     if not u or not u.get("wallet"):
                         continue
-                    dt_lim = _ciclo_21h_since()  # corte 21h BR (não meia-noite)
                     with DB_LOCK:
                         cursor.execute("""
                             SELECT SUM(o.valor), SUM(o.gas_usd)
                             FROM operacoes o
                             JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
-                            WHERE o.tipo='Trade' AND o.data_hora>=? AND ow.wallet=?
-                        """, (dt_lim, u["wallet"]))
+                            WHERE o.tipo='Trade' AND o.data_hora>=? AND o.data_hora<? AND ow.wallet=?
+                        """, (dt_lim, dt_fim, u["wallet"]))
                         r = cursor.fetchone()
                     if r and r[0] is not None:
                         liq   = float(r[0]) - float(r[1] or 0.0)
@@ -138,8 +141,8 @@ def agendador_21h():
                                 SELECT COUNT(*), SUM(CASE WHEN o.valor>0 THEN 1 ELSE 0 END)
                                 FROM operacoes o
                                 JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
-                                WHERE o.tipo='Trade' AND o.data_hora>=? AND ow.wallet=?
-                            """, (dt_lim, u["wallet"])).fetchone()
+                                WHERE o.tipo='Trade' AND o.data_hora>=? AND o.data_hora<? AND ow.wallet=?
+                            """, (dt_lim, dt_fim, u["wallet"])).fetchone()
                         total_t = int(wr_row[0] or 0) if wr_row else 0
                         wins    = int(wr_row[1] or 0) if wr_row else 0
                         wr_pct  = (wins / total_t * 100) if total_t > 0 else 0
@@ -194,11 +197,12 @@ def agendador_21h():
                     try:
                         # Marcar em-progresso com timestamp — TTL 10 min evita deadlock em restart
                         set_config(_discord_21h_key, f"pending:{int(time.time())}")
-                        _dt_lim_brt = _ciclo_21h_since()  # corte 21h em BRT
-                        # protocol_ops.ts é UTC; _ciclo_21h_since() retorna BRT → converter +3h
-                        _dt_lim = (
-                            datetime.strptime(_dt_lim_brt, "%Y-%m-%d %H:%M:%S") + timedelta(hours=3)
-                        ).strftime("%Y-%m-%d %H:%M:%S")
+                        # Ciclo que fechou: de ontem 21h BRT → hoje 21h BRT
+                        # protocol_ops.ts é UTC → ontem 21h BRT = hoje 00h UTC
+                        _ciclo_fim_brt = datetime.strptime(_ciclo_21h_since(), "%Y-%m-%d %H:%M:%S")
+                        _ciclo_inicio_brt = _ciclo_fim_brt - timedelta(hours=24)
+                        _dt_lim = (_ciclo_inicio_brt + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")
+                        _dt_fim = (_ciclo_fim_brt + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S")  # limite superior UTC
                         with DB_LOCK:
                             _pr = cursor.execute("""
                                 SELECT COUNT(DISTINCT wallet),
@@ -206,20 +210,20 @@ def agendador_21h():
                                        COUNT(*),
                                        ROUND(SUM(fee_bd),6),
                                        ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4)
-                                FROM protocol_ops WHERE ts>=?
-                            """, (_dt_lim,)).fetchone()
+                                FROM protocol_ops WHERE ts>=? AND ts<?
+                            """, (_dt_lim, _dt_fim)).fetchone()
                             _tvl_row = cursor.execute("""
-                                SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply),2)
+                                SELECT ROUND(SUM(total_usd),2)
                                 FROM fl_snapshots WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)
                             """).fetchone()
                             _top5 = cursor.execute("""
                                 SELECT wallet,
                                        ROUND(SUM(profit),4),
                                        ROUND(SUM(fee_bd),4)
-                                FROM protocol_ops WHERE ts>=?
+                                FROM protocol_ops WHERE ts>=? AND ts<?
                                 GROUP BY wallet ORDER BY SUM(profit) DESC LIMIT 5
-                            """, (_dt_lim,)).fetchall()
-                        if not _pr or _pr[0] is None:
+                            """, (_dt_lim, _dt_fim)).fetchall()
+                        if not _pr or _pr[2] == 0:
                             logger.info("[agendador_21h] Sem ops no ciclo atual — pulando relatório Discord")
                             set_config(_discord_21h_key, "")   # resetar para retry (sem ops)
                             continue
@@ -428,7 +432,7 @@ def agendador_horario():
                                     FROM protocol_ops WHERE ts>=?
                                 """, (_dt_lim_utc,)).fetchone()
                                 _tvl_row = cursor.execute("""
-                                    SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply),2)
+                                    SELECT ROUND(SUM(total_usd),2)
                                     FROM fl_snapshots WHERE ts=(SELECT MAX(ts) FROM fl_snapshots)
                                 """).fetchone()
                             _s_traders = int(_s_row[0] or 0)

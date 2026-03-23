@@ -37,7 +37,7 @@ with DB_LOCK:
     """, (dt_lim,)).fetchone()
 
     tvl_row = cursor.execute("""
-        SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply),2)
+        SELECT ROUND(SUM(total_usd),2)
         FROM fl_snapshots WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)
     """).fetchone()
 

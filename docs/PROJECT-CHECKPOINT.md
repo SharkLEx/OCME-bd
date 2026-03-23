@@ -1,13 +1,13 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-23 (auto-refresh)
+> Ultima atualizacao: 2026-03-23 16:09 (pre-compact save)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-23 — Epic 19 ✅ COMPLETO + deploy VPS**
-Branch: `main`
-Status: Monitor v4 Subaccount deployado e rodando. Worker detectou 1 evento na primeira varredura. Relatório 2h enviará para Discord no próximo ciclo par UTC.
-Pendente: nenhum bloqueio ativo.
+**Sessão 2026-03-23 — Fixes relatório 21h (TVL + ciclo timing + Smith audit)**
+Branch: `feat/epic-7-monitor-engine`
+Status: 4 fixes Smith aplicados em `webdex_workers.py`. TVL fix em `protocol_context.py` e `test_relatorio_21h.py`.
+Pendente: SCP para VPS (`webdex_workers.py` + `protocol_context.py`) + commit/push.
 
 ## Decisoes Tomadas
 
@@ -82,6 +82,25 @@ Pendente: nenhum bloqueio ativo.
 (atualizado pelos agentes durante o trabalho)
 
 ## Ultimo Trabalho Realizado
+
+### Sessão 2026-03-23 — Fixes relatório 21h (TVL + ciclo + Smith audit)
+
+**Bugs corrigidos em `webdex_workers.py`:**
+- TVL: `lp_usdt_supply + lp_loop_supply` (raw LP) → `SUM(total_usd)` (USD real)
+- Ciclo timing: `_ciclo_21h_since()` = início do ciclo NOVO → subtrair 24h = ciclo que fechou
+- Smith Fix 1 🔴: guard `_pr[0] is None` → `_pr[2] == 0` (COUNT() nunca retorna NULL)
+- Smith Fix 2 🟡: `_ciclo_fim`/`dt_lim` hoistado para fora do loop por-usuário
+- Smith Fix 3 🟡: comentário UTC corrigido ("ontem 00h" → "hoje 00h")
+- Smith Fix 4 🟡: upper bound `AND data_hora<?` / `AND ts<?` adicionado (anti double-count)
+
+**TVL fix aplicado também em:**
+- `protocol_context.py` (get_protocol_context + get_status_embed_data)
+- `scripts/test_relatorio_21h.py`
+
+Arquivos modificados:
+- `packages/monitor-engine/webdex_workers.py`
+- `packages/monitor-engine/protocol_context.py`
+- `packages/monitor-engine/scripts/test_relatorio_21h.py`
 
 ### Sessão 2026-03-23 — Epic 19 Monitor v4 Subaccount + Discord
 

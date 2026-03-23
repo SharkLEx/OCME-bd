@@ -37,16 +37,15 @@ def get_protocol_context() -> str:
         conn = _conn()
         lines = ["=== DADOS REAIS DO PROTOCOLO WEbdEX (agora) ==="]
 
-        # TVL combinado (Story 15.2 — lp_usdt_supply + lp_loop_supply)
+        # TVL combinado — total_usd já inclui preços reais dos LP tokens
         try:
             tvl_row = conn.execute(
-                """SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply), 2)
+                """SELECT ROUND(SUM(total_usd), 2)
                    FROM fl_snapshots
                    WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)"""
             ).fetchone()
             tvl_total = float(tvl_row[0] or 0) if tvl_row else 0.0
         except Exception:
-            # fallback para total_usd se colunas lp_* não existirem
             tvl_rows = conn.execute(
                 """SELECT env, total_usd FROM fl_snapshots
                    WHERE (env, ts) IN (SELECT env, MAX(ts) FROM fl_snapshots GROUP BY env)"""
@@ -108,10 +107,10 @@ def get_status_embed_data() -> dict:
     try:
         conn = _conn()
 
-        # TVL combinado (Story 15.2)
+        # TVL combinado — total_usd já inclui preços reais dos LP tokens
         try:
             tvl_row = conn.execute(
-                """SELECT ROUND(SUM(lp_usdt_supply + lp_loop_supply), 2)
+                """SELECT ROUND(SUM(total_usd), 2)
                    FROM fl_snapshots
                    WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)"""
             ).fetchone()
