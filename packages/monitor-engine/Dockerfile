@@ -61,6 +61,7 @@ COPY monitor-engine/webdex_config.py \
      monitor-engine/creatomate_worker.py \
      monitor-engine/metrics_worker.py \
      monitor-engine/webdex_ai_memory.py \
+     monitor-engine/webdex_v4_monitor.py \
      ./
 
 # Handlers do bot
