@@ -4,9 +4,9 @@
 
 ## Contexto Ativo
 
-**Sessão 2026-03-23 — Epic 16 QA Audit COMPLETO: 289/289 testes passando**
-Branch: `feat/epic-7-monitor-engine`
-Status: Stories 16.1 + 16.2 ✅ Ready for Review. Suite completa: 289 testes, 0 falhas, 35.5s.
+**Sessão 2026-03-23 — Grooming + Epic 16 Done + Epic 18.1 cancelado**
+Branch: `main`
+Status: main limpo, 289 testes passando, OpenRouter configurado (OPENROUTER_API_KEY ativo).
 Pendente (requer dashboard web): Rotacionar Creatomate API key em https://app.creatomate.com/settings → API Keys (a chave antiga `2d948f174156...` ainda está ativa)
 
 ## Decisoes Tomadas
@@ -20,9 +20,10 @@ Pendente (requer dashboard web): Rotacionar Creatomate API key em https://app.cr
 | Instagram (8.8) → bloqueada até Meta aprovar app | Não adianta implementar sem poder testar |
 | Twitter/X (17.1) → OAuth 1.0a com hmac stdlib | Evita dependência requests-oauthlib |
 | TikTok (17.2) → upload 3-step (init+PUT+poll) | Único fluxo suportado pelo Content Posting API |
-| LiteLLM stack → gpt-4o-mini + DeepSeek V3 + Groq | -60% custo, fallback automático via proxy |
-| LiteLLM → OpenAI SDK com base_url (não litellm lib) | Menos dependências, mesma funcionalidade |
-| Epic 13 (Dashboard) → adiado | Analisar após social media + LiteLLM |
+| Epic 18.1 (LiteLLM) → CANCELADO | OpenRouter já resolve — OPENROUTER_API_KEY ativo, multi-model, sem container extra |
+| IA: OpenRouter com Claude Haiku 4.5 | OPENAI_MODEL=anthropic/claude-haiku-4-5, _AI_BASE_URL=openrouter.ai/api/v1 |
+| Epic 13 (Dashboard) → adiado | Analisar após social media completo |
+| Epic 7 → DONE, branch deletada | Todo trabalho já estava em main — feat/epic-7-monitor-engine removida |
 
 ## Status das Stories
 
