@@ -180,8 +180,17 @@ tests/*/__fixtures__/
 # UI/UX design artifacts
 docs/ui-prompts.pdf
 
-# Media project scripts (podem conter API keys — não commitar)
-media/projects/
+# Media project scripts — binários pesados ignorados, scripts commitados
+media/projects/*/renders/
+media/projects/*/previews/
+media/projects/*/audio/
+media/projects/*/templates/
+media/projects/*/assets/
+# Exceções: scripts e configs sem secrets são commitados
+!media/projects/*/render_local.js
+!media/projects/*/local_renders.json
+!media/projects/*/README.md
+!media/projects/*/STYLE-GUIDE.md
 
 # NOTE: docs/ internal directories are gitignored in the
 # "INTERNAL DOCS" section below. Only public docs ship.

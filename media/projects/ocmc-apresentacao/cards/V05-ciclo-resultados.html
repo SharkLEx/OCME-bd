@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1080">
+<title>V05 — Ciclo 21h — Resultados Reais</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --black: #000000; --dark: #131313;
+    --pink: #FB0491; --red: #D90048;
+    --green: #00FFB2; --cyan: #00D4FF;
+    --white: #ffffff; --gray: #888888;
+  }
+  body {
+    width: 1080px; height: 1920px;
+    background: var(--black);
+    font-family: 'Syne', sans-serif;
+    color: var(--white);
+    overflow: hidden; position: relative;
+  }
+  /* V05 glow — verde (resultados/performance) */
+  body::before {
+    content: '';
+    position: absolute;
+    top: -150px; right: -150px;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(0,255,178,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  body::after {
+    content: '';
+    position: absolute;
+    bottom: 60px; left: -100px;
+    width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(0,212,255,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 48px 64px;
+    border-bottom: 1px solid rgba(0,255,178,0.2);
+  }
+  .logo-wrap { display: flex; align-items: center; gap: 20px; }
+  .logo-icon {
+    width: 72px; height: 72px; border-radius: 18px;
+    background: linear-gradient(135deg, #FB0491 0%, #D90048 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 22px; color: white; letter-spacing: -2px;
+  }
+  .logo-text { font-family: 'Press Start 2P', monospace; font-size: 26px; }
+  .logo-text span { color: var(--pink); }
+  .header-badge { color: var(--green); font-weight: 700; letter-spacing: 3px; font-size: 18px; }
+
+  /* ── SCENE AREA ── */
+  .scene-area {
+    height: 840px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    flex-direction: column;
+    gap: 32px;
+    padding: 0 64px;
+  }
+
+  /* Hora do ciclo */
+  .ciclo-time {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 64px;
+    color: var(--green);
+    letter-spacing: 4px;
+    text-shadow: 0 0 40px rgba(0,255,178,0.5);
+    position: relative;
+  }
+  .ciclo-label {
+    font-size: 18px; font-weight: 700; letter-spacing: 4px;
+    color: var(--gray); text-transform: uppercase;
+    margin-top: 8px; text-align: center;
+  }
+
+  /* Painéis de resultado */
+  .results-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    width: 100%;
+  }
+  .result-card {
+    background: var(--dark);
+    border-radius: 20px;
+    padding: 32px 36px;
+    border-left: 4px solid var(--green);
+    position: relative; overflow: hidden;
+  }
+  .result-card::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(0,255,178,0.06) 0%, transparent 60%);
+    border-radius: 20px;
+    pointer-events: none;
+  }
+  .result-card.protocol { border-left-color: var(--cyan); }
+  .result-card.protocol::before {
+    background: linear-gradient(135deg, rgba(0,212,255,0.06) 0%, transparent 60%);
+  }
+  .rc-label {
+    font-size: 14px; font-weight: 700; letter-spacing: 3px;
+    text-transform: uppercase; margin-bottom: 12px;
+    color: var(--green);
+  }
+  .result-card.protocol .rc-label { color: var(--cyan); }
+  .rc-value { font-size: 44px; font-weight: 800; line-height: 1.0; letter-spacing: -1px; }
+  .rc-sub { font-size: 16px; color: var(--gray); margin-top: 6px; }
+
+  /* Notificação Telegram */
+  .tg-notification {
+    background: #1E2029;
+    border: 1px solid rgba(0,255,178,0.25);
+    border-radius: 20px;
+    padding: 24px 28px;
+    display: flex; align-items: center; gap: 20px;
+    width: 100%;
+  }
+  .tg-icon {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg, #FB0491, #D90048);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; flex-shrink: 0;
+  }
+  .tg-content {}
+  .tg-title { font-size: 18px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .tg-text { font-size: 16px; color: var(--gray); }
+  .tg-text .highlight { color: var(--green); font-weight: 700; }
+
+  /* bdZinho no canto */
+  .bdzinho-mini {
+    position: absolute;
+    right: 32px; top: 48px;
+    width: 220px; height: 220px;
+    opacity: 0.85;
+  }
+  .bdzinho-mini img {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 0 32px rgba(0,255,178,0.45));
+    border-radius: 16px;
+  }
+
+  /* ── DIVIDER ── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(0,255,178,0.3) 30%, rgba(0,255,178,0.3) 70%, transparent 100%);
+    margin: 0 64px;
+  }
+
+  /* ── TEXT AREA ── */
+  .text-area { padding: 48px 64px 0; }
+  .text-eyebrow {
+    font-size: 20px; font-weight: 700;
+    color: var(--green); letter-spacing: 4px;
+    text-transform: uppercase; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .text-eyebrow::before {
+    content: ''; width: 60px; height: 3px;
+    background: var(--green); flex-shrink: 0;
+  }
+  .text-main {
+    font-size: 80px; font-weight: 800;
+    line-height: 1.0; letter-spacing: -2px;
+    margin-bottom: 28px;
+  }
+  .text-main .accent { color: var(--green); }
+  .text-sub {
+    font-size: 28px; font-weight: 400;
+    color: rgba(255,255,255,0.75); line-height: 1.45;
+  }
+
+  /* ── FOOTER ── */
+  .footer {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 40px 64px;
+    border-top: 1px solid rgba(0,255,178,0.15);
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(0,0,0,0.85);
+  }
+  .footer-brand { font-family: 'Press Start 2P', monospace; font-size: 13px; color: var(--gray); }
+  .footer-brand span { color: var(--pink); }
+  .footer-cta { font-size: 20px; font-weight: 700; color: var(--green); letter-spacing: 1px; }
+</style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo-wrap">
+      <div class="logo-icon">bd</div>
+      <div class="logo-text">WE<span>bd</span>EX</div>
+    </div>
+    <div class="header-badge">CICLO 21H</div>
+  </div>
+
+  <!-- SCENE AREA -->
+  <div class="scene-area">
+    <!-- bdZinho real -->
+    <div class="bdzinho-mini">
+      <img src="../assets/post_144_historico_01.jpg" alt="bdZinho">
+    </div>
+
+    <!-- Hora do ciclo -->
+    <div style="text-align:center;">
+      <div class="ciclo-time">🌙 21:00</div>
+      <div class="ciclo-label">Ciclo encerrado · Resultados calculados</div>
+    </div>
+
+    <!-- Grid de resultados -->
+    <div class="results-grid">
+      <div class="result-card">
+        <div class="rc-label">Receita Protocol</div>
+        <div class="rc-value" style="color:var(--green);">+$847</div>
+        <div class="rc-sub">Fee acumulado</div>
+      </div>
+      <div class="result-card protocol">
+        <div class="rc-label">Usuários</div>
+        <div class="rc-value" style="color:var(--cyan);">79</div>
+        <div class="rc-sub">Traders ativos</div>
+      </div>
+      <div class="result-card">
+        <div class="rc-label">P&L Médio</div>
+        <div class="rc-value" style="color:var(--green);">+4.7%</div>
+        <div class="rc-sub">Por usuário</div>
+      </div>
+      <div class="result-card protocol">
+        <div class="rc-label">Operações</div>
+        <div class="rc-value" style="color:var(--cyan);">312</div>
+        <div class="rc-sub">Executadas</div>
+      </div>
+    </div>
+
+    <!-- Notificação Telegram -->
+    <div class="tg-notification">
+      <div class="tg-icon">🤖</div>
+      <div class="tg-content">
+        <div class="tg-title">🌙 Relatório do Ciclo 21H</div>
+        <div class="tg-text">Seus resultados: <span class="highlight">+$127,40 (+4.7%)</span> — enviado agora</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- TEXT AREA -->
+  <div class="text-area">
+    <div class="text-eyebrow">CICLO 21H</div>
+    <div class="text-main">RESULTADOS<br><span class="accent">REAIS</span></div>
+    <div class="text-sub">Registrado. Auditável. Direto<br>no seu Telegram antes de dormir.</div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div class="footer-brand">WE<span>bd</span>EX Protocol</div>
+    <div class="footer-cta">t.me/OCME_bd →</div>
+  </div>
+
+</body>
+</html>
