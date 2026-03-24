@@ -1,6 +1,6 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-23 (auto-refresh)
+> Ultima atualizacao: 2026-03-24 (auto-refresh)
 
 ## Contexto Ativo
 
@@ -28,7 +28,7 @@ Pendente (requer dashboard web): Rotacionar Creatomate API key em https://app.cr
 ## Status das Stories
 
 <!-- GROOMING 2026-03-23 — não editar manualmente, use @po *grooming para atualizar -->
-> Total: **39 stories + 9 epics** | ✅ Done: 21 | 🟢 RfR: 11 | 🟡 InProgress: 3 | ⏳ Backlog: 2 | 🔵 Blocked: 2 | ❌ Cancelada: 1
+> Total: **39 stories + 9 epics** | ✅ Done: 25 | 🟢 RfR: 10 | 🟡 InProgress: 1 | ⏳ Backlog: 2 | 🔵 Blocked: 1 | ❌ Cancelada: 1 (Smith INFECTED→CONTAINED ✅)
 
 ### Epics (grooming 2026-03-23)
 
