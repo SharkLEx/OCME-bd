@@ -82,7 +82,7 @@ print(f"{'='*50}")
 print(f"  {em} P&L Bruto:  {pl}")
 print(f"  🎯 WinRate:   {p_wr:.1f}%  ({p_wins}/{p_total} trades)")
 print(f"  👥 Traders:   {p_traders}")
-print(f"  💎 TVL:       ${tvl_usd:,.0f}")
+print(f"  💧 Liquidez LP: ${tvl_usd:,.0f}")
 print(f"  💰 BD:        {p_bd:.4f}")
 print(f"  📅 Data:      {hoje}")
 if top5:

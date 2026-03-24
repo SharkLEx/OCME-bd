@@ -153,7 +153,7 @@ def render_imagem(
         tvl_fmt = f"${tvl_usd/1_000_000:.2f}M" if tvl_usd >= 1_000_000 else f"${tvl_usd:,.0f}"
         draw.text((cx_right, y), tvl_fmt, font=f_stat_val,
                   fill=_ACCENT, anchor="mm")
-        draw.text((cx_right, y + 80), "TVL", font=f_stat_lbl,
+        draw.text((cx_right, y + 80), "Liquidez LP", font=f_stat_lbl,
                   fill=_MUTED, anchor="mm")
 
         # ── Divisor ───────────────────────────────────────────────────────
@@ -227,7 +227,7 @@ def post_discord(
                 f"**P&L Bruto:** `{pnl_str}`\n"
                 f"**Traders:** `{traders}` · **Trades:** `{trades:,}`\n"
                 f"**WinRate:** `{winrate:.1f}%`\n"
-                f"**TVL:** `${tvl_usd:,.0f}`\n"
+                f"**Liquidez LP:** `${tvl_usd:,.0f}`\n"
                 f"**BD Coletado:** `{bd:.4f}`\n"
                 f"**Data:** {data_fmt}"
             ),
