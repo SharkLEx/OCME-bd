@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from datetime import datetime, timedelta
 from webdex_db import DB_LOCK, conn, cursor, get_config, now_br, _ciclo_21h_since
-from webdex_discord_sync import notify_protocolo_relatorio, _WEBHOOK_RELATORIO
+from webdex_discord_sync import notify_protocolo_relatorio, notify_protocolo_relatorio_telegram, _WEBHOOK_RELATORIO
 
 try:
     from webdex_render_pil import render_e_postar_relatorio as _pil_render
@@ -45,9 +45,12 @@ with DB_LOCK:
         FROM protocol_ops WHERE ts>=? AND ts<?
     """, (dt_lim, dt_fim)).fetchone()
 
+    # Per-env max — soma o snapshot mais recente de CADA ambiente
     tvl_row = cursor.execute("""
-        SELECT ROUND(SUM(total_usd),2)
-        FROM fl_snapshots WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)
+        SELECT ROUND(SUM(f.total_usd),2)
+        FROM fl_snapshots f
+        INNER JOIN (SELECT env, MAX(ts) AS max_ts FROM fl_snapshots GROUP BY env) latest
+          ON f.env=latest.env AND f.ts=latest.max_ts
     """).fetchone()
 
     top5 = cursor.execute("""
@@ -106,6 +109,34 @@ notify_protocolo_relatorio(
     label="Ciclo 21h",
 )
 print("[teste] ✅ Relatório Discord enviado!")
+
+# Broadcast Telegram — bot.send_message direto (síncrono) para garantir flush antes do script encerrar
+try:
+    from webdex_bot_core import bot as _tg_bot
+    _tg_msg = notify_protocolo_relatorio_telegram(
+        hoje=hoje,
+        tvl_usd=tvl_usd,
+        bd_periodo=p_bd,
+        p_traders=p_traders,
+        p_wr=p_wr,
+        p_bruto=p_bruto,
+        top_traders=top5,
+        label="Ciclo 21h",
+    )
+    with DB_LOCK:
+        tg_users = cursor.execute(
+            "SELECT DISTINCT chat_id FROM users WHERE active=1"
+        ).fetchall()
+    tg_sent = 0
+    for (uid,) in tg_users:
+        try:
+            _tg_bot.send_message(int(uid), _tg_msg, parse_mode="HTML", disable_web_page_preview=True)
+            tg_sent += 1
+        except Exception as _te:
+            print(f"[teste] ⚠️ Telegram uid={uid}: {_te}")
+    print(f"[teste] ✅ Relatório Telegram enviado para {tg_sent} usuário(s).")
+except Exception as _tg_err:
+    print(f"[teste] ⚠️ Broadcast Telegram falhou: {_tg_err}")
 
 # Imagem PIL — nodo designer interno (zero APIs externas)
 if _pil_render and p_total > 0:

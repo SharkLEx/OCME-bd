@@ -19,7 +19,7 @@ from webdex_db import (
     DB_LOCK, cursor, conn, set_user_active, now_br, get_config, set_config,
     normalize_txhash,
 )
-from webdex_chain import obter_preco_pol
+from webdex_chain import obter_preco_pol, invalidate_wallet_map_cache
 
 import matplotlib
 matplotlib.use("Agg")
@@ -119,12 +119,34 @@ def _tg_send_with_retry(fn, *args, **kwargs):
             last_err = e
             if _is_tg_blocked_error(e):
                 try:
-                    logger.warning(f"Telegram 403 (blocked) -> desativando chat_id={chat_id}")
+                    logger.warning("Telegram 403 (blocked) — desativando chat_id=%s. Notificações suspensas para este usuário.", chat_id)
                 except Exception:
                     pass
                 try:
                     if chat_id is not None:
                         set_user_active(int(chat_id), 0)
+                        invalidate_wallet_map_cache()
+                        # Alerta admins — dedup 6h por chat_id para evitar flood
+                        try:
+                            from webdex_config import ADMIN_USER_IDS as _AIDS
+                            _dedup_key = f"admin_403_alerted_{chat_id}"
+                            _last_alerted = float(get_config(_dedup_key, "0") or "0")
+                            if (time.time() - _last_alerted) >= 21600:  # 6h de dedup
+                                set_config(_dedup_key, str(int(time.time())))
+                                _amsg = (
+                                    f"⚠️ <b>Usuário desativado (Telegram 403)</b>\n"
+                                    f"chat_id: <code>{chat_id}</code>\n"
+                                    f"Motivo: bot bloqueado pelo usuário.\n"
+                                    f"Notificações suspensas. Use /fix_notifications para reativar."
+                                )
+                                for _aid in _AIDS:
+                                    if int(_aid) != int(chat_id):
+                                        try:
+                                            bot.send_message(int(_aid), _amsg, parse_mode="HTML")
+                                        except Exception:
+                                            pass
+                        except Exception:
+                            pass
                 except Exception:
                     pass
                 return None

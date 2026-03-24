@@ -56,9 +56,75 @@ except ImportError:
 def sentinela():
     logger.info("🛡️ Sentinela: Ativo...")
     last = 0
+    _last_vigia_check = 0.0          # watchdog: dispara imediatamente no startup (intencional)
+    _last_health_check = time.time() # health: primeira verificação após 6h (evita spam no startup)
     while True:
         try:
-            if time.time() - last > 300:
+            now_ts = time.time()
+
+            # ── Watchdog vigia: alerta se last_block estiver > 500 blocos atrás ──
+            if now_ts - _last_vigia_check > 600:
+                try:
+                    _lb_str = str(get_config("last_block", "") or "").strip()
+                    if _lb_str.isdigit():
+                        _curr_block = int(web3.eth.block_number)
+                        _lag = _curr_block - int(_lb_str)
+                        if _lag > 500:
+                            from webdex_config import ADMIN_USER_IDS as _AIDS
+                            _vmsg = (
+                                f"🚨 <b>VIGIA COM LAG CRÍTICO</b>\n"
+                                f"last_block: <code>{_lb_str}</code>\n"
+                                f"atual: <code>{_curr_block}</code>\n"
+                                f"lag: <b>{_lag} blocos (~{_lag * 2.4 / 60:.0f} min)</b>\n"
+                                f"Verifique o container: <code>docker logs ocme-monitor --tail=50</code>"
+                            )
+                            _vigia_alerted_key = f"vigia_lag_alerted_{_lb_str}"
+                            _vigia_last_alert = float(get_config(_vigia_alerted_key, "0") or "0")
+                            if (time.time() - _vigia_last_alert) >= 1800:  # re-alerta a cada 30min enquanto travado
+                                for _aid in _AIDS:
+                                    try:
+                                        send_html(int(_aid), _vmsg)
+                                    except Exception:
+                                        pass
+                                set_config(_vigia_alerted_key, str(int(time.time())))
+                                logger.warning("[sentinela/watchdog] Vigia lag=%d blocos — admins alertados", _lag)
+                        elif _lag >= 0:
+                            # lag aceitável — limpar alerta anterior se existir
+                            pass
+                except Exception as _wde:
+                    logger.debug("[sentinela/watchdog] erro: %s", _wde)
+                _last_vigia_check = now_ts
+
+            # ── Health check: usuários active=0 com wallet (silent kill) ──
+            if now_ts - _last_health_check > 21600:  # a cada 6h
+                try:
+                    with DB_LOCK:
+                        _dead = cursor.execute(
+                            "SELECT COUNT(*) FROM users WHERE active=0 AND wallet<>'' AND wallet IS NOT NULL"
+                        ).fetchone()[0]
+                    if _dead > 0:
+                        from webdex_config import ADMIN_USER_IDS as _AIDS
+                        _hmsg = (
+                            f"⚠️ <b>HEALTH CHECK: usuários sem notificação</b>\n"
+                            f"{_dead} usuário(s) com wallet mas <b>active=0</b>.\n"
+                            f"Eles não recebem notificações Telegram.\n"
+                            f"Execute: <code>docker exec ocme-monitor python fix_notifications.py</code>"
+                        )
+                        _hkey = f"health_dead_{_dead}_{int(now_ts // 21600)}"
+                        if get_config(_hkey, "") != "ok":
+                            for _aid in _AIDS:
+                                try:
+                                    send_html(int(_aid), _hmsg)
+                                except Exception:
+                                    pass
+                            set_config(_hkey, "ok")
+                            logger.warning("[sentinela/health] %d usuários active=0 com wallet — admins alertados", _dead)
+                except Exception as _hce:
+                    logger.debug("[sentinela/health] erro: %s", _hce)
+                _last_health_check = now_ts
+
+            # ── Gas check original ────────────────────────────────────────
+            if now_ts - last > 300:
                 _, meta = get_active_wallet_map()
                 if not meta:
                     time.sleep(10)
@@ -82,7 +148,7 @@ def sentinela():
                             ))
                     except Exception as e:
                         logger.debug(f"[sentinela] gasBalance falhou cid={cid}: {e}")
-                last = time.time()
+                last = now_ts
         except Exception as e:
             logger.warning(f"[sentinela] Erro no loop de verificação: {e}")
         time.sleep(30)
@@ -216,9 +282,12 @@ def agendador_21h():
                                        ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4)
                                 FROM protocol_ops WHERE ts>=? AND ts<?
                             """, (_dt_lim, _dt_fim)).fetchone()
+                            # Per-env max — evita perder um ambiente se snapshots têm ts diferente
                             _tvl_row = cursor.execute("""
-                                SELECT ROUND(SUM(total_usd),2)
-                                FROM fl_snapshots WHERE ts = (SELECT MAX(ts) FROM fl_snapshots)
+                                SELECT ROUND(SUM(f.total_usd),2)
+                                FROM fl_snapshots f
+                                INNER JOIN (SELECT env, MAX(ts) AS max_ts FROM fl_snapshots GROUP BY env) latest
+                                  ON f.env=latest.env AND f.ts=latest.max_ts
                             """).fetchone()
                             _top5 = cursor.execute("""
                                 SELECT wallet,
@@ -269,27 +338,44 @@ def agendador_21h():
                             logger.error(f"[agendador_21h] Onchain channel falhou: {_oc_err}")
 
                         # ── BROADCAST TELEGRAM (mesmo modelo) ─────────────────
-                        try:
-                            _tg_msg = notify_protocolo_relatorio_telegram(
-                                hoje=hoje,
-                                tvl_usd=_tvl_usd,
-                                bd_periodo=_p_bd,
-                                p_traders=_p_traders,
-                                p_wr=_p_wr,
-                                p_bruto=_p_bruto,
-                                top_traders=_top5,
-                            )
-                            with DB_LOCK:
-                                _tg_users = cursor.execute(
-                                    "SELECT chat_id FROM users WHERE active=1"
-                                ).fetchall()
-                            _sent_broadcast = 0
-                            for (uid,) in _tg_users:
-                                send_html(uid, _tg_msg)
-                                _sent_broadcast += 1
-                            logger.info(f"[agendador_21h] Broadcast Telegram protocolo: {_sent_broadcast}/{len(_tg_users)} users (todos ativos)")
-                        except Exception as _tg_err:
-                            logger.error(f"[agendador_21h] Broadcast Telegram falhou: {_tg_err}")
+                        # Guard idêntico ao Discord — evita double-send em restart
+                        _tg_21h_key = f"tg_21h_{hoje}"
+                        _tg_21h_val = get_config(_tg_21h_key, "")
+                        _tg_21h_skip = _tg_21h_val == "ok"
+                        if not _tg_21h_skip and _tg_21h_val.startswith("pending:"):
+                            try:
+                                _tg_21h_ts = int(_tg_21h_val.split(":", 1)[1])
+                                _tg_21h_skip = (time.time() - _tg_21h_ts) < 600
+                            except (ValueError, IndexError):
+                                pass
+                        if _tg_21h_skip:
+                            logger.info("[agendador_21h] Broadcast Telegram já enviado hoje — skip")
+                        else:
+                            try:
+                                set_config(_tg_21h_key, f"pending:{int(time.time())}")
+                                _tg_msg = notify_protocolo_relatorio_telegram(
+                                    hoje=hoje,
+                                    tvl_usd=_tvl_usd,
+                                    bd_periodo=_p_bd,
+                                    p_traders=_p_traders,
+                                    p_wr=_p_wr,
+                                    p_bruto=_p_bruto,
+                                    top_traders=_top5,
+                                )
+                                with DB_LOCK:
+                                    _tg_users = cursor.execute(
+                                        "SELECT chat_id FROM users WHERE active=1"
+                                    ).fetchall()
+                                _sent_broadcast = 0
+                                for (uid,) in _tg_users:
+                                    send_html(uid, _tg_msg)
+                                    _sent_broadcast += 1
+                                set_config(_tg_21h_key, "ok")
+                                logger.info(f"[agendador_21h] Broadcast Telegram protocolo: {_sent_broadcast}/{len(_tg_users)} users")
+                            except Exception as _tg_err:
+                                logger.error(f"[agendador_21h] Broadcast Telegram falhou: {_tg_err}")
+                                if get_config(_tg_21h_key, "") != "ok":
+                                    set_config(_tg_21h_key, "")  # resetar para retry
 
                         # Animação bdZinho → #relatório-diário
                         if _animate and _p_total > 0:
@@ -302,7 +388,7 @@ def agendador_21h():
                                 title=f"{_em}  RELATÓRIO NOTURNO — WEbdEX PROTOCOL",
                                 description=(
                                     f"## {_em} RESULTADO DO DIA\n"
-                                    f"💎 **TVL:** `${_tvl_usd:,.0f} USD`\n"
+                                    f"💧 **Liquidez LP:** `${_tvl_usd:,.0f} USD`\n"
                                     f"📈 **P&L Bruto:** `{_pl}`  ·  🎯 **WR {_wr_anim:.0f}%**\n"
                                     f"👥 **{_p_traders} traders** · 📊 **{_p_total:,} trades**\n"
                                     f"💰 **BD coletado:** `{_p_bd:.4f} BD`\n"
@@ -436,8 +522,10 @@ def agendador_horario():
                                     FROM protocol_ops WHERE ts>=?
                                 """, (_dt_lim_utc,)).fetchone()
                                 _tvl_row = cursor.execute("""
-                                    SELECT ROUND(SUM(total_usd),2)
-                                    FROM fl_snapshots WHERE ts=(SELECT MAX(ts) FROM fl_snapshots)
+                                    SELECT ROUND(SUM(f.total_usd),2)
+                                    FROM fl_snapshots f
+                                    INNER JOIN (SELECT env, MAX(ts) AS max_ts FROM fl_snapshots GROUP BY env) latest
+                                      ON f.env=latest.env AND f.ts=latest.max_ts
                                 """).fetchone()
                             _s_traders = int(_s_row[0] or 0)
                             _s_wins    = int(_s_row[1] or 0)
@@ -851,21 +939,13 @@ def _fl_snapshot_worker():
                     liq_loop       = float(_erc20(ADDR_LPLPUSD).functions.balanceOf(_W3.to_checksum_address(sub_addr)).call()) / 1e9 if sub_addr else 0.0
                     gas_pol        = float(w3.from_wei(w3.eth.get_balance(_W3.to_checksum_address(mgr_addr)), "ether")) if mgr_addr else 0.0
 
-                    # LP price via DexScreener (reutiliza lógica existente)
-                    try:
-                        lp_usdt_price = _fetch_lp_price_per_unit(w3, lp_usdt_addr, 6)
-                        lp_loop_price = _fetch_lp_price_per_unit(w3, lp_loop_addr, 9)
-                    except Exception as _lpe:
-                        logger.warning("[fl_snap] LP price fetch falhou: %s", _lpe)
-                        # usa último preço válido ou 0.0 (não usa 1.0)
-                        lp_usdt_price = _lp_price_last_known.get((lp_usdt_addr or "").lower(), 0.0)
-                        lp_loop_price = _lp_price_last_known.get((lp_loop_addr or "").lower(), 0.0)
-
+                    # TVL = supply de LP tokens (sem dependência de price feed externo)
+                    # Cada LP token representa $1 USD de liquidez depositada no protocolo
+                    # lp_usdt_supply (6 dec) e lp_loop_supply (9 dec) já normalizados acima
                     total_usd = (
-                        liq_usdt +
-                        liq_loop * lp_loop_price +
-                        lp_usdt_supply * lp_usdt_price +
-                        gas_pol * pol_price
+                        lp_usdt_supply +       # LP_USDT: totalSupply ≈ USD locked
+                        lp_loop_supply +       # LP_LOOP: totalSupply ≈ USD locked
+                        gas_pol * pol_price    # POL para gas × preço atual
                     )
 
                     with DB_LOCK:
@@ -878,8 +958,8 @@ def _fl_snapshot_worker():
                         )
                         conn.commit()
 
-                    logger.info("[fl_snap] %s total_usd=%.2f liq_usdt=%.2f gas_pol=%.2f",
-                                env_key, total_usd, liq_usdt, gas_pol)
+                    logger.info("[fl_snap] %s total_usd=%.2f lp_usdt_supply=%.2f lp_loop_supply=%.2f gas_pol=%.4f",
+                                env_key, total_usd, lp_usdt_supply, lp_loop_supply, gas_pol)
                 except Exception as _env_e:
                     logger.warning("[fl_snap] erro env=%s: %s", env_key, _env_e)
 
@@ -1061,7 +1141,16 @@ def _inactivity_auto_loop():
                         f"Sem trades nos últimos <b>{check_min} min</b>\n"
                         f"Bloco <code>{start}</code> → <code>{curr}</code>"
                     )
+                    with DB_LOCK:
+                        _blocked_aids = {
+                            int(r[0]) for r in cursor.execute(
+                                "SELECT chat_id FROM users WHERE active=0"
+                            ).fetchall()
+                        }
                     for aid in ADMIN_USER_IDS:
+                        if int(aid) in _blocked_aids:
+                            logger.debug("[inactivity] skip aid=%s (active=0 / bot bloqueado)", aid)
+                            continue
                         try:
                             from webdex_bot_core import send_html as _sh
                             _sh(int(aid), msg)
