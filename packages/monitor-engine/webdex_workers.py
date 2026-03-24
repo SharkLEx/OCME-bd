@@ -197,6 +197,10 @@ def agendador_21h():
                     try:
                         # Marcar em-progresso com timestamp — TTL 10 min evita deadlock em restart
                         set_config(_discord_21h_key, f"pending:{int(time.time())}")
+                        # Aguardar 5 min para proto_sync commitar último batch antes de consultar
+                        if now.minute < 6:
+                            logger.info("[agendador_21h] Aguardando 5min para proto_sync fechar último batch...")
+                            time.sleep(300)
                         # Ciclo que fechou: de ontem 21h BRT → hoje 21h BRT
                         # protocol_ops.ts é UTC → ontem 21h BRT = hoje 00h UTC
                         _ciclo_fim_brt = datetime.strptime(_ciclo_21h_since(), "%Y-%m-%d %H:%M:%S")
