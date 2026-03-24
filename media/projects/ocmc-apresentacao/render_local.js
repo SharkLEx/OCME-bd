@@ -23,11 +23,15 @@ const CARDS = [
   { file: 'card_v05.png', label: 'V05 — Ciclo 21h Resultados' },
 ];
 
-// Ken Burns: zoom 100→106% em 10s (300 frames @ 30fps) + fade-in 1.2s (36 frames)
-// zoompan: z='min(zoom+0.0002,1.06)' sobe de 1.0 a 1.06 em 300 frames
-// fps=300/10=30; d=300 frames total
+// Ken Burns v2: scale fixo + crop com pan diagonal suave
+// Estratégia: pré-escala 20% (1296×2304), depois crop 1080×1920 com pan
+//   - Inicia em top-left (logo WEbdEX visível)
+//   - Pan diagonal para centro em 8s (settle no conteúdo principal)
+//   - Sem zoompan: evita bug de variável `zoom` no FFmpeg 4.x (2018)
+//   - `t` no filtro crop = timestamp em segundos, sempre confiável
 const VFILTER = [
-  "zoompan=z='min(zoom+0.0002,1.06)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=300:s=1080x1920:fps=30",
+  'scale=1296:2304',                                          // zoom 20% fixo
+  "crop=1080:1920:x='108*min(t/8,1)':y='240*min(t/8,1)'", // pan top-left → centro em 8s
   'fade=t=in:st=0:d=1.2',
 ].join(',');
 

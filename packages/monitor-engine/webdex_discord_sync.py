@@ -474,7 +474,7 @@ def notify_protocolo_relatorio_telegram(
     msg = (
         f"🌙 <b>RELATÓRIO DO PROTOCOLO — WEbdEX</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"💎 TVL: <b>${tvl_usd:,.0f} USD</b>\n"
+        f"💧 Liquidez LP: <b>${tvl_usd:,.0f} USD</b>\n"
         f"👥 Traders: <b>{p_traders}</b>  ·  WR: <b>{p_wr:.1f}%</b>\n"
         f"{emoji} P&amp;L Bruto: <b>{pl_str} USD</b>\n"
         f"🏦 BD período: <b>{bd_periodo:,.4f} BD</b>\n"

@@ -515,6 +515,8 @@ def registrar_operacao(tx_hash, log_index, tipo, valor, gas_usd, token, sub_id, 
                        strategy_addr='', bot_id='', gas_protocol=0.0, old_balance_usd=0.0):
     dt = now_br().strftime("%Y-%m-%d %H:%M:%S")
     tx_hash = normalize_txhash(tx_hash)
+    # Garantir tipos primitivos para sqlite3 (sub_id pode ser HexBytes/AttributeDict do web3)
+    sub_id_safe = str(sub_id) if sub_id is not None else ''
     with DB_LOCK:
         try:
             if cursor.execute("SELECT 1 FROM operacoes WHERE hash=? AND log_index=?", (tx_hash, int(log_index))).fetchone():
@@ -526,17 +528,13 @@ def registrar_operacao(tx_hash, log_index, tipo, valor, gas_usd, token, sub_id, 
                     " strategy_addr,bot_id,gas_protocol,old_balance_usd) "
                     "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (tx_hash, int(log_index), dt, tipo, float(valor), float(gas_usd), token,
-                     sub_id, int(bloco), ambiente, float(fee),
+                     sub_id_safe, int(bloco), str(ambiente or 'UNKNOWN'), float(fee),
                      str(strategy_addr or ''), str(bot_id or ''),
                      float(gas_protocol or 0.0), float(old_balance_usd or 0.0))
                 )
             except Exception as e_full:
-                logger.debug(f"[registrar_op] INSERT full falhou ({e_full}), tentando fallback...")
-                cursor.execute(
-                    "INSERT OR IGNORE INTO operacoes VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (tx_hash, int(log_index), dt, tipo, float(valor), float(gas_usd),
-                     token, sub_id, int(bloco), ambiente, float(fee))
-                )
+                logger.warning(f"[registrar_op] INSERT principal falhou ({e_full}) — abortando tx={tx_hash[:12]}...")
+                raise
             cursor.execute(
                 "INSERT OR REPLACE INTO op_owner (hash, log_index, wallet) VALUES (?,?,?)",
                 (tx_hash, int(log_index), str(owner_wallet).lower())

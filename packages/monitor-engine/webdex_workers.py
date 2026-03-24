@@ -58,6 +58,7 @@ def sentinela():
     last = 0
     _last_vigia_check = 0.0          # watchdog: dispara imediatamente no startup (intencional)
     _last_health_check = time.time() # health: primeira verificação após 6h (evita spam no startup)
+    _last_chain_health = time.time() # chain health: primeira verificação após 15min (evita spam no startup)
     while True:
         try:
             now_ts = time.time()
@@ -122,6 +123,36 @@ def sentinela():
                 except Exception as _hce:
                     logger.debug("[sentinela/health] erro: %s", _hce)
                 _last_health_check = now_ts
+
+            # ── Chain health: alerta se RPC/Tendermint/Heimdall degradados ──
+            if now_ts - _last_chain_health > 900:  # a cada 15min
+                try:
+                    from webdex_chain_health import get_chain_health
+                    _ch = get_chain_health()
+                    if not _ch['healthy'] and _ch['degraded']:
+                        from webdex_config import ADMIN_USER_IDS as _AIDS
+                        _degraded_list = '\n'.join(f'  • {d}' for d in _ch['degraded'])
+                        _ch_msg = (
+                            f"⛓️ <b>POLYGON DEGRADADO</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━━\n"
+                            f"{_degraded_list}\n\n"
+                            f"<i>Monitor operando em modo degradado.</i>"
+                        )
+                        _ch_key = f"chain_health_alert_{'_'.join(_ch['degraded'])[:40]}"
+                        _ch_last = float(get_config(_ch_key, '0') or '0')
+                        if (now_ts - _ch_last) >= 1800:  # re-alerta a cada 30min
+                            for _aid in _AIDS:
+                                try:
+                                    send_html(int(_aid), _ch_msg)
+                                except Exception:
+                                    pass
+                            set_config(_ch_key, str(int(now_ts)))
+                            logger.warning('[sentinela/chain_health] componentes degradados: %s', _ch['degraded'])
+                    else:
+                        logger.debug('[sentinela/chain_health] all operational')
+                except Exception as _che:
+                    logger.debug('[sentinela/chain_health] erro: %s', _che)
+                _last_chain_health = now_ts
 
             # ── Gas check original ────────────────────────────────────────
             if now_ts - last > 300:
