@@ -30,6 +30,9 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    networks:
+      - default
+      - orchestrator_net
     logging:
       driver: json-file
       options:
@@ -79,3 +82,8 @@ volumes:
     driver: local
   monitor_backups:
     driver: local
+
+networks:
+  default: {}
+  orchestrator_net:
+    external: true  # criada pelo stack do orchestrator — ocme-monitor precisa acessar ai_memory (pgvector)

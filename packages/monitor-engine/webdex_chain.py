@@ -252,8 +252,21 @@ def obter_preco_pol() -> float:
         return 0.50
 
 def _is_429_error(e: Exception) -> bool:
+    """Detecta erros de quota/auth que justificam rotação de endpoint.
+    NOTA: -32000 é código genérico — capturamos apenas strings específicas,
+    NÃO o código em si (block range params é culpa do cliente, não do endpoint).
+    """
     s = str(e).lower()
-    return ("429" in s) or ("too many requests" in s) or ("rate limit" in s)
+    return (
+        "429" in s or
+        "too many requests" in s or
+        "rate limit" in s or
+        "exceeded the quota" in s or   # Alchemy -32001 quota exhausted
+        "-32001" in s or               # JSON-RPC quota code
+        "unauthorized" in s or         # Ankr/outros: auth required
+        "api key" in s or              # falta de API key
+        "401 client error" in s        # HTTP 401 Unauthorized
+    )
 
 _WALLET_MAP_CACHE: Dict[str, Any] = {"ts": 0.0, "data": ({}, {})}
 _WALLET_MAP_TTL = 60.0  # segundos — recarrega a cada minuto
@@ -290,11 +303,13 @@ def get_active_wallet_map(force_refresh: bool = False):
                     "periodo":  (per or "24h"),
                     "active":   int(act or 0),
                 }
-        except Exception:
-            pass
+        except Exception as _wme:
+            logger.error("[wallet_map] ERRO ao carregar do DB — wallet_map vazio: %s", _wme)
 
     _WALLET_MAP_CACHE["data"] = (wallet_map, meta)
     _WALLET_MAP_CACHE["ts"]   = now
+    if not wallet_map:
+        logger.warning("[wallet_map] wallet_map VAZIO — nenhum usuário com wallet ativo. Notificações Telegram suspensas.")
     return wallet_map, meta
 
 
