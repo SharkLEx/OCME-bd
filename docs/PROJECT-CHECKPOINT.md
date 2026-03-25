@@ -4,6 +4,21 @@
 
 ## Contexto Ativo
 
+**Sessão 2026-03-25 tarde — CONCLUÍDA ✅**
+
+Entregas desta sessão (commits pushados):
+- `42f2164` chore: bump orchestrator (Dockerfile auto-suficiente + media/ no submodule)
+- `c143ca4` feat(trainer): 5° agente Nexo — aprendizado contínuo das conversas
+- `959e9b7` fix(smith): HIGH-01/02/03 + MEDIUM-05/06 corrigidos após auditoria Smith
+
+**Dockerfile discord ✅**: Node.js 20 LTS + Playwright + Chromium instalados no build. discord/media/ incluso no submodule. package-lock.json commitado (builds reproduzíveis).
+
+**Nexo (5° agente trainer) ✅ CORRIGIDO**: discord_convs buscado antes do early return. Pareamento Telegram user→assistant corrigido. Guard condicional adicionado.
+
+**Próximo deploy VPS**: `git pull` no VPS + `docker cp webdex_ai_trainer.py ocme-monitor:/app/` para ativar os fixes do Nexo.
+
+## Contexto Ativo (anterior)
+
 **bdZinho Cards v3 ✅ 100% DEPLOYADO NO VPS** (2026-03-25 15:00)
 - card_server.py: auto-inicia com o bot via `_start_card_server()` no `on_ready`
 - Node.js v24 + Playwright + Chromium headless instalados no container orchestrator-discord
