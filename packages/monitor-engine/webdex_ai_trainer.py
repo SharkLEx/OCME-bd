@@ -542,14 +542,16 @@ def _run_nexo(
     Retorna dict com chave nexo_learned.
     """
     all_convs = []
-    # Telegram: já vem como {chat_id, messages}
+    # FIX HIGH-02: Telegram — parear user→assistant em vez de mensagens isoladas
     for conv in telegram_convs[:10]:
-        for msg in conv.get("messages", [])[-4:]:
-            all_convs.append({
-                "user":    msg["content"] if msg["role"] == "user" else "",
-                "bot":     msg["content"] if msg["role"] == "assistant" else "",
-                "channel": "telegram",
-            })
+        msgs = conv.get("messages", [])[-8:]  # últimas 8 msgs = até 4 pares
+        for i in range(len(msgs) - 1):
+            if msgs[i]["role"] == "user" and msgs[i + 1]["role"] == "assistant":
+                all_convs.append({
+                    "user":    msgs[i]["content"][:300].replace("\n", " ").strip(),
+                    "bot":     msgs[i + 1]["content"][:400].replace("\n", " ").strip(),
+                    "channel": "telegram",
+                })
 
     # Discord: já vem como {user, bot}
     all_convs.extend(discord_convs[:30])
@@ -608,8 +610,13 @@ def run_training(days: int = 3, dry_run: bool = False) -> dict:
     digests = _fetch_recent_digests(days=7)
     logger.info("Digests carregados: %d ciclos", len(digests))
 
-    if not conversations and not digests:
-        logger.warning("Nenhum dado disponível — ciclo de treinamento vazio")
+    # FIX HIGH-01: Nexo usa Discord — buscar ANTES do early return para incluir na condição
+    logger.info("Carregando conversas Discord (últimos %d dias)...", days)
+    discord_convs = _fetch_discord_conversations(days=days)
+    logger.info("Conversas Discord carregadas: %d pares", len(discord_convs))
+
+    if not conversations and not digests and not discord_convs:
+        logger.warning("Nenhum dado disponível (Telegram, Discord ou digests) — ciclo de treinamento vazio")
         return {"total": 0}
 
     # ── Smith ─────────────────────────────────────────────────────────────────
@@ -647,17 +654,20 @@ def run_training(days: int = 3, dry_run: bool = False) -> dict:
         time.sleep(1)
 
     # ── Nexo — aprendizado contínuo das conversas ─────────────────────────────
-    logger.info("Iniciando análise Nexo (aprendizado contínuo)...")
-    discord_convs   = _fetch_discord_conversations(days=days)
-    existing_topics = _fetch_existing_knowledge_topics()
-    logger.info(
-        "Nexo: %d conversas Discord | %d tópicos existentes",
-        len(discord_convs), len(existing_topics),
-    )
-    nexo_data  = _run_nexo(conversations, discord_convs, existing_topics)
-    nexo_count = _persist_knowledge(nexo_data, source="nexo", dry_run=dry_run)
-    summary["nexo"] = nexo_count
-    logger.info("Nexo: %d novos itens de conhecimento injetados", nexo_count)
+    # FIX MEDIUM-06: só executa se há dados para analisar
+    if conversations or discord_convs:
+        logger.info("Iniciando análise Nexo (aprendizado contínuo)...")
+        existing_topics = _fetch_existing_knowledge_topics()
+        logger.info(
+            "Nexo: %d conv Telegram | %d conv Discord | %d tópicos existentes",
+            len(conversations), len(discord_convs), len(existing_topics),
+        )
+        nexo_data  = _run_nexo(conversations, discord_convs, existing_topics)
+        nexo_count = _persist_knowledge(nexo_data, source="nexo", dry_run=dry_run)
+        summary["nexo"] = nexo_count
+        logger.info("Nexo: %d novos itens de conhecimento injetados", nexo_count)
+    else:
+        logger.info("Nexo: sem conversas disponíveis — pulando")
 
     elapsed = time.time() - start
     total = sum(summary.values())
