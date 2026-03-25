@@ -121,24 +121,8 @@ DASH_GRAPH_TTL = 300  # 5 min
 # ==============================================================================
 def main_kb(chat_id=None):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-
-    kb.row("🔌 Conectar", "▶️ Ativar", "⏸️ Pausar")
-    kb.row("📈 Dashboard PRO", "📌 Ciclo 21h", "🩺 Saúde")
-    kb.row("🧠 IA", "🎨 Criar Imagem")
-    kb.row("🗓️ Escolher Período", "🔎 Wallet Info")
-
-    kb.row("📊 mybdBook", "📈 mybdBook (Gráfico)")
-    kb.row("🏆 Ranking Lucro", "🏛️ Comunidade", "🎛️ Filtros")
-
-    kb.row("🧬 Ciclo da Subconta", "🧠 Ranking Consistência")
-    kb.row("⏱️ Ranking Ciclo", "🧾 IDs com Saldo")
-
-    kb.row("📜 Ops", "⛽ Auditoria Gás", "🔔 Alertas")
-    kb.row("🔍 Buscar Tx", "🔄 Sync OnChain", "📍 Posições")
-    kb.row("🔬 Análise")
-    kb.row("⏳ Inatividade")
-    kb.row("🌐 Protocolo", "📡 Status", "⚙️ Config", "❓ Ajuda")
-    kb.row("🛠️ ADM")
+    kb.row("📊 Resultados", "🤖 bdZinho")
+    kb.row("🌐 Protocolo", "⚙️ Config")
     return kb
 
 
@@ -164,6 +148,45 @@ def ia_kb():
     kb.row("💬 Perguntar", "📌 OpenPosition")
     kb.row("📈 Dashboard", "🏆 Ranking")
     kb.row("🔙 Menu")
+    return kb
+
+
+def resultado_kb():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row("📌 Ciclo 21h", "📈 Dashboard PRO")
+    kb.row("📍 Posições", "📊 mybdBook")
+    kb.row("📈 mybdBook (Gráfico)", "🩺 Saúde")
+    kb.row("⬅️ Menu")
+    return kb
+
+
+def bdzinho_kb():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row("💬 Perguntar", "🎨 Criar Imagem")
+    kb.row("📌 Posição Aberta", "🔬 Análise")
+    kb.row("⬅️ Menu")
+    return kb
+
+
+def protocolo_kb():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row("🏆 Ranking Lucro", "🧠 Ranking Consistência")
+    kb.row("⏱️ Ranking Ciclo", "🏛️ Comunidade")
+    kb.row("📡 Status", "🔔 Alertas")
+    kb.row("⛽ Auditoria Gás", "🧬 Ciclo da Subconta")
+    kb.row("📜 Ops", "🔍 Buscar Tx")
+    kb.row("🔄 Sync OnChain", "🧾 IDs com Saldo")
+    kb.row("⬅️ Menu")
+    return kb
+
+
+def config_kb():
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row("🔌 Conectar", "▶️ Ativar", "⏸️ Pausar")
+    kb.row("🗓️ Escolher Período", "🎛️ Filtros")
+    kb.row("🔎 Wallet Info", "❓ Ajuda")
+    kb.row("⏳ Inatividade", "🛠️ ADM")
+    kb.row("⬅️ Menu")
     return kb
 
 
@@ -1952,13 +1975,50 @@ def ia_menu(m):
 
     bot.send_message(
         chat_id,
-        "🧠 <b>IA da WEbdEX</b>\n\n"
+        "🤖 <b>bdZinho</b>\n\n"
         f"✅ Status: <b>{g}</b>\n"
         f"🎛️ Modo: <b>{mode}</b>\n\n"
         "Escolha uma opção abaixo 👇",
-        reply_markup=ia_kb(),
+        reply_markup=bdzinho_kb(),
         parse_mode="HTML"
     )
+
+
+@bot.message_handler(func=lambda m: m.text == "📊 Resultados")
+def btn_resultados(message):
+    bot.send_message(message.chat.id, "📊 <b>Resultados</b> — escolha:",
+                     parse_mode="HTML", reply_markup=resultado_kb())
+
+
+@bot.message_handler(func=lambda m: m.text == "🤖 bdZinho")
+def btn_bdzinho(message):
+    bot.send_message(message.chat.id, "🤖 <b>bdZinho</b> — o que deseja?",
+                     parse_mode="HTML", reply_markup=bdzinho_kb())
+
+
+@bot.message_handler(func=lambda m: m.text == "🌐 Protocolo")
+def btn_protocolo(message):
+    bot.send_message(message.chat.id, "🌐 <b>Protocolo WEbdEX</b> — explorar:",
+                     parse_mode="HTML", reply_markup=protocolo_kb())
+
+
+@bot.message_handler(func=lambda m: m.text == "⚙️ Config")
+def btn_config(message):
+    bot.send_message(message.chat.id, "⚙️ <b>Configurações</b>:",
+                     parse_mode="HTML", reply_markup=config_kb())
+
+
+@bot.message_handler(func=lambda m: m.text in ("⬅️ Menu", "🔙 Menu"))
+def btn_voltar_menu(message):
+    bot.send_message(message.chat.id, "🏠 Menu principal:",
+                     parse_mode="HTML", reply_markup=main_kb(message.chat.id))
+
+
+@bot.message_handler(func=lambda m: m.text == "📌 Posição Aberta")
+def btn_posicao_aberta(message):
+    chat_id = message.chat.id
+    msg = webdex_explain_openposition()
+    send_support(chat_id, msg, reply_markup=bdzinho_kb())
 
 
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "💬 Perguntar")
@@ -2004,7 +2064,7 @@ def ia_question(m):
     chat_id = m.chat.id
     t = (m.text or "").strip()
     if t.lower() in ("/cancelar", "cancelar", "/cancel"):
-        bot.send_message(chat_id, "✅ IA cancelada.", reply_markup=ia_kb())
+        bot.send_message(chat_id, "✅ IA cancelada.", reply_markup=bdzinho_kb())
         return
 
     if not ai_can_use(chat_id):
@@ -2022,7 +2082,7 @@ def ia_question(m):
             "Tente novamente em alguns segundos.\n"
         )
 
-    send_support(chat_id, _tg_ai_pretty(answer), reply_markup=ia_kb())
+    send_support(chat_id, _tg_ai_pretty(answer), reply_markup=bdzinho_kb())
 
 
 # Mantém compatibilidade: per-user flag existe no DB (não usado por padrão)
@@ -2690,21 +2750,31 @@ def protocolo(m):
 # ✅ WIZARD (pending-only)
 # ==============================================================================
 _KNOWN_BUTTONS = {
-    # Menu principal
+    # Menu principal (novo — 4 botões)
+    "📊 Resultados", "🤖 bdZinho", "🌐 Protocolo", "⚙️ Config",
+    # Submenu Resultados
+    "📌 Ciclo 21h", "📈 Dashboard PRO", "📍 Posições", "📊 mybdBook",
+    "📈 mybdBook (Gráfico)", "🩺 Saúde",
+    # Submenu bdZinho
+    "🎨 Criar Imagem", "📌 Posição Aberta", "🔬 Análise",
+    # Submenu Protocolo
+    "🏆 Ranking Lucro", "🧠 Ranking Consistência", "⏱️ Ranking Ciclo",
+    "🏛️ Comunidade", "📡 Status", "🔔 Alertas",
+    "⛽ Auditoria Gás", "🧬 Ciclo da Subconta",
+    "📜 Ops", "🔍 Buscar Tx", "🔄 Sync OnChain", "🧾 IDs com Saldo",
+    # Submenu Config
     "🔌 Conectar", "▶️ Ativar", "⏸️ Pausar",
-    "📈 Dashboard PRO", "📌 Ciclo 21h", "🩺 Saúde",
+    "🗓️ Escolher Período", "🎛️ Filtros",
+    "🔎 Wallet Info", "❓ Ajuda",
+    "⏳ Inatividade", "🛠️ ADM",
+    # Navegação submenus
+    "⬅️ Menu",
+    # Backward compat (menu antigo / ia_kb antigo)
     "🧠 IA",
-    "🗓️ Escolher Período", "🔎 Wallet Info",
     "📊 Consolidado (24h)",
-    "📊 mybdBook", "📊 mybdBook ADM", "📈 mybdBook (Gráfico)",
-    "🏆 Ranking Lucro", "🏛️ Comunidade", "🎛️ Filtros",
-    "🧬 Ciclo da Subconta", "🧠 Ranking Consistência", "⏱️ Ranking Ciclo",
-    "🧾 IDs com Saldo",
-    "📜 Ops", "⛽ Auditoria Gás", "🔔 Alertas",
-    "🔍 Buscar Tx", "🔄 Sync OnChain", "🔬 Análise",
-    "⏳ Inatividade",
-    "🌐 Protocolo", "📡 Status", "⚙️ Config", "❓ Ajuda",
-    "🛠️ ADM", "🔙 Menu", "🔙 ADM",
+    "📊 mybdBook ADM",
+    "🔬 Análise",
+    "🔙 Menu", "🔙 ADM",
     # Botões ADM (handlers em admin.py)
     "📊 Análise SubAccounts", "📊 Relatório Institucional",
     "📸 Progressão do Capital",
@@ -2731,7 +2801,7 @@ def step_handler(m):
 
     # Botao do menu durante pending -> limpa pending e retorna ao menu
     # Exceções: cancelar e botões de navegação do wizard são tratados adiante
-    _WIZARD_BUTTONS = {"cancelar", "⏭️ Pular RPC", "⬅️ Voltar"}
+    _WIZARD_BUTTONS = {"cancelar", "⏭️ Pular RPC", "⬅️ Voltar", "⬅️ Menu"}
     if txt in _KNOWN_BUTTONS and txt not in _WIZARD_BUTTONS:
         upsert_user(m.chat.id, pending="")
         bot.send_message(m.chat.id, "↩️ Ação cancelada.", reply_markup=main_kb())

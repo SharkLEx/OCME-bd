@@ -4,6 +4,15 @@
 
 ## Contexto Ativo
 
+**Sessão 2026-03-25 madrugada — CONCLUÍDA ✅**
+
+Entregas (commit `d0685ae` pushado + deployado VPS):
+- Notas Obsidian 052-055 — Dimensão 9 criada (55 notas totais)
+- Dashboard Público (Gap #1) LIVE: `https://track-ocme.rxuos9.easypanel.host/dashboard-publico.html`
+- `/api/data/public-dashboard`: win_rate 77%, P&L $933K, 4.37M ciclos, histórico 60
+- card_server auto-inicia com bot, DB correto `/ocme_data/webdex_v5_final.db`, imagem rebuilded ✅
+- Próximo: Gap #2 DeCripto; Epic 13; sincronizar git VPS
+
 **Sessão 2026-03-25 noite — CONCLUÍDA ✅**
 
 Entregas desta sessão (commits pushados + deployados VPS):
@@ -24,9 +33,17 @@ Entregas desta sessão (commits pushados + deployados VPS):
 - market-intelligence 044-050 adicionadas
 - MOC-bdZinho-Learning-Map.md atualizado
 
+**Sessão 2026-03-25 noite (Sprints OCME Telegram) — CONCLUÍDA ✅**
+- Sprint 1 Hamann: infra hardening (memory 768M, restart policy, SIGTERM graceful, throttle restart)
+- Sprint 2 Kamala: UX redesign (4-button menu + 4 submenus + backward compat)
+- Sprint 3 Mifune: bdZinho expressão emocional no ciclo 21h Telegram (timeout 30s, rate limit)
+- Smith supervisão: INFECTED → CLEAN após 4 correções (BD-01 timeout, UX-01/02/05 menu fixes)
+- Arquivos modificados: docker-compose.yml, webdex_main.py, webdex_handlers/user.py, webdex_workers.py
+
 **Próximas sessões:**
-- Deploy trainer fix para ocme-monitor (webdex_ai_trainer.py Nexo fixes já copiado via docker cp)
-- Criar uma nota Obsidian 052 sobre Track Record card decision
+- Deploy para VPS: SCP 4 arquivos + docker compose build + up ocme-monitor
+- Deploy trainer fix (webdex_ai_trainer.py Nexo fixes já copiado via docker cp)
+- Epic 13 (Dashboard Externo Next.js)
 
 ## Contexto Ativo (anterior)
 

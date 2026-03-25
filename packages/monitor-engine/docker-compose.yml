@@ -33,6 +33,18 @@ services:
     networks:
       - default
       - orchestrator_net
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 256M
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
     logging:
       driver: json-file
       options:

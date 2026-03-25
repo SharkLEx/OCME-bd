@@ -142,8 +142,20 @@ def auto_resume_notify():
         "Para receber análises personalizadas da IA com seus dados reais, "
         "use /start → <b>Conectar Wallet</b>."
     )
+    # Throttle: max 1 notificação de restart por hora
+    _resume_key = "auto_resume_last"
     try:
+        from webdex_db import DB_LOCK, cursor, get_config, set_config
+    except Exception:
         from webdex_db import DB_LOCK, cursor
+        get_config = set_config = None
+    if get_config and set_config:
+        _last = float(get_config(_resume_key, "0") or "0")
+        if (time.time() - _last) < 3600:
+            logger.info("[main] auto_resume_notify throttled — last sent %.0f min ago", (time.time() - _last) / 60)
+            return
+        set_config(_resume_key, str(int(time.time())))
+    try:
         from webdex_bot_core import send_html
         with DB_LOCK:
             rows = cursor.execute(
@@ -193,6 +205,15 @@ if __name__ == "__main__":
         _obs.start(daemon=True)
     except Exception as _obs_err:
         logger.warning("[main] Observability server não iniciado: %s", _obs_err)
+
+    # Graceful shutdown — permite que threads finalizem antes do kill
+    import signal
+    def _graceful_shutdown(sig, frame):
+        logger.info("[main] Sinal %s recebido — encerrando graciosamente...", sig)
+        # Dá 3s para threads terminarem transações pendentes
+        time.sleep(3)
+        import sys; sys.exit(0)
+    signal.signal(signal.SIGTERM, _graceful_shutdown)
 
     # Watchdog em thread separada (monitora e reinicia as demais)
     threading.Thread(target=_watchdog, name="watchdog", daemon=True).start()

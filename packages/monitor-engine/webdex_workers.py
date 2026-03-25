@@ -23,7 +23,7 @@ from webdex_chain import (
     web3, CONTRACTS_A, CONTRACTS_B, get_active_wallet_map,
     obter_preco_pol, _chain_cache_worker,
 )
-from webdex_bot_core import send_html, _notif_worker, send_logo_photo
+from webdex_bot_core import send_html, _notif_worker, send_logo_photo, bot
 from webdex_discord_sync import (
     notify_protocolo_relatorio, notify_protocolo_relatorio_telegram,
     notify_protocolo_relatorio_onchain, notify_gm, _WEBHOOK_GM,
@@ -271,6 +271,32 @@ def agendador_21h():
                             )
                         send_html(cid, msg)
                         send_logo_photo(cid, f"{'🌙' if not _TG_TOKENS else TG.ciclo_noite} <b>WEbdEX</b> — bom descanso, até amanhã! 🚀")
+                        # bdZinho expressão emocional no ciclo 21h (Telegram)
+                        if _CYCLE_VISUAL_MODULE_ENABLED:
+                            try:
+                                from webdex_ai_cycle_visual import _choose_prompt
+                                from webdex_ai_image_gen import generate_image as _gen_img
+                                import concurrent.futures as _cf
+                                _bdzinho_prompt, _bdzinho_label = _choose_prompt(liq, total_t)
+                                _bdzinho_label_safe = str(_bdzinho_label).replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
+                                with _cf.ThreadPoolExecutor(max_workers=1) as _pool:
+                                    _future = _pool.submit(_gen_img, _bdzinho_prompt)
+                                    try:
+                                        _bdzinho_img = _future.result(timeout=30)
+                                    except _cf.TimeoutError:
+                                        logger.warning("[agendador_21h] bdZinho timeout (>30s) para %s — pulando", cid)
+                                        _bdzinho_img = None
+                                if _bdzinho_img:
+                                    if liq > 0:
+                                        _bdzinho_caption = f"🎉 <b>bdZinho {_bdzinho_label_safe}</b> — ciclo positivo! Bom trabalho 💚"
+                                    elif liq < 0:
+                                        _bdzinho_caption = f"💪 <b>bdZinho {_bdzinho_label_safe}</b> — ciclo desafiador. Amanhã é novo dia 🔄"
+                                    else:
+                                        _bdzinho_caption = f"⚡ <b>bdZinho {_bdzinho_label_safe}</b> — ciclo neutro. Protocolo estável."
+                                    bot.send_photo(cid, _bdzinho_img, caption=_bdzinho_caption, parse_mode="HTML")
+                                    time.sleep(0.05)
+                            except Exception as _bdzinho_err:
+                                logger.warning("[agendador_21h] bdZinho photo falhou para %s: %s", cid, _bdzinho_err)
                         _agg_liq += liq; _agg_gas += gas_t
                         _agg_trades += total_t; _agg_wins += wins
                     set_config(f"last_rep_{cid}", hoje)
