@@ -134,16 +134,21 @@ Sistema P2P de negociação que determina o preço via trocas diretas entre usu�
 
 ## 8. Onde Adquirir/Vender BD
 
-**ATUALMENTE: APENAS VIA SWAPBOOK P2P**
+**ATUALMENTE: APENAS P2P — sem CEX, sem Uniswap**
 
-Toda compra e venda de BD é feita exclusivamente via **Swapbook P2P** nativo da WEbdEX (`betav5.webdex.fyi`). Não há rota ativa via Uniswap, CEX ou outra DEX no momento.
+Toda compra e venda de BD é feita exclusivamente de forma P2P. As rotas para conectar compradores e vendedores:
 
-- Negociação direta entre usuários (P2P)
-- Pares: USDT, USDC, DAI, POL
-- Sistema adiciona 18% automático em liquidez nas listagens de venda
-- Preço de referência do sistema: ~$0,38/BD
+| Rota | Descrição |
+|------|-----------|
+| **Swapbook P2P** | Plataforma nativa `betav5.webdex.fyi` — listagem oficial |
+| **Discord oficial** | Canal principal onde usuários se conectam para negociar BD |
+| **Grupos oficiais** | Telegram e WhatsApp da comunidade WEbdEX |
 
-> Nota: o whitepaper menciona Uniswap V3 como rota futura/eventual — mas não é a realidade operacional atual.
+- Pares aceitos: USDT, USDC, DAI, POL
+- Sistema adiciona 18% automático em liquidez nas listagens do Swapbook
+- Preço de referência: ~$0,38/BD
+
+> Whitepaper menciona Uniswap V3 como rota futura — não está ativa atualmente.
 
 ---
 
