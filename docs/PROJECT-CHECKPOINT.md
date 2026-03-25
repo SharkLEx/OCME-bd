@@ -4,20 +4,29 @@
 
 ## Contexto Ativo
 
-**Sessão 2026-03-25 tarde — CONCLUÍDA ✅**
+**Sessão 2026-03-25 noite — CONCLUÍDA ✅**
 
-Entregas desta sessão (commits pushados):
-- `42f2164` chore: bump orchestrator (Dockerfile auto-suficiente + media/ no submodule)
-- `c143ca4` feat(trainer): 5° agente Nexo — aprendizado contínuo das conversas
-- `959e9b7` fix(smith): HIGH-01/02/03 + MEDIUM-05/06 corrigidos após auditoria Smith
+Entregas desta sessão (commits pushados + deployados VPS):
+- `1e5585d` feat(conquistas): Track Record v2 — gold theme, win_rate, dados reais
+- `1f04db8` fix(card_server): OCME_DB_PATH → TODOS os cards agora com dados reais!
+- `22f01dd` chore: bump root
 
-**Dockerfile discord ✅**: Node.js 20 LTS + Playwright + Chromium instalados no build. discord/media/ incluso no submodule. package-lock.json commitado (builds reproduzíveis).
+**#conquistas Track Record ✅ LIVE — dados reais confirmados via API:**
+- 🏆 Streak: 3 ciclos positivos consecutivos
+- 💯 Win Rate: 77% dos ciclos lucrativos
+- 📈 P&L Total: $932.795 acumulado
+- 🎯 Record Ciclo: $4,35
 
-**Nexo (5° agente trainer) ✅ CORRIGIDO**: discord_convs buscado antes do early return. Pareamento Telegram user→assistant corrigido. Guard condicional adicionado.
+**BUG CRÍTICO CORRIGIDO: card_server DB_PATH ✅**
+- Todos os 8 cards Discord agora usam /ocme_data/webdex_v5_final.db (4.37M rows)
 
-**Smith CLEAN ✅ (fc8b418)**: MEDIUM-04 watchdog card_server + LOW-01 nexo summary clean + LOW-02 --nexo-only flag. Todos os 8 findings resolvidos.
+**Vault Obsidian VPS sincronizado ✅ (55 notas)**
+- market-intelligence 044-050 adicionadas
+- MOC-bdZinho-Learning-Map.md atualizado
 
-**Próximo deploy VPS**: `git pull` no VPS + `docker cp webdex_ai_trainer.py ocme-monitor:/app/` para ativar Nexo fixes + watchdog.
+**Próximas sessões:**
+- Deploy trainer fix para ocme-monitor (webdex_ai_trainer.py Nexo fixes já copiado via docker cp)
+- Criar uma nota Obsidian 052 sobre Track Record card decision
 
 ## Contexto Ativo (anterior)
 
