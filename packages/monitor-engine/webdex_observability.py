@@ -161,9 +161,25 @@ class _ObsHandler(BaseHTTPRequestHandler):
             self._handle_metrics()
         elif self.path.startswith("/health"):
             self._handle_health()
+        elif self.path.startswith("/digests"):
+            self._handle_digests()
         else:
             self._send(404, "application/json",
                        json.dumps({"error": "Not Found", "path": self.path}))
+
+    def _handle_digests(self):
+        """Retorna últimos 7 digests como JSON."""
+        try:
+            import urllib.parse as _up
+            qs = _up.parse_qs(_up.urlparse(self.path).query)
+            days = int(qs.get("days", ["7"])[0])
+            from webdex_ai_digest import get_recent_digests
+            from webdex_db import DB_LOCK, conn
+            digests = get_recent_digests(conn, DB_LOCK, days=min(days, 30))
+            body = json.dumps({"digests": digests, "count": len(digests)})
+            self._send(200, "application/json", body)
+        except Exception as e:
+            self._send(500, "application/json", json.dumps({"error": str(e)}))
 
     def _handle_metrics(self):
         # Sincroniza métricas do HEALTH vivo (via health_ref ou sys.modules)
@@ -183,6 +199,8 @@ class _ObsHandler(BaseHTTPRequestHandler):
 
     def _build_health_payload(self) -> Dict:
         # Vigia — lê HEALTH dict via live_health() (health_ref ou sys.modules)
+        # Fallback: se vigia legado nao atualiza last_fetch_ok_ts,
+        # verifica atividade recente no DB (workers modernos = protocolo ok)
         vigia_ok = False
         try:
             h = self._live_health() or {}
@@ -192,6 +210,19 @@ class _ObsHandler(BaseHTTPRequestHandler):
                 h.get("last_fetch_ok_ts", 0) or
                 h.get("updated_at", 0)
             )
+            if last_updated == 0:
+                # Vigia legado inativo: checar workers modernos via DB
+                try:
+                    c = sqlite3.connect(self._db_path, timeout=3)
+                    row = c.execute(
+                        "SELECT MAX(ts) FROM protocol_ops "
+                        "WHERE ts >= datetime(now, -30 minutes)"
+                    ).fetchone()
+                    c.close()
+                    if row and row[0]:
+                        last_updated = time.time()  # dados frescos = workers ativos
+                except Exception:
+                    pass
             vigia_ok = last_updated > 0 and (time.time() - last_updated) < 300  # 5 min
         except Exception:
             pass

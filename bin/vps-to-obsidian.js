@@ -16,11 +16,11 @@
 const http  = require('http');
 const https = require('https');
 
-const VPS_HEALTH   = 'http://76.13.100.67:9090/health';
-const VPS_METRICS  = 'http://76.13.100.67:9090/metrics';
-const VPS_DIGESTS  = 'http://76.13.100.67:9090/digests?days=1';
+const VPS_HEALTH   = process.env.VPS_MONITOR_URL ? `${process.env.VPS_MONITOR_URL}/health`   : 'http://76.13.100.67:9090/health';
+const VPS_METRICS  = process.env.VPS_MONITOR_URL ? `${process.env.VPS_MONITOR_URL}/metrics`  : 'http://76.13.100.67:9090/metrics';
+const VPS_DIGESTS  = process.env.VPS_MONITOR_URL ? `${process.env.VPS_MONITOR_URL}/digests?days=1` : 'http://76.13.100.67:9090/digests?days=1';
 const OBS_BASE    = 'https://127.0.0.1:27124';
-const OBS_KEY     = 'b9ac93d39dcf02ad9cb7f550e7e2fabc45b48f275cf447f31a9408db624b8a5f';
+const OBS_KEY     = process.env.OBSIDIAN_API_KEY || 'b9ac93d39dcf02ad9cb7f550e7e2fabc45b48f275cf447f31a9408db624b8a5f';
 const DRY_RUN     = process.argv.includes('--dry-run');
 const TIMEOUT     = 5000;
 
@@ -96,7 +96,12 @@ function obsidianAppend(markdown) {
       getRes.on('data', c => existing += c);
       getRes.on('end', () => {
         if (getRes.statusCode === 404) existing = '';
-        const combined = Buffer.from(existing + markdown, 'utf8');
+        // Deduplicação: substituir seção WEbdEX Monitor se já existir na nota
+        const MONITOR_RE = /\n## 🖥️ WEbdEX Monitor[\s\S]*?(?=\n## [^🖥]|\n---|\n# |$)/;
+        const merged = MONITOR_RE.test(existing)
+          ? existing.replace(MONITOR_RE, markdown)
+          : existing + markdown;
+        const combined = Buffer.from(merged, 'utf8');
         const req = https.request({
           hostname: '127.0.0.1', port: 27124,
           path: '/periodic/daily/',
@@ -110,7 +115,7 @@ function obsidianAppend(markdown) {
         }, res => {
           let body = '';
           res.on('data', c => body += c);
-          res.on('end', () => resolve(res.statusCode === 200 || res.statusCode === 204));
+          res.on('end', () => resolve(res.statusCode >= 200 && res.statusCode < 300));
         });
         req.on('error', reject);
         req.write(combined);
