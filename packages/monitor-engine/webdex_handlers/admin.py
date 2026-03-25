@@ -66,6 +66,7 @@ def adm_kb():
     kb.row("📸 Progressão do Capital")
     kb.row("📨 Gerar Convites", "📢 Broadcast")
     kb.row("📡 Status Monitor")
+    kb.row("🤖 Content Engine")
     kb.row("🔙 Menu")
     return kb
 
@@ -2612,3 +2613,183 @@ def _broadcast_callback(c):
             pass
 
     threading.Thread(target=_send_broadcast, daemon=True, name="broadcast_worker").start()
+
+
+# ==============================================================================
+# 🤖 MATRIX 3.0 — Content Engine (ADM only)
+# Comandos: /gerar_post, /criar_copy, /relatorio_mkt, /thread_x
+# ==============================================================================
+
+def _content_adm_only(m) -> bool:
+    """Retorna False e avisa se não for admin."""
+    if not is_admin(m.chat.id):
+        bot.send_message(m.chat.id, "🔒 Acesso restrito.")
+        return False
+    return True
+
+
+def _content_kb():
+    """Keyboard do menu Content Engine."""
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.row("📝 Post Discord", "📱 Post Telegram")
+    kb.row("🎯 Copy Tráfego", "📊 Relatório Mkt")
+    kb.row("🐦 Thread X", "🔙 ADM")
+    return kb
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "🤖 Content Engine")
+def adm_content_menu(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(
+        m.chat.id,
+        "🤖 <b>MATRIX 3.0 — Content Engine</b>\n\n"
+        "Selecione o tipo de conteúdo a gerar:",
+        parse_mode="HTML",
+        reply_markup=_content_kb(),
+    )
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "📝 Post Discord")
+def adm_content_discord(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando post Discord (ciclo)...", parse_mode="HTML")
+    _run_content_gen(m.chat.id, "post_discord", "ciclo")
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "📱 Post Telegram")
+def adm_content_telegram(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando post Telegram...", parse_mode="HTML")
+    _run_content_gen(m.chat.id, "post_telegram", "ciclo")
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "🎯 Copy Tráfego")
+def adm_content_copy(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando copy de captação...", parse_mode="HTML")
+    _run_content_gen(m.chat.id, "copy_trafego", "captacao")
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "📊 Relatório Mkt")
+def adm_content_relatorio(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando relatório de marketing...", parse_mode="HTML")
+    _run_content_gen(m.chat.id, "relatorio_mkt", None)
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "🐦 Thread X")
+def adm_content_thread_x(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando thread Twitter/X...", parse_mode="HTML")
+    _run_content_gen(m.chat.id, "thread_x", None)
+
+
+@bot.message_handler(commands=["gerar_post"])
+def cmd_gerar_post(m):
+    if not _content_adm_only(m):
+        return
+    parts = (m.text or "").split(maxsplit=1)
+    style = parts[1].strip() if len(parts) > 1 else "ciclo"
+    bot.send_message(m.chat.id, f"⏳ Gerando post ({style})...")
+    _run_content_gen(m.chat.id, "post_discord", style)
+
+
+@bot.message_handler(commands=["criar_copy"])
+def cmd_criar_copy(m):
+    if not _content_adm_only(m):
+        return
+    parts = (m.text or "").split(maxsplit=1)
+    obj = parts[1].strip() if len(parts) > 1 else "captacao"
+    bot.send_message(m.chat.id, f"⏳ Gerando copy ({obj})...")
+    _run_content_gen(m.chat.id, "copy_trafego", obj)
+
+
+@bot.message_handler(commands=["relatorio_mkt"])
+def cmd_relatorio_mkt(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando relatório de marketing...")
+    _run_content_gen(m.chat.id, "relatorio_mkt", None)
+
+
+@bot.message_handler(commands=["thread_x"])
+def cmd_thread_x(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando thread X...")
+    _run_content_gen(m.chat.id, "thread_x", None)
+
+
+@bot.message_handler(commands=["matrix3_stats"])
+def cmd_matrix3_stats(m):
+    """Mostra estatísticas do bdz_knowledge."""
+    if not _content_adm_only(m):
+        return
+    try:
+        from webdex_ai_knowledge import knowledge_stats
+        stats = knowledge_stats()
+        if not stats:
+            bot.send_message(m.chat.id, "📊 bdz_knowledge: (vazio — treino ainda não rodou)")
+            return
+        lines = ["📊 <b>MATRIX 3.0 — Knowledge Stats</b>\n"]
+        total = 0
+        for cat, info in stats.items():
+            n = info["total"]
+            total += n
+            lu = (info.get("last_update") or "")[:10]
+            lines.append(f"• <b>{cat}</b>: {n} itens ({lu})")
+        lines.append(f"\n🧠 Total: <b>{total} itens</b>")
+        bot.send_message(m.chat.id, "\n".join(lines), parse_mode="HTML", reply_markup=adm_kb())
+    except Exception as e:
+        bot.send_message(m.chat.id, f"❌ Erro: {e}")
+
+
+def _run_content_gen(chat_id: int, content_type: str, style: str | None):
+    """Executa geração de conteúdo em thread separada para não bloquear o bot."""
+    def _gen():
+        try:
+            from webdex_ai_content import (
+                gerar_post_discord, gerar_post_telegram,
+                gerar_copy_trafego, gerar_relatorio_marketing, gerar_thread_x,
+            )
+            result = None
+            if content_type == "post_discord":
+                result = gerar_post_discord(style or "ciclo")
+            elif content_type == "post_telegram":
+                result = gerar_post_telegram(style or "ciclo")
+            elif content_type == "copy_trafego":
+                result = gerar_copy_trafego(style or "captacao")
+            elif content_type == "relatorio_mkt":
+                result = gerar_relatorio_marketing()
+            elif content_type == "thread_x":
+                result = gerar_thread_x()
+
+            if result:
+                # Envia em chunks se for texto longo
+                if len(result) <= 4000:
+                    bot.send_message(
+                        chat_id,
+                        f"✅ <b>Conteúdo gerado:</b>\n\n{result}",
+                        parse_mode="HTML",
+                        reply_markup=_content_kb(),
+                    )
+                else:
+                    # Parte 1: cabeçalho
+                    bot.send_message(chat_id, "✅ <b>Conteúdo gerado:</b>", parse_mode="HTML")
+                    # Parte 2+: texto em chunks de 3800 chars
+                    for i in range(0, len(result), 3800):
+                        chunk = result[i:i+3800]
+                        bot.send_message(chat_id, chunk, reply_markup=_content_kb() if i+3800 >= len(result) else None)
+            else:
+                bot.send_message(chat_id, "❌ Geração falhou. Verifique API key.", reply_markup=_content_kb())
+        except Exception as e:
+            logger.error("[content] _run_content_gen falhou: %s", e)
+            bot.send_message(chat_id, f"❌ Erro interno: {e}", reply_markup=_content_kb())
+
+    threading.Thread(target=_gen, daemon=True, name=f"content_{content_type}").start()
