@@ -25,13 +25,105 @@ DASH_GRAPH_TTL = 15  # segundos
 
 DB_LOCK = threading.Lock()
 DB_PATH = os.getenv("DB_PATH") or os.getenv("WEbdEX_DB_PATH") or "webdex_v5_final.db"
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-cursor = conn.cursor()
-conn.execute("PRAGMA journal_mode=WAL")
-conn.execute("PRAGMA synchronous=NORMAL")
-conn.execute("PRAGMA cache_size=-8000")
-conn.execute("PRAGMA temp_store=MEMORY")
-conn.commit()
+
+# ==============================================================================
+# 🔒 Thread-local connection pool
+# Cada thread recebe sua própria conexão SQLite — elimina segfault no C layer
+# (_sqlite3.cpython-312.so crashes quando múltiplas threads compartilham conn)
+# DB_LOCK ainda serializa escritas para evitar SQLITE_BUSY em WAL mode.
+# ==============================================================================
+_thread_local = threading.local()
+
+
+def _make_conn() -> sqlite3.Connection:
+    # check_same_thread=False: seguro porque cada thread tem sua própria conexão
+    c = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA synchronous=NORMAL")
+    c.execute("PRAGMA cache_size=-8000")
+    c.execute("PRAGMA temp_store=MEMORY")
+    c.commit()
+    return c
+
+
+def _get_thread_conn() -> sqlite3.Connection:
+    """Retorna (ou cria) a conexão SQLite da thread atual."""
+    if not hasattr(_thread_local, 'conn') or _thread_local.conn is None:
+        _thread_local.conn = _make_conn()
+    return _thread_local.conn
+
+
+class _ConnProxy:
+    """Proxy transparente: roteia conn.execute() para a conexão da thread atual."""
+
+    def execute(self, sql, params=()):
+        return _get_thread_conn().execute(sql, params)
+
+    def executemany(self, sql, params=()):
+        return _get_thread_conn().executemany(sql, params)
+
+    def commit(self):
+        _get_thread_conn().commit()
+
+    def cursor(self):
+        return _get_thread_conn().cursor()
+
+    def close(self):
+        if hasattr(_thread_local, 'conn') and _thread_local.conn:
+            _thread_local.conn.close()
+            _thread_local.conn = None
+
+    def __getattr__(self, name):
+        return getattr(_get_thread_conn(), name)
+
+
+class _CursorProxy:
+    """Proxy de cursor thread-safe — estado armazenado em thread-local."""
+
+    def execute(self, sql, params=()):
+        cur = _get_thread_conn().execute(sql, params)
+        _thread_local.cur = cur
+        return cur
+
+    def executemany(self, sql, params=()):
+        cur = _get_thread_conn().executemany(sql, params)
+        _thread_local.cur = cur
+        return cur
+
+    def executescript(self, sql):
+        cur = _get_thread_conn().executescript(sql)
+        _thread_local.cur = cur
+        return cur
+
+    def fetchone(self):
+        c = getattr(_thread_local, 'cur', None)
+        return c.fetchone() if c else None
+
+    def fetchall(self):
+        c = getattr(_thread_local, 'cur', None)
+        return c.fetchall() if c else []
+
+    def fetchmany(self, size=1):
+        c = getattr(_thread_local, 'cur', None)
+        return c.fetchmany(size) if c else []
+
+    def __iter__(self):
+        c = getattr(_thread_local, 'cur', None)
+        return iter(c) if c else iter([])
+
+    @property
+    def rowcount(self):
+        c = getattr(_thread_local, 'cur', None)
+        return c.rowcount if c else -1
+
+    @property
+    def lastrowid(self):
+        c = getattr(_thread_local, 'cur', None)
+        return c.lastrowid if c else None
+
+
+conn = _ConnProxy()
+cursor = _CursorProxy()
 
 
 def _ensure_operacoes_ambiente_column_and_backfill(conn: sqlite3.Connection) -> int:
