@@ -4,18 +4,19 @@
 
 ## Contexto Ativo
 
-**bdZinho Cards v3 + Sistema Dados ao Vivo ✅ 100% IMPLEMENTADO** (2026-03-25)
-- `card_server.py` (Python stdlib puro, porta 8766) — API JSON dados ao vivo do SQLite
-- `live-data.js` — binder declarativo `data-live="campo"` para todos os cards HTML
-- `render_card.js` — grava WebM 1080×1920 on-demand + envia Discord webhook
-- 8 `canal-*.html` atualizados com `data-live` e `<script src="live-data.js">`
-- `/card` slash command Discord — dropdown 8 canais → gera WebM ao vivo → envia
-- `inject_cards_knowledge.py` — 9 items injetados no bdz_knowledge PostgreSQL
-- 8 WebM enviados ao Discord (8/8 ✅, dados ao vivo ativos)
+**bdZinho Cards v3 ✅ 100% DEPLOYADO NO VPS** (2026-03-25 15:00)
+- card_server.py: auto-inicia com o bot via `_start_card_server()` no `on_ready`
+- Node.js v24 + Playwright + Chromium headless instalados no container orchestrator-discord
+- render_card.js versão Linux — token-bd.webm 740KB gerado e testado no VPS
+- `/card` slash command: 10 comandos Discord sincronizados (era 9)
+- bdz_knowledge: **99 items ativos** (+9 sobre sistema de cards)
+- Obsidian vault VPS: nota 051 criada em knowledge/webdex/
+- VPS host: Node.js v18 + Chromium 146 também disponíveis
 
-**Problema resolvido: DPR=0.5 no Playwright**
-- Fix: `viewport-fix.js` aplica `html { zoom: 2 }` condicionalmente (DPR ≤ 0.6)
-- Chrome DPR=1 grava animações CSS como WebM → Discord reproduz inline com movimento
+**Commits locais (aguardando push pelo @devops):**
+- `767cbe5` chore: bump orchestrator (auto-start card_server)
+- `4932feb` fix: render_card_linux.js + path fix container
+- `8b6a7a3` feat(cards-v3): 8 cards + sistema dados ao vivo
 
 **Market Intelligence WEbdEX Q1/Q2 2026 ✅ INJETADA E DEPLOYADA** (2026-03-25)
 - Pesquisa extensiva: 7 temas, 18+ fontes, dados Q1 2026
