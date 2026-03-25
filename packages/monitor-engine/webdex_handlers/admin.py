@@ -2631,9 +2631,10 @@ def _content_adm_only(m) -> bool:
 def _content_kb():
     """Keyboard do menu Content Engine."""
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.row("📝 Post Discord", "📱 Post Telegram")
-    kb.row("🎯 Copy Tráfego", "📊 Relatório Mkt")
-    kb.row("🐦 Thread X", "🔙 ADM")
+    kb.row("🖼️ Card Ciclo", "📝 Post Discord")
+    kb.row("📱 Post Telegram", "🎯 Copy Tráfego")
+    kb.row("📊 Relatório Mkt", "🐦 Thread X")
+    kb.row("🔙 ADM")
     return kb
 
 
@@ -2648,6 +2649,42 @@ def adm_content_menu(m):
         parse_mode="HTML",
         reply_markup=_content_kb(),
     )
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "🖼️ Card Ciclo")
+def adm_content_card_ciclo(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando card visual do ciclo 21h...", parse_mode="HTML")
+    def _gen():
+        try:
+            from webdex_ai_image import gerar_card_ciclo
+            buf = gerar_card_ciclo()
+            buf.seek(0)
+            bot.send_photo(m.chat.id, buf,
+                           caption="📊 Card Ciclo 21h — WEbdEX Protocol\n#WEbdEX",
+                           reply_markup=_content_kb())
+        except Exception as e:
+            bot.send_message(m.chat.id, f"❌ {e}", reply_markup=_content_kb())
+    threading.Thread(target=_gen, daemon=True).start()
+
+
+@bot.message_handler(commands=["card_ciclo"])
+def cmd_card_ciclo(m):
+    if not _content_adm_only(m):
+        return
+    bot.send_message(m.chat.id, "⏳ Gerando card...")
+    def _gen():
+        try:
+            from webdex_ai_image import gerar_card_ciclo
+            buf = gerar_card_ciclo()
+            buf.seek(0)
+            bot.send_photo(m.chat.id, buf,
+                           caption="📊 Card Ciclo 21h · WEbdEX Protocol",
+                           reply_markup=_content_kb())
+        except Exception as e:
+            bot.send_message(m.chat.id, f"❌ {e}", reply_markup=_content_kb())
+    threading.Thread(target=_gen, daemon=True).start()
 
 
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "📝 Post Discord")

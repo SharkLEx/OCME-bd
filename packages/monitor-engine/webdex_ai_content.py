@@ -286,3 +286,39 @@ CONTEXTO DO PROTOCOLO:
         temperature=0.78,
     )
     return result or "⚠️ Falha na geração da thread."
+
+
+def gerar_pacote_ciclo(webhook_discord: str = "") -> dict:
+    """
+    Gera o pacote completo de conteúdo do ciclo:
+      - Card visual PNG (1200×675)
+      - Post Discord formatado
+      - Post Telegram formatado
+      Opcionalmente posta o card no Discord se webhook fornecido.
+
+    Retorna dict com chaves: 'card_buf', 'post_discord', 'post_telegram', 'discord_ok'
+    """
+    try:
+        from webdex_ai_image import gerar_card_ciclo, post_card_discord
+        card_buf = gerar_card_ciclo()
+        discord_ok = False
+        if webhook_discord:
+            discord_ok = post_card_discord(
+                webhook_discord,
+                card_buf,
+                filename="webdex_ciclo.png",
+                title="📊 Resultado do Ciclo 21h",
+                description="Dados on-chain · Polygon Mainnet",
+                color=0x00FFB2,
+            )
+    except Exception as e:
+        logger.warning("[content] gerar_card falhou: %s", e)
+        card_buf = None
+        discord_ok = False
+
+    return {
+        "card_buf":      card_buf,
+        "post_discord":  gerar_post_discord("ciclo"),
+        "post_telegram": gerar_post_telegram("ciclo"),
+        "discord_ok":    discord_ok,
+    }
