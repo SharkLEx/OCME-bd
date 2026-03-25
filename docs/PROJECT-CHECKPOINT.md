@@ -15,7 +15,9 @@ Entregas desta sessão (commits pushados):
 
 **Nexo (5° agente trainer) ✅ CORRIGIDO**: discord_convs buscado antes do early return. Pareamento Telegram user→assistant corrigido. Guard condicional adicionado.
 
-**Próximo deploy VPS**: `git pull` no VPS + `docker cp webdex_ai_trainer.py ocme-monitor:/app/` para ativar os fixes do Nexo.
+**Smith CLEAN ✅ (fc8b418)**: MEDIUM-04 watchdog card_server + LOW-01 nexo summary clean + LOW-02 --nexo-only flag. Todos os 8 findings resolvidos.
+
+**Próximo deploy VPS**: `git pull` no VPS + `docker cp webdex_ai_trainer.py ocme-monitor:/app/` para ativar Nexo fixes + watchdog.
 
 ## Contexto Ativo (anterior)
 
