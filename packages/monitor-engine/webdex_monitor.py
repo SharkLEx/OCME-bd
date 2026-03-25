@@ -445,11 +445,22 @@ def notificar(
             f"┈┈┈┈┈┈ SUBCONTA ┈┈┈┈┈┈\n\n{sub_lines}\n"
         ) if sub_lines else ""
 
+        # Blockchain compacta — 1 linha
+        _bloco_num = f"Bloco <code>{bloco:,}</code>  ·  " if (bloco and bloco > 0) else ""
+        _chain_compact = f"🔷  Polygon  ·  {_bloco_num}🕒  <i>{esc(ago)}</i>\n"
+
+        # Footer dinâmico bdZinho
+        _footer = (
+            "bdZinho monitora · dia positivo 🟢" if pnl_hj > 0
+            else ("bdZinho monitora · protocolo estável ⚡" if pnl_hj == 0
+                  else "bdZinho monitora · protocolo ON 🔵")
+        )
+
         msg = (
             f"⚡ <b>WEbdEX ENGINE</b>  ·  <code>{esc(tag)}</code>\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"\n"
-            f"{exec_icon}  <b>EXECUÇÃO CONFIRMADA</b>  ·  #{trades_hj}\n"
+            f"{exec_icon}  <b>CICLO CONFIRMADO</b>  ·  #{trades_hj}\n"
             f"👤  {code(sub)}\n"
             f"🔄  Estratégia: <b>{esc(strat)}</b>  ·  🪙 <b>{esc(token)}</b>\n"
             f"\n"
@@ -460,10 +471,7 @@ def notificar(
             f"{gas_line}\n"
             f"{pass_line + chr(10) if pass_line else ''}"
             f"\n"
-            f"┈┈┈┈┈┈ BLOCKCHAIN ┈┈┈┈┈┈\n"
-            f"\n"
-            f"{bloco_line}"
-            f"🕒  <i>{esc(ago)}</i>\n"
+            f"{_chain_compact}"
             f"{cycle_line}"
             f'🔗  <a href="https://polygonscan.com/tx/{esc(tx)}">Ver transação ↗</a>\n'
             f"\n"
@@ -476,7 +484,7 @@ def notificar(
             f"{streak_line}"
             f"\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"<i>⚡ WEbdEX · New Digital Economy</i>"
+            f"<i>⚡ WEbdEX · {_footer}</i>"
         )
         send_html(chat_id, msg, disable_web_page_preview=True)
     except Exception as e:
