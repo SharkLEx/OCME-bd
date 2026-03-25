@@ -24,7 +24,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 try:
-    from webdex_discord_animate import animate_and_post as _animate
+    from webdex_local_animate import animate_and_post as _animate
 except ImportError:
     _animate = None  # type: ignore[assignment]
 
