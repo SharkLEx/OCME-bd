@@ -53,6 +53,16 @@ except ImportError:
     TOOLS = []
     logger.warning("[ai] Tool use desabilitado — webdex_tools não encontrado")
 
+# ── Epic MATRIX-3 Story 3.1 — Knowledge Base (soft import — graceful degradation) ──
+try:
+    from webdex_ai_knowledge import knowledge_build_context
+    _KNOWLEDGE_ENABLED = True
+    logger.info("[ai] MATRIX 3.0 Knowledge Base: ATIVO")
+except ImportError:
+    _KNOWLEDGE_ENABLED = False
+    knowledge_build_context = None  # type: ignore[assignment]
+    logger.warning("[ai] MATRIX 3.0 Knowledge Base: módulo não encontrado")
+
 # ==============================================================================
 # ⚙️ CONFIG
 # ==============================================================================
@@ -1230,6 +1240,31 @@ def _get_webdex_kb() -> str:
     return WEBDEX_KB
 
 
+# Cache simples para não recarregar knowledge do Postgres a cada mensagem
+_matrix3_cache: dict = {"content": "", "ts": 0.0}
+_MATRIX3_CACHE_TTL = 300  # 5 minutos
+
+
+def _get_matrix3_knowledge() -> str:
+    """
+    Retorna o bloco de conhecimento MATRIX 3.0 do bdZinho.
+    Cacheado por 5 minutos para não sobrecarregar o banco em cada msg.
+    Retorna string vazia se módulo indisponível ou banco vazio.
+    """
+    import time as _time
+    now = _time.time()
+    if now - _matrix3_cache["ts"] < _MATRIX3_CACHE_TTL and _matrix3_cache["content"]:
+        return _matrix3_cache["content"]
+    try:
+        ctx = knowledge_build_context()
+        _matrix3_cache["content"] = ctx
+        _matrix3_cache["ts"] = now
+        return ctx
+    except Exception as e:
+        logger.debug("[ai] _get_matrix3_knowledge falhou: %s", e)
+        return ""
+
+
 # ==============================================================================
 # 🧠 BRAIN PROMPT BUILDER
 # ==============================================================================
@@ -1275,6 +1310,7 @@ def build_webdex_brain_prompt(chat_id, user_text: str) -> list:
         "BASE DE CONHECIMENTO COMPLETA DO PROTOCOLO:\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         + _get_webdex_kb()
+        + (_get_matrix3_knowledge() if _KNOWLEDGE_ENABLED else "")
     )
 
     # ── Snapshot do DB do usuário (dados reais) ───────────────────────────────
