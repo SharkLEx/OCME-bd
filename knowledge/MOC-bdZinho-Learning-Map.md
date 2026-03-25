@@ -254,6 +254,20 @@ TÉCNICA → DEPLOY → RESILIÊNCIA
 
 ---
 
+## 🏗️ DIMENSÃO 9 — Decisões & Incidentes (memória institucional)
+
+*As escolhas que moldaram o protocolo — e o porquê delas.*
+
+| Nota | O que bdZinho aprende |
+|------|----------------------|
+| [[051-cards-bdzinho-v3]] | Sistema de 8 cards animados — arquitetura e deploy |
+| [[052-track-record-decisao]] | Por que Win Rate > Streak como métrica principal |
+| [[053-pipeline-dado-ao-usuario]] | Da blockchain ao card Discord — 5 camadas |
+| [[054-subscription-tiers]] | Free / Pro / Institutional — o que cada tier recebe |
+| [[055-observability-degraded-fix]] | Por que "degraded" retorna 200, não 503 |
+
+---
+
 ## 📊 Status do Knowledge Graph
 
 | Dimensão | Notas | Status |
@@ -265,9 +279,10 @@ TÉCNICA → DEPLOY → RESILIÊNCIA
 | Marketing | 028-031 | ✅ Completo |
 | Marca/Brand | 035-037 | ✅ Completo |
 | Fluxos | 038-039 | ✅ Completo |
-| **Market Intelligence** | **044-050** | ✅ **Completo (2026-03-25)** |
+| Market Intelligence | 044-050 | ✅ Completo (2026-03-25) |
+| **Decisões & Incidentes** | **051-055** | ✅ **Completo (2026-03-25)** |
 
-**Total: 50 notas atômicas. 8 dimensões cobertas. bdZinho conhece o mercado em que vive.**
+**Total: 55 notas atômicas. 9 dimensões cobertas. bdZinho conhece suas próprias decisões.**
 
 ---
 
