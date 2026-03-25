@@ -42,6 +42,16 @@ try:
 except ImportError:
     _render_21h = None  # type: ignore[assignment]
 
+# MATRIX-3.6: auto-post card visual após ciclo 21h
+try:
+    from webdex_ai_image import gerar_card_ciclo, post_card_discord as _post_card_discord
+    from webdex_ai_content import gerar_post_discord as _gerar_post_discord
+    import os as _os
+    _WEBHOOK_CONTENT_CARD = _os.getenv("DISCORD_WEBHOOK_CONTENT_CARD", "").strip() or _WEBHOOK_RELATORIO
+    _MATRIX36_ENABLED = True
+except ImportError:
+    _MATRIX36_ENABLED = False
+
 try:
     from telegram_design_tokens import (
         HDR, SEP, EMOJI as TG, winrate_bar, format_currency, cta_ocme,
@@ -352,6 +362,36 @@ def agendador_21h():
                             )
                         except Exception as _dig_err:
                             logger.warning("[agendador_21h] ai_digest falhou (não crítico): %s", _dig_err)
+
+                        # ── MATRIX-3.6: Card visual + post Discord (fail-open) ──────
+                        if _MATRIX36_ENABLED and _WEBHOOK_CONTENT_CARD:
+                            _m36_key = f"matrix36_21h_{hoje}"
+                            if get_config(_m36_key, "") != "ok":
+                                try:
+                                    import threading as _thr
+                                    def _post_card_bg():
+                                        try:
+                                            _card_buf = gerar_card_ciclo()
+                                            _card_ok = _post_card_discord(
+                                                webhook_url=_WEBHOOK_CONTENT_CARD,
+                                                image_buf=_card_buf,
+                                                filename="webdex_ciclo.png",
+                                                title="📊 Resultado do Ciclo 21h",
+                                                description="Dados on-chain · Polygon Mainnet",
+                                                color=0x00FFB2,
+                                            )
+                                            if _card_ok:
+                                                set_config(_m36_key, "ok")
+                                                logger.info("[matrix36] Card ciclo postado no Discord")
+                                            else:
+                                                logger.warning("[matrix36] post_card_discord retornou False")
+                                        except Exception as _m36_e:
+                                            logger.warning("[matrix36] card falhou (não crítico): %s", _m36_e)
+                                    _thr.Thread(target=_post_card_bg, daemon=True).start()
+                                except Exception as _m36_err:
+                                    logger.warning("[matrix36] erro ao lançar thread: %s", _m36_err)
+                            else:
+                                logger.info("[matrix36] card já postado hoje — skip")
 
                         # ── SEGUNDO CANAL DISCORD: #webdex-on-chain (resumo compacto) ──
                         try:
