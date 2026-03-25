@@ -16,8 +16,9 @@
 const http  = require('http');
 const https = require('https');
 
-const VPS_HEALTH  = 'http://76.13.100.67:9090/health';
-const VPS_METRICS = 'http://76.13.100.67:9090/metrics';
+const VPS_HEALTH   = 'http://76.13.100.67:9090/health';
+const VPS_METRICS  = 'http://76.13.100.67:9090/metrics';
+const VPS_DIGESTS  = 'http://76.13.100.67:9090/digests?days=1';
 const OBS_BASE    = 'https://127.0.0.1:27124';
 const OBS_KEY     = 'b9ac93d39dcf02ad9cb7f550e7e2fabc45b48f275cf447f31a9408db624b8a5f';
 const DRY_RUN     = process.argv.includes('--dry-run');
@@ -44,6 +45,17 @@ async function fetchHealth() {
   } catch (e) {
     console.warn('[WARN] health fetch:', e.message);
     return {};
+  }
+}
+
+async function fetchLatestDigest() {
+  try {
+    const raw = await fetch(VPS_DIGESTS);
+    const data = JSON.parse(raw);
+    return (data.digests && data.digests.length > 0) ? data.digests[data.digests.length - 1] : null;
+  } catch (e) {
+    console.warn('[WARN] digest fetch:', e.message);
+    return null;
   }
 }
 
@@ -112,7 +124,33 @@ function obsidianAppend(markdown) {
 
 // ── Note builder ──────────────────────────────────────────────────────────────
 
-function buildNote(health, metrics) {
+function buildDigestSection(digest) {
+  if (!digest) return '';
+  const wr   = (digest.wr_pct || 0).toFixed(1);
+  const pnl  = (digest.pnl_usd || 0);
+  const pnlTxt = pnl >= 0 ? `✅ +$${pnl.toFixed(4)}` : `⚠️ -$${Math.abs(pnl).toFixed(4)}`;
+  const tvl  = Math.round(digest.tvl_usd || 0).toLocaleString('pt-BR');
+  const traders = digest.traders || 0;
+  const trades  = (digest.trades || 0).toLocaleString('pt-BR');
+
+  let section = `
+## 🧠 Último Ciclo 21h — ${digest.date}
+
+| Métrica | Valor |
+|---------|-------|
+| Traders ativos | ${traders} |
+| Total de trades | ${trades} |
+| WinRate | ${wr}% |
+| P&L bruto | ${pnlTxt} |
+| TVL | $${tvl} |
+`;
+  if (digest.analysis) {
+    section += `\n> 🤖 **Análise IA:** ${digest.analysis}\n`;
+  }
+  return section;
+}
+
+function buildNote(health, metrics, digest) {
   const ts = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
 
   const icon = v => v ? '✅' : '⚠️';
@@ -133,6 +171,8 @@ function buildNote(health, metrics) {
   const lagTxt     = lag === 0 ? '✅ 0' : `⚠️ ${lag} blocos`;
   const captureTxt = parseFloat(capture) >= 99.0 ? `✅ ${capture}%` : `⚠️ ${capture}%`;
 
+  const digestSection = buildDigestSection(digest);
+
   return `
 ## 🖥️ WEbdEX Monitor — ${ts} BRT
 
@@ -152,7 +192,7 @@ function buildNote(health, metrics) {
 | Taxa de captura | ${captureTxt} |
 | Erros RPC | ${rpcErrs} |
 | Alertas sentinela | ${alerts} |
-
+${digestSection}
 `;
 }
 
@@ -160,14 +200,14 @@ function buildNote(health, metrics) {
 
 async function main() {
   console.log('[vps-to-obsidian] Buscando dados do VPS...');
-  const [health, metrics] = await Promise.all([fetchHealth(), fetchMetrics()]);
+  const [health, metrics, digest] = await Promise.all([fetchHealth(), fetchMetrics(), fetchLatestDigest()]);
 
   if (!Object.keys(health).length && !Object.keys(metrics).length) {
     console.error('[ERROR] Sem dados do VPS. Abortando.');
     process.exit(1);
   }
 
-  const note = buildNote(health, metrics);
+  const note = buildNote(health, metrics, digest);
 
   if (DRY_RUN) {
     console.log('── DRY RUN ─────────────────────────────────────────');
