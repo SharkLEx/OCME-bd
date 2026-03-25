@@ -587,13 +587,14 @@ def _run_nexo(
 
 # ── Orquestrador principal ────────────────────────────────────────────────────
 
-def run_training(days: int = 3, dry_run: bool = False) -> dict:
+def run_training(days: int = 3, dry_run: bool = False, nexo_only: bool = False) -> dict:
     """
     Executa ciclo completo de treinamento.
+    nexo_only=True pula Smith/Morpheus/Analyst/Profiles e executa apenas o Nexo.
     Retorna sumário: {agent: count_saved}
     """
     logger.info("═══ bdZinho — Ciclo de treinamento noturno ═══")
-    logger.info("Parâmetros: days=%d, dry_run=%s, model=%s", days, dry_run, _TRAINER_MODEL)
+    logger.info("Parâmetros: days=%d, dry_run=%s, nexo_only=%s, model=%s", days, dry_run, nexo_only, _TRAINER_MODEL)
 
     start = time.time()
     summary = {}
@@ -619,39 +620,40 @@ def run_training(days: int = 3, dry_run: bool = False) -> dict:
         logger.warning("Nenhum dado disponível (Telegram, Discord ou digests) — ciclo de treinamento vazio")
         return {"total": 0}
 
-    # ── Smith ─────────────────────────────────────────────────────────────────
-    if conversations:
-        logger.info("Iniciando análise Smith...")
-        smith_data = _run_smith(conversations)
-        smith_count = _persist_knowledge(smith_data, source="smith", dry_run=dry_run)
-        summary["smith"] = smith_count
-        logger.info("Smith: %d itens de conhecimento salvos", smith_count)
-        time.sleep(1)  # rate limit entre calls
+    if not nexo_only:
+        # ── Smith ─────────────────────────────────────────────────────────────
+        if conversations:
+            logger.info("Iniciando análise Smith...")
+            smith_data = _run_smith(conversations)
+            smith_count = _persist_knowledge(smith_data, source="smith", dry_run=dry_run)
+            summary["smith"] = smith_count
+            logger.info("Smith: %d itens de conhecimento salvos", smith_count)
+            time.sleep(1)  # rate limit entre calls
 
-    # ── Morpheus ──────────────────────────────────────────────────────────────
-    logger.info("Iniciando análise Morpheus...")
-    morpheus_data = _run_morpheus(conversations, digests)
-    morpheus_count = _persist_knowledge(morpheus_data, source="morpheus", dry_run=dry_run)
-    summary["morpheus"] = morpheus_count
-    logger.info("Morpheus: %d itens de conhecimento salvos", morpheus_count)
-    time.sleep(1)
-
-    # ── Analyst ───────────────────────────────────────────────────────────────
-    if digests:
-        logger.info("Iniciando análise Analyst...")
-        analyst_data = _run_analyst(digests)
-        analyst_count = _persist_knowledge(analyst_data, source="analyst", dry_run=dry_run)
-        summary["analyst"] = analyst_count
-        logger.info("Analyst: %d itens de conhecimento salvos", analyst_count)
+        # ── Morpheus ──────────────────────────────────────────────────────────
+        logger.info("Iniciando análise Morpheus...")
+        morpheus_data = _run_morpheus(conversations, digests)
+        morpheus_count = _persist_knowledge(morpheus_data, source="morpheus", dry_run=dry_run)
+        summary["morpheus"] = morpheus_count
+        logger.info("Morpheus: %d itens de conhecimento salvos", morpheus_count)
         time.sleep(1)
 
-    # ── Profile Updater ──────────────────────────────────────────────────────
-    if conversations_by_user:
-        logger.info("Iniciando Profile Updater (%d usuários)...", len(conversations_by_user))
-        profile_count = _run_profile_updater(conversations_by_user, dry_run=dry_run)
-        summary["profiles"] = profile_count
-        logger.info("Profile Updater: %d perfis atualizados", profile_count)
-        time.sleep(1)
+        # ── Analyst ───────────────────────────────────────────────────────────
+        if digests:
+            logger.info("Iniciando análise Analyst...")
+            analyst_data = _run_analyst(digests)
+            analyst_count = _persist_knowledge(analyst_data, source="analyst", dry_run=dry_run)
+            summary["analyst"] = analyst_count
+            logger.info("Analyst: %d itens de conhecimento salvos", analyst_count)
+            time.sleep(1)
+
+        # ── Profile Updater ──────────────────────────────────────────────────
+        if conversations_by_user:
+            logger.info("Iniciando Profile Updater (%d usuários)...", len(conversations_by_user))
+            profile_count = _run_profile_updater(conversations_by_user, dry_run=dry_run)
+            summary["profiles"] = profile_count
+            logger.info("Profile Updater: %d perfis atualizados", profile_count)
+            time.sleep(1)
 
     # ── Nexo — aprendizado contínuo das conversas ─────────────────────────────
     # FIX MEDIUM-06: só executa se há dados para analisar
@@ -664,7 +666,8 @@ def run_training(days: int = 3, dry_run: bool = False) -> dict:
         )
         nexo_data  = _run_nexo(conversations, discord_convs, existing_topics)
         nexo_count = _persist_knowledge(nexo_data, source="nexo", dry_run=dry_run)
-        summary["nexo"] = nexo_count
+        if nexo_count:
+            summary["nexo"] = nexo_count
         logger.info("Nexo: %d novos itens de conhecimento injetados", nexo_count)
     else:
         logger.info("Nexo: sem conversas disponíveis — pulando")
@@ -688,6 +691,7 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Simula sem salvar no banco")
     parser.add_argument("--days", type=int, default=3, help="Dias de conversas a analisar (default: 3)")
     parser.add_argument("--stats", action="store_true", help="Mostra estatísticas do bdz_knowledge")
+    parser.add_argument("--nexo-only", action="store_true", help="Executa apenas o agente Nexo (aprendizado contínuo)")
     args = parser.parse_args()
 
     if args.stats:
@@ -703,6 +707,6 @@ if __name__ == "__main__":
             print(f"Erro ao ler stats: {e}")
         sys.exit(0)
 
-    result = run_training(days=args.days, dry_run=args.dry_run)
+    result = run_training(days=args.days, dry_run=args.dry_run, nexo_only=args.nexo_only)
     print(f"\n✅ Resultado: {result}")
     sys.exit(0 if result.get("total", 0) >= 0 else 1)
