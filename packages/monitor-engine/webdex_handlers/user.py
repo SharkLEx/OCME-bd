@@ -48,6 +48,19 @@ from webdex_db import ai_can_use, ai_global_enabled, ai_mode, DASH_GRAPH_CACHE
 from webdex_config import ai_answer_ptbr
 from webdex_monitor import HEALTH, fetch_range
 
+# Image generation (Nano Banana / Gemini via OpenRouter) — soft import
+try:
+    from webdex_ai_image_gen import generate_image as _img_gen, IMAGE_GEN_COOLDOWN_S
+    _IMG_GEN_AVAILABLE = True
+except ImportError:
+    _img_gen = None  # type: ignore[assignment]
+    IMAGE_GEN_COOLDOWN_S = 30
+    _IMG_GEN_AVAILABLE = False
+
+# Rate limit dedicado para image gen (separado do _rate_cache geral)
+_img_rate_cache: dict[int, float] = {}
+_img_rate_lock  = threading.Lock()
+
 # ==============================================================================
 # TOKENS MAP (para handler IDs com Saldo)
 # ==============================================================================
@@ -90,7 +103,7 @@ def main_kb(chat_id=None):
 
     kb.row("🔌 Conectar", "▶️ Ativar", "⏸️ Pausar")
     kb.row("📈 Dashboard PRO", "📌 Ciclo 21h", "🩺 Saúde")
-    kb.row("🧠 IA")
+    kb.row("🧠 IA", "🎨 Criar Imagem")
     kb.row("🗓️ Escolher Período", "🔎 Wallet Info")
 
     kb.row("📊 mybdBook", "📈 mybdBook (Gráfico)")
@@ -3277,3 +3290,132 @@ def check_subscription_tier(chat_id: int) -> str:
         _sub_tier_cache[chat_id] = (tier, now)
 
     return tier
+
+
+# ==============================================================================
+# 🎨 CRIAR IMAGEM — Nano Banana / Gemini via OpenRouter (MATRIX-3.7)
+# ==============================================================================
+
+def _img_throttle(user_id: int) -> float:
+    """
+    Verifica cooldown de geração de imagem.
+    Retorna 0 se liberado, ou segundos restantes se ainda em cooldown.
+    """
+    now = time.time()
+    with _img_rate_lock:
+        last = _img_rate_cache.get(user_id, 0.0)
+        remaining = IMAGE_GEN_COOLDOWN_S - (now - last)
+        if remaining > 0:
+            return remaining
+        _img_rate_cache[user_id] = now
+        return 0.0
+
+
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "🎨 Criar Imagem")
+def img_gen_menu(m):
+    chat_id = m.chat.id
+
+    if not _IMG_GEN_AVAILABLE:
+        bot.send_message(
+            chat_id,
+            "🎨 <b>Criar Imagem</b>\n\n"
+            "⚠️ Geração de imagens não disponível no momento.\n"
+            "Verifique se <code>OPENROUTER_API_KEY</code> está configurada.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    bot.send_message(
+        chat_id,
+        "🎨 <b>Criar Imagem com IA</b>\n\n"
+        "Descreva a imagem que você quer gerar.\n\n"
+        "<b>Exemplos:</b>\n"
+        "• Um robô DeFi no espaço com neons azuis\n"
+        "• Gráfico de lucro explodindo com confetes\n"
+        "• Mascote WEbdEX celebrando um win\n\n"
+        "💡 <i>Escreva em português ou inglês.</i>\n"
+        "❌ Para cancelar, escreva /cancelar",
+        parse_mode="HTML",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+    bot.register_next_step_handler(m, img_gen_step)
+
+
+def img_gen_step(m):
+    """Recebe o prompt do usuário e gera a imagem."""
+    import io as _io
+
+    chat_id = m.chat.id
+    prompt  = (m.text or "").strip()
+
+    if prompt.lower() in ("/cancelar", "cancelar", "/cancel"):
+        bot.send_message(chat_id, "✅ Geração cancelada.", reply_markup=main_kb(chat_id))
+        return
+
+    if not prompt:
+        bot.send_message(
+            chat_id,
+            "⚠️ Prompt vazio. Tente novamente com /criar_imagem ou o botão 🎨.",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    # Rate limit
+    remaining = _img_throttle(chat_id)
+    if remaining > 0:
+        bot.send_message(
+            chat_id,
+            f"⏳ Aguarde <b>{int(remaining)}s</b> antes de gerar outra imagem.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    # Feedback imediato
+    wait_msg = bot.send_message(
+        chat_id,
+        "🎨 <b>Gerando sua imagem...</b> ⏳\n\n"
+        "<i>Isso pode levar até 30 segundos.</i>",
+        parse_mode="HTML",
+    )
+
+    try:
+        img_bytes = _img_gen(prompt)
+    except Exception as e:
+        logger.warning("[img_gen] Erro ao gerar imagem: %s", e)
+        img_bytes = None
+
+    # Remove mensagem de espera
+    try:
+        bot.delete_message(chat_id, wait_msg.message_id)
+    except Exception:
+        pass
+
+    if not img_bytes:
+        bot.send_message(
+            chat_id,
+            "❌ <b>Falha ao gerar imagem.</b>\n\n"
+            "O serviço pode estar temporariamente indisponível. Tente novamente em instantes.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    caption = f"🎨 <b>WEbdEX AI Art</b>\n<i>{prompt[:120]}</i>"
+    try:
+        bot.send_photo(
+            chat_id,
+            _io.BytesIO(img_bytes),
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        logger.info("[img_gen] Imagem enviada para chat_id=%s | prompt=%s...", chat_id, prompt[:60])
+    except Exception as e:
+        logger.warning("[img_gen] Falha ao enviar foto para chat_id=%s: %s", chat_id, e)
+        bot.send_message(
+            chat_id,
+            "⚠️ Imagem gerada mas falhou ao enviar. Tente novamente.",
+            reply_markup=main_kb(chat_id),
+        )
