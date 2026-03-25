@@ -57,7 +57,7 @@ except ImportError:
     IMAGE_GEN_COOLDOWN_S = 30
     _IMG_GEN_AVAILABLE = False
 
-# MATRIX 4.2 — Vision (análise de imagens enviadas pelo usuário) — soft import
+# Vision — análise de imagens enviadas pelo usuário — soft import
 try:
     from webdex_ai_vision import analyze_image as _vision_analyze
     _VISION_AVAILABLE = True
@@ -65,7 +65,7 @@ except ImportError:
     _vision_analyze = None  # type: ignore[assignment]
     _VISION_AVAILABLE = False
 
-# MATRIX 4.0 — Perfil (para enriquecer análise de visão) — soft import
+# Individual Profile — para enriquecer análise de visão — soft import
 try:
     from webdex_ai_user_profile import profile_build_context as _profile_ctx
     _VISION_PROFILE_ENABLED = True
@@ -3314,7 +3314,7 @@ def check_subscription_tier(chat_id: int) -> str:
 
 
 # ==============================================================================
-# 🎨 CRIAR IMAGEM — Nano Banana / Gemini via OpenRouter (MATRIX-3.7)
+# 🎨 CRIAR IMAGEM — Nano Banana / Gemini via OpenRouter
 # ==============================================================================
 
 def _img_throttle(user_id: int) -> float:
@@ -3443,7 +3443,7 @@ def img_gen_step(m):
 
 
 # ==============================================================================
-# 👁️ MATRIX 4.2 — VISION: análise de imagens enviadas pelo usuário
+# 👁️ VISION: análise de imagens enviadas pelo usuário
 # ==============================================================================
 
 @bot.message_handler(content_types=["photo"])

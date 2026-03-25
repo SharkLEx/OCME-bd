@@ -1,10 +1,9 @@
 """
-webdex_ai_content.py — bdZinho MATRIX 3.0 Content Engine
-Epic MATRIX-3 | Story MATRIX-3.5
+webdex_ai_content.py — bdZinho Content Engine
 
 Geração de conteúdo de marketing para o protocolo WEbdEX usando:
   - Dados reais do último ciclo 21h (ai_digests)
-  - Inteligência acumulada (bdz_knowledge via MATRIX 3.0)
+  - Inteligência acumulada (bdz_knowledge)
   - LLM via OpenRouter (deepseek ou openai)
 
 Funções públicas:
@@ -34,7 +33,7 @@ _CONTENT_MODEL = os.getenv("CONTENT_MODEL", "deepseek/deepseek-chat")
 # ── Carrega contexto ──────────────────────────────────────────────────────────
 
 def _get_protocol_context() -> str:
-    """Monta contexto completo do protocolo: último digest + knowledge MATRIX 3.0."""
+    """Monta contexto completo do protocolo: último digest + knowledge do bdZinho."""
     parts = []
 
     # Dados reais do último ciclo 21h
@@ -56,7 +55,7 @@ def _get_protocol_context() -> str:
     except Exception as e:
         logger.debug("[content] digest falhou: %s", e)
 
-    # Inteligência MATRIX 3.0
+    # Inteligência do bdZinho (bdz_knowledge)
     try:
         from webdex_ai_knowledge import knowledge_build_context
         ctx = knowledge_build_context(include_categories=[

@@ -1,9 +1,7 @@
 """
-webdex_ai_proactive.py — bdZinho MATRIX 4.1 Proactive Mode
-Epic MATRIX-4 | Story MATRIX-4.1
-
+webdex_ai_proactive.py — bdZinho Proactive Mode
 bdZinho ataca primeiro — envia mensagens proativas personalizadas baseadas no
-perfil individual do trader (MATRIX 4.0) + dados do ciclo 21h.
+perfil individual do trader + dados do ciclo 21h.
 
 Triggers:
   post_cycle_nudge  → após ciclo 21h: insight personalizado p/ traders ativos com perfil
@@ -22,7 +20,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# ── MATRIX 4.0 dependency ─────────────────────────────────────────────────────
+# ── Individual Profile dependency ────────────────────────────────────────────
 try:
     from webdex_ai_user_profile import profile_build_context, profile_list_active, profile_get
     _PROFILE_ENABLED = True
@@ -113,7 +111,7 @@ def _call_llm(profile_ctx: str, cycle_summary: str) -> Optional[str]:
                 "Authorization": f"Bearer {_AI_KEY}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://webdex.pro",
-                "X-Title": "WEbdEX bdZinho MATRIX-4.1",
+                "X-Title": "WEbdEX bdZinho",
             },
             json={
                 "model": _AI_MODEL,
@@ -271,8 +269,8 @@ def post_cycle_nudge(cycle_data: dict) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
-# ── MATRIX 4.1: módulo pronto ─────────────────────────────────────────────────
+# ── Proactive Mode: módulo pronto ─────────────────────────────────────────────
 logger.info(
-    "[proactive] MATRIX 4.1 carregado — perfil=%s bot=%s llm=%s enabled=%s",
+    "[proactive] carregado — perfil=%s bot=%s llm=%s enabled=%s",
     _PROFILE_ENABLED, _BOT_ENABLED, _LLM_ENABLED, _PROACTIVE_ENABLED
 )

@@ -1,6 +1,5 @@
 """
-webdex_ai_trainer.py — bdZinho MATRIX 3.0 Nightly Trainer
-Epic MATRIX-3 | Story MATRIX-3.3
+webdex_ai_trainer.py — bdZinho Nightly Trainer
 
 Orquestrador de treinamento noturno do bdZinho.
 Analisa conversas recentes + digests do protocolo e extrai conhecimento
@@ -333,7 +332,7 @@ def _persist_knowledge(extracted: dict, source: str, dry_run: bool = False) -> i
     return count
 
 
-# ── MATRIX 4.0 — Profile Updater ──────────────────────────────────────────────
+# ── Profile Updater ────────────────────────────────────────────────────────────
 
 _PROFILE_SYSTEM = """
 Você é um analista de comportamento de traders do protocolo WEbdEX DeFi.
@@ -437,7 +436,7 @@ def run_training(days: int = 3, dry_run: bool = False) -> dict:
     Executa ciclo completo de treinamento.
     Retorna sumário: {agent: count_saved}
     """
-    logger.info("═══ bdZinho MATRIX 4.0 — Ciclo de treinamento noturno ═══")
+    logger.info("═══ bdZinho — Ciclo de treinamento noturno ═══")
     logger.info("Parâmetros: days=%d, dry_run=%s, model=%s", days, dry_run, _TRAINER_MODEL)
 
     start = time.time()
@@ -448,7 +447,7 @@ def run_training(days: int = 3, dry_run: bool = False) -> dict:
     conversations = _fetch_recent_conversations(days=days)
     logger.info("Conversas carregadas: %d grupos de chat", len(conversations))
 
-    # Índice por chat_id para o Profile Updater (MATRIX 4.0)
+    # Índice por chat_id para o Profile Updater
     conversations_by_user: dict = {str(c["chat_id"]): c for c in conversations}
 
     logger.info("Carregando digests (últimos 7 dias)...")
@@ -485,9 +484,9 @@ def run_training(days: int = 3, dry_run: bool = False) -> dict:
         logger.info("Analyst: %d itens de conhecimento salvos", analyst_count)
         time.sleep(1)
 
-    # ── MATRIX 4.0 — Profile Updater ──────────────────────────────────────────
+    # ── Profile Updater ──────────────────────────────────────────────────────
     if conversations_by_user:
-        logger.info("Iniciando MATRIX 4.0 — Profile Updater (%d usuários)...", len(conversations_by_user))
+        logger.info("Iniciando Profile Updater (%d usuários)...", len(conversations_by_user))
         profile_count = _run_profile_updater(conversations_by_user, dry_run=dry_run)
         summary["profiles"] = profile_count
         logger.info("Profile Updater: %d perfis atualizados", profile_count)
@@ -507,7 +506,7 @@ def run_training(days: int = 3, dry_run: bool = False) -> dict:
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="bdZinho MATRIX 3.0 — Nightly Trainer")
+    parser = argparse.ArgumentParser(description="bdZinho — Nightly Trainer")
     parser.add_argument("--dry-run", action="store_true", help="Simula sem salvar no banco")
     parser.add_argument("--days", type=int, default=3, help="Dias de conversas a analisar (default: 3)")
     parser.add_argument("--stats", action="store_true", help="Mostra estatísticas do bdz_knowledge")

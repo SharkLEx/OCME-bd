@@ -42,15 +42,15 @@ try:
 except ImportError:
     _render_21h = None  # type: ignore[assignment]
 
-# MATRIX-3.6: auto-post card visual após ciclo 21h
+# Card visual Discord — auto-post após ciclo 21h
 try:
     from webdex_ai_image import gerar_card_ciclo, post_card_discord as _post_card_discord
     from webdex_ai_content import gerar_post_discord as _gerar_post_discord
     import os as _os
     _WEBHOOK_CONTENT_CARD = _os.getenv("DISCORD_WEBHOOK_CONTENT_CARD", "").strip() or _WEBHOOK_RELATORIO
-    _MATRIX36_ENABLED = True
+    _DISCORD_CARD_ENABLED = True
 except ImportError:
-    _MATRIX36_ENABLED = False
+    _DISCORD_CARD_ENABLED = False
 
 try:
     from telegram_design_tokens import (
@@ -60,20 +60,20 @@ try:
 except ImportError:
     _TG_TOKENS = False
 
-# MATRIX-4.1: Proactive Mode — bdZinho ataca primeiro
+# Proactive Mode — bdZinho ataca primeiro após ciclo 21h
 try:
     from webdex_ai_proactive import post_cycle_nudge as _proactive_nudge
-    _MATRIX41_ENABLED = True
+    _PROACTIVE_MODULE_ENABLED = True
 except ImportError:
-    _MATRIX41_ENABLED = False
+    _PROACTIVE_MODULE_ENABLED = False
     _proactive_nudge = None  # type: ignore[assignment]
 
-# MATRIX-4.4: Cycle Visual — bdZinho expressão pós-ciclo no Discord
+# Cycle Visual — bdZinho expressão pós-ciclo no Discord
 try:
     from webdex_ai_cycle_visual import post_cycle_bdzinho as _cycle_bdzinho
-    _MATRIX44_ENABLED = True
+    _CYCLE_VISUAL_MODULE_ENABLED = True
 except ImportError:
-    _MATRIX44_ENABLED = False
+    _CYCLE_VISUAL_MODULE_ENABLED = False
     _cycle_bdzinho = None  # type: ignore[assignment]
 
 # ==============================================================================
@@ -379,31 +379,31 @@ def agendador_21h():
                         except Exception as _dig_err:
                             logger.warning("[agendador_21h] ai_digest falhou (não crítico): %s", _dig_err)
 
-                        # ── MATRIX-3.6: Card visual + post Discord (fail-open) ──────
-                        if _MATRIX36_ENABLED and _WEBHOOK_CONTENT_CARD:
-                            _m36_key = f"matrix36_21h_{hoje}"
-                            _m36_val = get_config(_m36_key, "")
-                            _m36_skip = _m36_val == "ok"
-                            if not _m36_skip and _m36_val.startswith("pending:"):
+                        # ── Card visual + post Discord (fail-open) ──────────────────
+                        if _DISCORD_CARD_ENABLED and _WEBHOOK_CONTENT_CARD:
+                            _card_key = f"card_visual_21h_{hoje}"
+                            _card_val = get_config(_card_key, "")
+                            _card_skip = _card_val == "ok"
+                            if not _card_skip and _card_val.startswith("pending:"):
                                 try:
-                                    _m36_ts = int(_m36_val.split(":", 1)[1])
-                                    _m36_skip = (time.time() - _m36_ts) < 600
+                                    _card_ts = int(_card_val.split(":", 1)[1])
+                                    _card_skip = (time.time() - _card_ts) < 600
                                 except (ValueError, IndexError):
                                     pass
-                            if not _m36_skip:
+                            if not _card_skip:
                                 try:
                                     # Guard salvo ANTES do thread (protege contra restart do container)
-                                    set_config(_m36_key, f"pending:{int(time.time())}")
+                                    set_config(_card_key, f"pending:{int(time.time())}")
                                     import threading as _thr
                                     # Digest passado diretamente — evita round-trip ao banco
-                                    _m36_digest = {
+                                    _card_digest = {
                                         "traders": _p_traders, "trades": _p_total,
                                         "wr_pct": _p_wr, "pnl_usd": _p_bruto,
                                         "fee_bd": _p_bd, "tvl_usd": _tvl_usd, "date": hoje,
                                     }
                                     def _post_card_bg():
                                         try:
-                                            _card_buf = gerar_card_ciclo(_m36_digest)
+                                            _card_buf = gerar_card_ciclo(_card_digest)
                                             _card_ok = _post_card_discord(
                                                 webhook_url=_WEBHOOK_CONTENT_CARD,
                                                 image_buf=_card_buf,
@@ -413,17 +413,17 @@ def agendador_21h():
                                                 color=0x00FFB2,
                                             )
                                             if _card_ok:
-                                                set_config(_m36_key, "ok")
-                                                logger.info("[matrix36] Card ciclo postado no Discord")
+                                                set_config(_card_key, "ok")
+                                                logger.info("[card_visual] Card ciclo postado no Discord")
                                             else:
-                                                logger.warning("[matrix36] post_card_discord retornou False")
-                                        except Exception as _m36_e:
-                                            logger.warning("[matrix36] card falhou (não crítico): %s", _m36_e)
+                                                logger.warning("[card_visual] post_card_discord retornou False")
+                                        except Exception as _card_e:
+                                            logger.warning("[card_visual] card falhou (não crítico): %s", _card_e)
                                     _thr.Thread(target=_post_card_bg, daemon=True).start()
-                                except Exception as _m36_err:
-                                    logger.warning("[matrix36] erro ao lançar thread: %s", _m36_err)
+                                except Exception as _card_err:
+                                    logger.warning("[card_visual] erro ao lançar thread: %s", _card_err)
                             else:
-                                logger.info("[matrix36] card já postado hoje — skip")
+                                logger.info("[card_visual] card já postado hoje — skip")
 
                         # ── SEGUNDO CANAL DISCORD: #webdex-on-chain (resumo compacto) ──
                         try:
@@ -478,8 +478,8 @@ def agendador_21h():
                                 if get_config(_tg_21h_key, "") != "ok":
                                     set_config(_tg_21h_key, "")  # resetar para retry
 
-                        # MATRIX-4.4: Cycle Visual — bdZinho expressão no Discord
-                        if _MATRIX44_ENABLED and _cycle_bdzinho is not None:
+                        # Cycle Visual — bdZinho expressão no Discord
+                        if _CYCLE_VISUAL_MODULE_ENABLED and _cycle_bdzinho is not None:
                             try:
                                 _cycle_bdzinho({
                                     "hoje":      hoje,
@@ -488,11 +488,11 @@ def agendador_21h():
                                     "p_traders": _p_traders,
                                     "p_total":   _p_total,
                                 })
-                            except Exception as _m44_err:
-                                logger.warning("[agendador_21h] MATRIX-4.4 cycle visual falhou: %s", _m44_err)
+                            except Exception as _cv_err:
+                                logger.warning("[agendador_21h] cycle_visual falhou: %s", _cv_err)
 
-                        # MATRIX-4.1: Proactive Mode — insights personalizados pós-ciclo
-                        if _MATRIX41_ENABLED and _proactive_nudge is not None:
+                        # Proactive Mode — insights personalizados pós-ciclo
+                        if _PROACTIVE_MODULE_ENABLED and _proactive_nudge is not None:
                             try:
                                 _proactive_nudge({
                                     "hoje":      hoje,
@@ -503,8 +503,8 @@ def agendador_21h():
                                     "p_total":   _p_total,
                                     "p_bd":      _p_bd,
                                 })
-                            except Exception as _m41_err:
-                                logger.warning("[agendador_21h] MATRIX-4.1 proactive falhou: %s", _m41_err)
+                            except Exception as _pm_err:
+                                logger.warning("[agendador_21h] proactive falhou: %s", _pm_err)
 
                         # Animação bdZinho → #relatório-diário
                         if _animate and _p_total > 0:

@@ -53,26 +53,26 @@ except ImportError:
     TOOLS = []
     logger.warning("[ai] Tool use desabilitado — webdex_tools não encontrado")
 
-# ── Epic MATRIX-3 Story 3.1 — Knowledge Base (soft import — graceful degradation) ──
+# ── Knowledge Base (soft import — graceful degradation) ────────────────────
 try:
     from webdex_ai_knowledge import knowledge_build_context
     _KNOWLEDGE_ENABLED = True
-    logger.info("[ai] MATRIX 3.0 Knowledge Base: ATIVO")
+    logger.info("[ai] bdZinho Knowledge Base: ATIVO")
 except ImportError:
     _KNOWLEDGE_ENABLED = False
     knowledge_build_context = None  # type: ignore[assignment]
-    logger.warning("[ai] MATRIX 3.0 Knowledge Base: módulo não encontrado")
+    logger.warning("[ai] bdZinho Knowledge Base: módulo não encontrado")
 
-# ── Epic MATRIX-4 Story 4.0 — Individual User Profile (soft import) ──────────
+# ── Individual User Profile (soft import) ───────────────────────────────────
 try:
     from webdex_ai_user_profile import profile_build_context, profile_touch
     _USER_PROFILE_ENABLED = True
-    logger.info("[ai] MATRIX 4.0 Individual Profile: ATIVO")
+    logger.info("[ai] bdZinho Individual Profile: ATIVO")
 except ImportError:
     _USER_PROFILE_ENABLED = False
     profile_build_context = None  # type: ignore[assignment]
     profile_touch = None          # type: ignore[assignment]
-    logger.warning("[ai] MATRIX 4.0 Individual Profile: módulo não encontrado")
+    logger.warning("[ai] bdZinho Individual Profile: módulo não encontrado")
 
 # ==============================================================================
 # ⚙️ CONFIG
@@ -1252,27 +1252,27 @@ def _get_webdex_kb() -> str:
 
 
 # Cache simples para não recarregar knowledge do Postgres a cada mensagem
-_matrix3_cache: dict = {"content": "", "ts": 0.0}
-_MATRIX3_CACHE_TTL = 300  # 5 minutos
+_knowledge_cache: dict = {"content": "", "ts": 0.0}
+_KNOWLEDGE_CACHE_TTL = 300  # 5 minutos
 
 
-def _get_matrix3_knowledge() -> str:
+def _get_knowledge_context() -> str:
     """
-    Retorna o bloco de conhecimento MATRIX 3.0 do bdZinho.
+    Retorna o bloco de conhecimento do bdZinho.
     Cacheado por 5 minutos para não sobrecarregar o banco em cada msg.
     Retorna string vazia se módulo indisponível ou banco vazio.
     """
     import time as _time
     now = _time.time()
-    if now - _matrix3_cache["ts"] < _MATRIX3_CACHE_TTL and _matrix3_cache["content"]:
-        return _matrix3_cache["content"]
+    if now - _knowledge_cache["ts"] < _KNOWLEDGE_CACHE_TTL and _knowledge_cache["content"]:
+        return _knowledge_cache["content"]
     try:
         ctx = knowledge_build_context()
-        _matrix3_cache["content"] = ctx
-        _matrix3_cache["ts"] = now
+        _knowledge_cache["content"] = ctx
+        _knowledge_cache["ts"] = now
         return ctx
     except Exception as e:
-        logger.debug("[ai] _get_matrix3_knowledge falhou: %s", e)
+        logger.debug("[ai] _get_knowledge_context falhou: %s", e)
         return ""
 
 
@@ -1321,7 +1321,7 @@ def build_webdex_brain_prompt(chat_id, user_text: str) -> list:
         "BASE DE CONHECIMENTO COMPLETA DO PROTOCOLO:\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         + _get_webdex_kb()
-        + (_get_matrix3_knowledge() if _KNOWLEDGE_ENABLED else "")
+        + (_get_knowledge_context() if _KNOWLEDGE_ENABLED else "")
         + (profile_build_context(chat_id) if _USER_PROFILE_ENABLED else "")
     )
 

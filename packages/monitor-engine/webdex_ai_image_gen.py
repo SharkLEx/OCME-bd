@@ -1,6 +1,5 @@
 """
 webdex_ai_image_gen.py — bdZinho Image Generation (Nano Banana / Gemini)
-Epic MATRIX-3 | Story MATRIX-3.7
 
 Geração de imagens AI para usuários do Telegram via /criar_imagem.
 Usa Google Gemini via OpenRouter (Nano Banana: google/gemini-2.5-flash-image).

@@ -2616,7 +2616,7 @@ def _broadcast_callback(c):
 
 
 # ==============================================================================
-# 🤖 MATRIX 3.0 — Content Engine (ADM only)
+# 🤖 bdZinho Content Engine (ADM only)
 # Comandos: /gerar_post, /criar_copy, /relatorio_mkt, /thread_x
 # ==============================================================================
 
@@ -2763,7 +2763,7 @@ def cmd_thread_x(m):
     _run_content_gen(m.chat.id, "thread_x", None)
 
 
-@bot.message_handler(commands=["matrix3_stats"])
+@bot.message_handler(commands=["bdz_stats"])
 def cmd_matrix3_stats(m):
     """Mostra estatísticas do bdz_knowledge."""
     if not _content_adm_only(m):

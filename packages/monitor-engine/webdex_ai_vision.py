@@ -1,6 +1,5 @@
 """
-webdex_ai_vision.py — bdZinho MATRIX 4.2 Vision
-Epic MATRIX-4 | Story MATRIX-4.2
+webdex_ai_vision.py — bdZinho Vision
 
 bdZinho analisa imagens enviadas pelo usuário — screenshots de dashboard,
 gráficos de trading, prints de carteira, charts on-chain.
@@ -63,7 +62,7 @@ def analyze_image(
     Args:
         image_bytes:     bytes da imagem (PNG/JPG/WEBP)
         question:        pergunta opcional do usuário sobre a imagem
-        profile_context: contexto de perfil do trader (MATRIX 4.0)
+        profile_context: contexto de perfil do trader (Individual Profile)
 
     Returns:
         Texto da análise ou None em caso de falha.
@@ -155,4 +154,4 @@ def analyze_image(
         return None
 
 
-logger.info("[vision] MATRIX 4.2 Vision carregado — model=%s", _VISION_MODEL)
+logger.info("[vision] bdZinho Vision carregado — model=%s", _VISION_MODEL)

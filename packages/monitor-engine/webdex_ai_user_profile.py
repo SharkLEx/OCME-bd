@@ -1,6 +1,5 @@
 """
-webdex_ai_user_profile.py — bdZinho MATRIX 4.0 Individual Memory
-Epic MATRIX-4 | Story MATRIX-4.0
+webdex_ai_user_profile.py — bdZinho Individual Memory
 
 Perfil individual de cada trader — memória estruturada que o bdZinho usa para
 personalizar CADA resposta com contexto específico do usuário.

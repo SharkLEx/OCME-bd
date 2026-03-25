@@ -1,6 +1,5 @@
 """
-webdex_ai_image.py — bdZinho MATRIX 3.0 Image Pipeline
-Epic MATRIX-3 | Story MATRIX-3.4
+webdex_ai_image.py — bdZinho Image Pipeline
 
 Geração de cards visuais branded do protocolo WEbdEX via PIL puro.
 Zero custo, zero APIs externas. Pronto para Discord, Instagram, Twitter/X.

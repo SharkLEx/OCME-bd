@@ -1,6 +1,5 @@
 """
 webdex_ai_cycle_visual.py — bdZinho Visual Expressão Pós-Ciclo
-Epic MATRIX-4 | Story MATRIX-4.4
 
 Após cada ciclo 21h, gera UMA imagem do bdZinho com a expressão adequada
 e posta no Discord (#relatório-diário). Representa emocionalmente o resultado.
@@ -141,4 +140,4 @@ def post_cycle_bdzinho(cycle_data: dict) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
-logger.info("[cycle_visual] MATRIX 4.4 Cycle Visual carregado — enabled=%s", _CYCLE_VISUAL_ENABLED)
+logger.info("[cycle_visual] bdZinho Cycle Visual carregado — enabled=%s", _CYCLE_VISUAL_ENABLED)

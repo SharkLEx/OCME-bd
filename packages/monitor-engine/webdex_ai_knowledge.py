@@ -1,6 +1,5 @@
 """
-webdex_ai_knowledge.py — bdZinho MATRIX 3.0 Knowledge Base
-Epic MATRIX-3 | Story MATRIX-3.1
+webdex_ai_knowledge.py — bdZinho Knowledge Base
 
 Base de conhecimento persistente do bdZinho em PostgreSQL.
 Alimentada por agentes LMAS (Smith, Morpheus, Analyst, bdPro) via treino noturno.
