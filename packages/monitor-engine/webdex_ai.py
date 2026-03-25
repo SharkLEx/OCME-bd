@@ -63,6 +63,17 @@ except ImportError:
     knowledge_build_context = None  # type: ignore[assignment]
     logger.warning("[ai] MATRIX 3.0 Knowledge Base: módulo não encontrado")
 
+# ── Epic MATRIX-4 Story 4.0 — Individual User Profile (soft import) ──────────
+try:
+    from webdex_ai_user_profile import profile_build_context, profile_touch
+    _USER_PROFILE_ENABLED = True
+    logger.info("[ai] MATRIX 4.0 Individual Profile: ATIVO")
+except ImportError:
+    _USER_PROFILE_ENABLED = False
+    profile_build_context = None  # type: ignore[assignment]
+    profile_touch = None          # type: ignore[assignment]
+    logger.warning("[ai] MATRIX 4.0 Individual Profile: módulo não encontrado")
+
 # ==============================================================================
 # ⚙️ CONFIG
 # ==============================================================================
@@ -1311,7 +1322,12 @@ def build_webdex_brain_prompt(chat_id, user_text: str) -> list:
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         + _get_webdex_kb()
         + (_get_matrix3_knowledge() if _KNOWLEDGE_ENABLED else "")
+        + (profile_build_context(chat_id) if _USER_PROFILE_ENABLED else "")
     )
+
+    # Toca last_seen do usuário de forma assíncrona
+    if _USER_PROFILE_ENABLED:
+        profile_touch(chat_id)
 
     # ── Snapshot do DB do usuário (dados reais) ───────────────────────────────
     brain_db = _brain_db_snapshot(chat_id, user_text, intent)
