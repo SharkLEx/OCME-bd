@@ -374,13 +374,42 @@ def notify_nova_carteira(endereco: str, total_holders: int) -> None:
     short = f"{endereco[:6]}…{endereco[-4:]}" if len(endereco) > 12 else endereco
     _async_post({
         "embeds": [{
-            "title": "🎉 Nova Carteira Conectada!",
+            "title": "🟢 Protocolo em Crescimento",
             "description": (
-                f"🔗 **`{short}`** abriu posição no protocolo\n\n"
-                f"👥 Total de holders: **`{total_holders}`**"
+                f"Nova subconta **`{short}`** entrou no protocolo.\n\n"
+                f"👥 **Subcontas ativas:** `{total_holders}`"
             ),
-            "color": _COLOR_MILESTONE,
-            "footer": {"text": "WEbdEX Protocol · OCME"},
+            "color": _SUCCESS,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · OCME · Polygon"},
+        }]
+    }, url=_WEBHOOK_CONQUISTAS)
+
+
+def notify_conquistas_diario(
+    total_trades: int,
+    win_rate: float,
+    pnl_usd: float,
+    active_traders: int,
+    hoje: str = "",
+) -> None:
+    """Mini-resumo diário do ciclo 21h → #conquistas (saúde do protocolo)."""
+    emoji = "🟢" if pnl_usd >= 0 else "🔴"
+    pnl_sign = "+" if pnl_usd >= 0 else ""
+    filled = round(win_rate / 10)
+    wr_bar = "█" * filled + "░" * (10 - filled)
+    _async_post({
+        "embeds": [{
+            "title": f"⚡ Protocolo · Ciclo Encerrado{(' · ' + hoje) if hoje else ''}",
+            "description": (
+                f"{emoji} **P&L:** `{pnl_sign}${pnl_usd:,.2f}`\n"
+                f"📊 **{total_trades:,} trades** · WinRate `{win_rate:.0f}%`\n"
+                f"`{wr_bar}`\n"
+                f"👥 **Traders ativos:** `{active_traders}`"
+            ),
+            "color": _SUCCESS if pnl_usd >= 0 else _ERROR,
+            "thumbnail": {"url": _BDZINHO_IMG},
+            "footer": {"text": "WEbdEX Protocol · OCME · Polygon"},
         }]
     }, url=_WEBHOOK_CONQUISTAS)
 

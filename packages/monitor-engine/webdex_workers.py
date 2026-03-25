@@ -376,6 +376,19 @@ def agendador_21h():
                         else:
                             logger.warning("[agendador_21h] webhook Discord falhou — mantendo pending para retry")
 
+                        # ── Mini-resumo diário → #conquistas (saúde do protocolo) ──
+                        try:
+                            from webdex_discord_sync import notify_conquistas_diario
+                            notify_conquistas_diario(
+                                total_trades=_p_total,
+                                win_rate=_p_wr,
+                                pnl_usd=_p_bruto,
+                                active_traders=_p_traders,
+                                hoje=hoje,
+                            )
+                        except Exception as _conq_err:
+                            logger.warning("[agendador_21h] conquistas_diario falhou (não crítico): %s", _conq_err)
+
                         # ── AI DIGEST: salva resumo estruturado + análise IA (fail-open) ──
                         try:
                             from webdex_ai_digest import save_digest, generate_analysis, get_recent_digests

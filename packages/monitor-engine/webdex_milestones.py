@@ -16,7 +16,6 @@ from datetime import datetime, timedelta
 from webdex_config import logger, TZ_BR
 from webdex_db import DB_LOCK, conn, _ciclo_21h_since
 from webdex_bot_core import send_html
-from webdex_discord_sync import notify_milestone
 
 # ==============================================================================
 # ⚙️ PARÂMETROS
@@ -227,11 +226,7 @@ def _send_milestone(chat_id: int, wallet: str, m: dict) -> None:
     )
     try:
         send_html(chat_id, text)
-        # Sync para Discord (anonimizado — sem chat_id/wallet)
-        notify_milestone(
-            title="Conquista Desbloqueada no Protocolo!",
-            description=text
-        )
+        # Achievements individuais ficam só no Telegram (privado do trader)
     except Exception as e:
         logger.warning("[milestones] falha ao notificar chat_id=%s: %s", chat_id, e)
 
