@@ -57,9 +57,30 @@ except ImportError:
     IMAGE_GEN_COOLDOWN_S = 30
     _IMG_GEN_AVAILABLE = False
 
+# MATRIX 4.2 — Vision (análise de imagens enviadas pelo usuário) — soft import
+try:
+    from webdex_ai_vision import analyze_image as _vision_analyze
+    _VISION_AVAILABLE = True
+except ImportError:
+    _vision_analyze = None  # type: ignore[assignment]
+    _VISION_AVAILABLE = False
+
+# MATRIX 4.0 — Perfil (para enriquecer análise de visão) — soft import
+try:
+    from webdex_ai_user_profile import profile_build_context as _profile_ctx
+    _VISION_PROFILE_ENABLED = True
+except ImportError:
+    _profile_ctx = None  # type: ignore[assignment]
+    _VISION_PROFILE_ENABLED = False
+
 # Rate limit dedicado para image gen (separado do _rate_cache geral)
 _img_rate_cache: dict[int, float] = {}
 _img_rate_lock  = threading.Lock()
+
+# Rate limit para vision (cooldown 10s)
+_VISION_COOLDOWN_S = 10
+_vision_rate_cache: dict[int, float] = {}
+_vision_rate_lock  = threading.Lock()
 
 # ==============================================================================
 # TOKENS MAP (para handler IDs com Saldo)
@@ -3419,3 +3440,94 @@ def img_gen_step(m):
             "⚠️ Imagem gerada mas falhou ao enviar. Tente novamente.",
             reply_markup=main_kb(chat_id),
         )
+
+
+# ==============================================================================
+# 👁️ MATRIX 4.2 — VISION: análise de imagens enviadas pelo usuário
+# ==============================================================================
+
+@bot.message_handler(content_types=["photo"])
+def vision_photo_handler(m):
+    """
+    Usuário envia uma foto → bdZinho analisa via Gemini Vision.
+    Suporta: charts, dashboards, screenshots de carteira, gráficos on-chain.
+    """
+    import io as _io2
+
+    chat_id = m.chat.id
+
+    if not _VISION_AVAILABLE:
+        return  # módulo indisponível — silencioso
+
+    # Rate limit
+    now = time.time()
+    with _vision_rate_lock:
+        last = _vision_rate_cache.get(chat_id, 0.0)
+        remaining = _VISION_COOLDOWN_S - (now - last)
+        if remaining > 0:
+            bot.send_message(
+                chat_id,
+                f"⏳ Aguarde <b>{int(remaining)}s</b> antes de enviar outra imagem.",
+                parse_mode="HTML",
+            )
+            return
+        _vision_rate_cache[chat_id] = now
+
+    # Mensagem de espera
+    wait_msg = bot.send_message(
+        chat_id,
+        "👁️ <b>bdZinho analisando sua imagem...</b> ⏳\n"
+        "<i>Pode levar até 15 segundos.</i>",
+        parse_mode="HTML",
+    )
+
+    try:
+        # Baixar a maior versão disponível da foto
+        file_id   = m.photo[-1].file_id
+        file_info = bot.get_file(file_id)
+        file_bytes = bot.download_file(file_info.file_path)
+
+        # Captura a legenda/pergunta do usuário (se enviou junto com a foto)
+        question = (m.caption or "").strip()
+
+        # Perfil do trader para enriquecer análise
+        profile_context = ""
+        if _VISION_PROFILE_ENABLED and _profile_ctx:
+            try:
+                profile_context = _profile_ctx(chat_id) or ""
+            except Exception:
+                pass
+
+        # Analisar via Vision
+        analysis = _vision_analyze(  # type: ignore
+            image_bytes=file_bytes,
+            question=question,
+            profile_context=profile_context,
+        )
+    except Exception as e:
+        logger.warning("[vision] Erro ao processar foto chat_id=%s: %s", chat_id, e)
+        analysis = None
+
+    # Remove mensagem de espera
+    try:
+        bot.delete_message(chat_id, wait_msg.message_id)
+    except Exception:
+        pass
+
+    if not analysis:
+        bot.send_message(
+            chat_id,
+            "❌ <b>Não consegui analisar a imagem.</b>\n\n"
+            "Verifique se a imagem está nítida e tente novamente.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    bot.send_message(
+        chat_id,
+        f"👁️ <b>Análise bdZinho:</b>\n\n{analysis}",
+        parse_mode="HTML",
+        reply_markup=main_kb(chat_id),
+    )
+    logger.info("[vision] Análise enviada para chat_id=%s", chat_id)
