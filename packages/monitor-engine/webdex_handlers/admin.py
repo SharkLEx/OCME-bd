@@ -2644,7 +2644,7 @@ def adm_content_menu(m):
         return
     bot.send_message(
         m.chat.id,
-        "🤖 <b>MATRIX 3.0 — Content Engine</b>\n\n"
+        "🤖 <b>bdZinho — Content Engine</b>\n\n"
         "Selecione o tipo de conteúdo a gerar:",
         parse_mode="HTML",
         reply_markup=_content_kb(),
@@ -2774,7 +2774,7 @@ def cmd_matrix3_stats(m):
         if not stats:
             bot.send_message(m.chat.id, "📊 bdz_knowledge: (vazio — treino ainda não rodou)")
             return
-        lines = ["📊 <b>MATRIX 3.0 — Knowledge Stats</b>\n"]
+        lines = ["📊 <b>bdZinho — Knowledge Stats</b>\n"]
         total = 0
         for cat, info in stats.items():
             n = info["total"]

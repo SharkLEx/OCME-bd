@@ -275,7 +275,7 @@ def gerar_card_ciclo(digest: Optional[dict] = None) -> io.BytesIO:
 
     # ── Footer ────────────────────────────────────────────────────────────────
     draw.text((28, _H - 33),
-              "webdex.protocol  ·  dados on-chain · Polygon Mainnet  ·  bdZinho MATRIX 3.0",
+              "webdex.protocol  ·  dados on-chain · Polygon Mainnet  ·  bdZinho",
               font=font_footer, fill=_GRAY)
 
     # Watermark accent
@@ -344,7 +344,7 @@ def gerar_card_milestone(tvl_usd: float, label: str = "") -> io.BytesIO:
                   mask.convert("L") if bdzinho.mode == "RGBA" else None)
 
     _draw_accent_bar(draw, _H - 40, h=1, color=_DARK_SEP)
-    draw.text((28, _H - 28), "webdex.protocol · Polygon Mainnet · bdZinho MATRIX 3.0",
+    draw.text((28, _H - 28), "webdex.protocol · Polygon Mainnet · bdZinho",
               font=font_footer, fill=_GRAY)
     draw.text((_W - 100, _H - 28), "#WEbdEX", font=font_footer, fill=_GOLD)
 
@@ -401,7 +401,7 @@ def gerar_card_destaque(
                   mask.convert("L") if bdzinho.mode == "RGBA" else None)
 
     _draw_accent_bar(draw, _H - 38, h=1, color=_DARK_SEP)
-    draw.text((28, _H - 26), "webdex.protocol · Polygon Mainnet · bdZinho MATRIX 3.0",
+    draw.text((28, _H - 26), "webdex.protocol · Polygon Mainnet · bdZinho",
               font=_font(14), fill=_GRAY)
     draw.text((_W - 100, _H - 26), "#WEbdEX", font=_font(14), fill=_ACCENT)
 
@@ -449,7 +449,7 @@ def post_card_discord(
         "description": description,
         "color": color,
         "image": {"url": f"attachment://{filename}"},
-        "footer": {"text": "WEbdEX Protocol · bdZinho MATRIX 3.0"},
+        "footer": {"text": "WEbdEX Protocol · bdZinho"},
     }
 
     image_buf.seek(0)
