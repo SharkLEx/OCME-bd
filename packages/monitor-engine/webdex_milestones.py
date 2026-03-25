@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta
 
 from webdex_config import logger, TZ_BR
-from webdex_db import DB_LOCK, conn, cursor, _ciclo_21h_since
+from webdex_db import DB_LOCK, conn, _ciclo_21h_since
 from webdex_bot_core import send_html
 from webdex_discord_sync import notify_milestone
 
@@ -48,7 +48,7 @@ def init_milestone_table() -> None:
 
 def _already_fired(chat_id: int, milestone: str) -> bool:
     with DB_LOCK:
-        row = cursor.execute(
+        row = conn.execute(
             "SELECT 1 FROM milestone_flags WHERE chat_id=? AND milestone=? LIMIT 1",
             (chat_id, milestone)
         ).fetchone()
@@ -76,7 +76,7 @@ def _check_trade_milestones(chat_id: int, wallet: str) -> list[dict]:
     """Retorna lista de marcos de trades atingidos e ainda não disparados."""
     try:
         with DB_LOCK:
-            row = cursor.execute("""
+            row = conn.execute("""
                 SELECT COUNT(*) FROM operacoes o
                 JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
                 WHERE ow.wallet=? AND o.tipo='Trade'
@@ -97,7 +97,7 @@ def _check_pnl_milestones(chat_id: int, wallet: str) -> list[dict]:
     """Retorna lista de marcos de PnL ($) atingidos e ainda não disparados."""
     try:
         with DB_LOCK:
-            row = cursor.execute("""
+            row = conn.execute("""
                 SELECT SUM(CAST(o.valor AS REAL) - CAST(o.gas_usd AS REAL))
                 FROM operacoes o
                 JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
@@ -122,7 +122,7 @@ def _check_streak_milestones(chat_id: int, wallet: str) -> list[dict]:
     """Retorna lista de marcos de win streak atingidos e ainda não disparados."""
     try:
         with DB_LOCK:
-            rows = cursor.execute("""
+            rows = conn.execute("""
                 SELECT CAST(o.valor AS REAL) - CAST(o.gas_usd AS REAL)
                 FROM operacoes o
                 JOIN op_owner ow ON ow.hash=o.hash AND ow.log_index=o.log_index
@@ -158,7 +158,7 @@ def _check_first_positive_day(chat_id: int, wallet: str) -> list[dict]:
     since_ciclo = _ciclo_21h_since()
     try:
         with DB_LOCK:
-            row = cursor.execute("""
+            row = conn.execute("""
                 SELECT COUNT(*),
                        SUM(CASE WHEN CAST(o.valor AS REAL) - CAST(o.gas_usd AS REAL) > 0 THEN 1 ELSE 0 END)
                 FROM operacoes o
@@ -244,7 +244,7 @@ def _milestone_check_cycle() -> None:
     """Verifica todos os usuários ativos para novos milestones."""
     try:
         with DB_LOCK:
-            users = cursor.execute(
+            users = conn.execute(
                 "SELECT chat_id, wallet FROM users WHERE chat_id IS NOT NULL AND wallet IS NOT NULL"
             ).fetchall()
     except Exception as e:
