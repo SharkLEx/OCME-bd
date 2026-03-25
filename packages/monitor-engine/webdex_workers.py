@@ -60,6 +60,14 @@ try:
 except ImportError:
     _TG_TOKENS = False
 
+# MATRIX-4.1: Proactive Mode — bdZinho ataca primeiro
+try:
+    from webdex_ai_proactive import post_cycle_nudge as _proactive_nudge
+    _MATRIX41_ENABLED = True
+except ImportError:
+    _MATRIX41_ENABLED = False
+    _proactive_nudge = None  # type: ignore[assignment]
+
 # ==============================================================================
 # 🛡️ SENTINELA
 # ==============================================================================
@@ -461,6 +469,21 @@ def agendador_21h():
                                 logger.error(f"[agendador_21h] Broadcast Telegram falhou: {_tg_err}")
                                 if get_config(_tg_21h_key, "") != "ok":
                                     set_config(_tg_21h_key, "")  # resetar para retry
+
+                        # MATRIX-4.1: Proactive Mode — insights personalizados pós-ciclo
+                        if _MATRIX41_ENABLED and _proactive_nudge is not None:
+                            try:
+                                _proactive_nudge({
+                                    "hoje":      hoje,
+                                    "tvl_usd":   _tvl_usd,
+                                    "p_wr":      _p_wr,
+                                    "p_bruto":   _p_bruto,
+                                    "p_traders": _p_traders,
+                                    "p_total":   _p_total,
+                                    "p_bd":      _p_bd,
+                                })
+                            except Exception as _m41_err:
+                                logger.warning("[agendador_21h] MATRIX-4.1 proactive falhou: %s", _m41_err)
 
                         # Animação bdZinho → #relatório-diário
                         if _animate and _p_total > 0:
