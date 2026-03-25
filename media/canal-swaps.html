@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1080">
+<title>Canal #swaps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="viewport-fix.js"></script>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="animations.css">
+<style>
+  :root { --accent: #00D4FF; --accent2: #00FFB2; --accent-rgb: 0,212,255; --accent2-rgb: 0,255,178; }
+  .logo-wrap { display:flex; align-items:center; gap:18px; }
+  .logo-icon { width:60px; height:60px; border-radius:14px; }
+  .logo-wordmark { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:-0.5px; }
+  .logo-wordmark span { color:#fb0491; }
+  .bot-img { height: 490px !important; filter: drop-shadow(0 0 60px rgba(0,212,255,0.45)) !important; }
+  .badge { background: rgba(0,212,255,0.12) !important; border-color: rgba(0,212,255,0.45) !important; color: #00D4FF !important; }
+  /* swap flow visual */
+  .swap-flow {
+    padding: 20px 72px 24px; flex-shrink: 0; position: relative; z-index: 1;
+  }
+  .swap-row {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 16px;
+  }
+  .swap-token {
+    flex: 1; background: #111; border-radius: 16px; padding: 18px 24px;
+    display: flex; align-items: center; gap: 14px;
+    border: 1px solid rgba(0,212,255,0.20);
+  }
+  .swap-arrow-box {
+    width: 52px; height: 52px; border-radius: 50%; background: #111;
+    border: 1px solid rgba(0,212,255,0.35);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+    color: #00D4FF;
+  }
+  .swap-token-icon { font-size: 28px; }
+  .swap-token-name { font-size: 16px; font-weight: 800; letter-spacing: 1px; }
+  .swap-token.from .swap-token-name { color: #00D4FF; }
+  .swap-token.to .swap-token-name { color: #00FFB2; }
+  .swap-token-sub { font-size: 13px; color: #666; }
+  /* type badges */
+  .swap-types { display: flex; gap: 12px; }
+  .swap-type-badge {
+    flex: 1; text-align: center; padding: 14px; border-radius: 14px;
+    font-size: 14px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+    border: 1px solid;
+  }
+  .swap-type-badge.create { background: rgba(0,212,255,0.08); border-color: rgba(0,212,255,0.30); color: #00D4FF; }
+  .swap-type-badge.execute { background: rgba(0,255,178,0.08); border-color: rgba(0,255,178,0.30); color: #00FFB2; }
+</style>
+</head>
+<body>
+  <div class="bg-glow-top"></div><div class="bg-glow-mid"></div><div class="bg-glow-bot"></div>
+
+  <div class="header">
+    <div class="logo-wrap">
+      <img class="logo-icon" src="img/logo-icon.png" alt="bd">
+      <div class="logo-wordmark">WE<span>bd</span>EX</div>
+    </div>
+    <div class="badge">SWAPS</div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow"><div class="hero-eyebrow-line"></div><div class="hero-eyebrow-text">#swaps</div></div>
+    <div class="hero-title">Swap<br><span class="hl">Book</span></div>
+    <div class="hero-version">LIVE TRADES</div>
+    <div class="hero-tagline">🔄 CADA SWAP. AO VIVO.</div>
+    <div class="hero-sub">Create Swap e Swap Tokens notificados em tempo real.</div>
+  </div>
+
+  <div class="bot-visual">
+    <div class="bot-glow"></div>
+    <img class="bot-img" src="img/bot-defi.png" alt="bdZinho DeFi">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="swap-flow">
+    <div class="features-label" style="font-size:14px;font-weight:700;letter-spacing:5px;color:#888;text-transform:uppercase;margin-bottom:14px;">Fluxo de swap</div>
+    <div class="swap-row">
+      <div class="swap-token from"><div class="swap-token-icon">🟣</div><div><div class="swap-token-name">MATIC</div><div class="swap-token-sub">Token de origem</div></div></div>
+      <div class="swap-arrow-box">⇄</div>
+      <div class="swap-token to"><div class="swap-token-icon">💎</div><div><div class="swap-token-name">BD</div><div class="swap-token-sub">Token de destino</div></div></div>
+    </div>
+    <div class="swap-types">
+      <div class="swap-type-badge create" data-live="create_text">📋 Create Swap</div>
+      <div class="swap-type-badge execute" data-live="swap_text">⚡ Swap Tokens</div>
+    </div>
+  </div>
+
+  <div class="features" style="display:flex !important; padding-top:0 !important;">
+    <div class="feature-card c3"><div class="feature-icon">📊</div><div><div class="feature-name">Volume</div><div class="feature-desc" data-live="volume_text">Volume total de swaps por período.</div></div></div>
+    <div class="feature-card c2"><div class="feature-icon">💹</div><div><div class="feature-name">Preço Médio</div><div class="feature-desc">Taxa de câmbio média calculada em tempo real.</div></div></div>
+  </div>
+
+  <div class="quote-section" style="padding-top:10px;">
+    <div class="quote-eyebrow">DeFi não espera. <span>Você também</span></div>
+    <div class="quote-text">não deveria.</div>
+  </div>
+
+  <div class="cta-section">
+    <div class="closing-line">Swap Book — <span>seu livro de ordens</span>.</div>
+    <div class="pills">
+      <div class="pill p1"><span class="pill-icon">🔄</span>Ver Swaps<span class="pill-arrow">→</span></div>
+      <div class="pill p2"><span class="pill-icon">🤖</span>bdZinho IA<span class="pill-arrow">→</span></div>
+    </div>
+  </div>
+
+  <script src="live-data.js" data-card="swaps"></script>
+  <div class="footer">
+    <div class="footer-logo"><img class="footer-logo-img" src="img/logo-icon.png" alt="bd"><span style="font-family:'Press Start 2P',monospace;font-size:12px;color:#888">WE<span style="color:#fb0491">bd</span>EX Protocol</span></div>
+    <div class="footer-tag">— bdZinho <em>🤖</em></div>
+  </div>
+</body>
+</html>

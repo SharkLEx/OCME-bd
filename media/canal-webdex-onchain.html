@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1080">
+<title>Canal #webdex-on-chain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="viewport-fix.js"></script>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="animations.css">
+<style>
+  :root { --accent: #00D4FF; --accent2: #fb0491; --accent-rgb: 0,212,255; --accent2-rgb: 251,4,145; }
+  .logo-wrap { display:flex; align-items:center; gap:18px; }
+  .logo-icon { width:60px; height:60px; border-radius:14px; }
+  .logo-wordmark { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:-0.5px; }
+  .logo-wordmark span { color:#fb0491; }
+  /* Grid de stats no-chain */
+  .stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    padding: 0 72px 28px; flex-shrink: 0; position: relative; z-index: 1;
+  }
+  .stat-card {
+    background: #111; border-radius: 18px; padding: 24px 28px;
+    border-left: 4px solid; position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; inset: 0; border-radius: 18px; pointer-events: none;
+    background: linear-gradient(135deg, rgba(0,212,255,0.07) 0%, transparent 55%);
+  }
+  .stat-card.c1 { border-left-color: #00D4FF; }
+  .stat-card.c2 { border-left-color: #fb0491; }
+  .stat-card.c3 { border-left-color: #00FFB2; }
+  .stat-card.c4 { border-left-color: #d90048; }
+  .stat-icon { font-size: 32px; margin-bottom: 10px; }
+  .stat-name { font-size: 13px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #888; margin-bottom: 4px; }
+  .stat-value { font-size: 20px; font-weight: 800; color: #fff; line-height: 1.3; }
+  .stat-card.c1 .stat-value { color: #00D4FF; }
+  .stat-card.c2 .stat-value { color: #fb0491; }
+  .stat-card.c3 .stat-value { color: #00FFB2; }
+  .stat-card.c4 .stat-value { color: #d90048; }
+  /* Override features layout with grid */
+  .features { display: none; }
+  .bot-img { height: 500px !important; filter: drop-shadow(0 0 60px rgba(0,212,255,0.40)) !important; }
+  .badge { background: rgba(0,212,255,0.12) !important; border-color: rgba(0,212,255,0.45) !important; color: #00D4FF !important; }
+  /* live indicator */
+  .live-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    background: #00D4FF; margin-right: 8px;
+    box-shadow: 0 0 8px rgba(0,212,255,0.8);
+  }
+</style>
+</head>
+<body>
+  <div class="bg-glow-top"></div><div class="bg-glow-mid"></div><div class="bg-glow-bot"></div>
+
+  <div class="header">
+    <div class="logo-wrap">
+      <img class="logo-icon" src="img/logo-icon.png" alt="bd">
+      <div class="logo-wordmark">WE<span>bd</span>EX</div>
+    </div>
+    <div class="badge">ON-CHAIN</div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow"><div class="hero-eyebrow-line"></div><div class="hero-eyebrow-text">#webdex-on-chain</div></div>
+    <div class="hero-title">WEbdEX<br><span class="hl">On-Chain</span></div>
+    <div class="hero-version"><span class="live-dot"></span>LIVE</div>
+    <div class="hero-tagline">⛓️ DADOS REAIS. AGORA.</div>
+    <div class="hero-sub">Eventos, anomalias e atividade da rede.</div>
+  </div>
+
+  <div class="bot-visual">
+    <div class="bot-glow"></div>
+    <img class="bot-img" src="img/bot-blockchain.png" alt="bdZinho On-Chain">
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- STATS GRID em vez de features -->
+  <div class="stats-grid">
+    <div class="stat-card c1">
+      <div class="stat-icon">📡</div>
+      <div class="stat-name">Anomalias</div>
+      <div class="stat-value" data-live="anomaly_value">Detecção em<br>tempo real</div>
+    </div>
+    <div class="stat-card c2">
+      <div class="stat-icon">🔥</div>
+      <div class="stat-name">Volume</div>
+      <div class="stat-value" data-live="volume_value">Transações<br>ao vivo</div>
+    </div>
+    <div class="stat-card c3">
+      <div class="stat-icon">👥</div>
+      <div class="stat-name">Holders</div>
+      <div class="stat-value" data-live="holders_value">Carteiras<br>ativas</div>
+    </div>
+    <div class="stat-card c4">
+      <div class="stat-icon">⚡</div>
+      <div class="stat-name">Eventos</div>
+      <div class="stat-value" data-live="events_value">Protocolo<br>WEbdEX</div>
+    </div>
+  </div>
+
+  <div class="quote-section">
+    <div class="quote-eyebrow">A blockchain não mente. <span>Só precisa</span></div>
+    <div class="quote-text">saber ouvir.</div>
+  </div>
+
+  <div class="cta-section">
+    <div class="closing-line">Polygon <span>ao vivo</span>. 24/7.</div>
+    <div class="pills">
+      <div class="pill p1"><span class="pill-icon">⛓️</span>Polygon Live<span class="pill-arrow">→</span></div>
+      <div class="pill p2"><span class="pill-icon">🤖</span>bdZinho IA<span class="pill-arrow">→</span></div>
+    </div>
+  </div>
+
+  <script src="live-data.js" data-card="webdex-onchain"></script>
+  <div class="footer">
+    <div class="footer-logo"><img class="footer-logo-img" src="img/logo-icon.png" alt="bd"><span style="font-family:'Press Start 2P',monospace;font-size:12px;color:#888">WE<span style="color:#fb0491">bd</span>EX Protocol</span></div>
+    <div class="footer-tag">— bdZinho <em>🤖</em></div>
+  </div>
+</body>
+</html>

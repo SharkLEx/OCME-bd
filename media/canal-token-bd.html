@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1080">
+<title>Canal #token-bd</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="viewport-fix.js"></script>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="animations.css">
+<style>
+  :root { --accent: #00FFB2; --accent2: #fb0491; --accent-rgb: 0,255,178; --accent2-rgb: 251,4,145; }
+  .logo-wrap { display:flex; align-items:center; gap:18px; }
+  .logo-icon { width:60px; height:60px; border-radius:14px; }
+  .logo-wordmark { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:-0.5px; }
+  .logo-wordmark span { color:#fb0491; }
+  .bot-img { height: 490px !important; filter: drop-shadow(0 0 60px rgba(0,255,178,0.35)) !important; }
+  .badge { background: rgba(0,255,178,0.12) !important; border-color: rgba(0,255,178,0.45) !important; color: #00FFB2 !important; }
+  /* token ticker */
+  .token-ticker {
+    display: flex; gap: 20px; padding: 0 72px; flex-shrink: 0;
+    position: relative; z-index: 1; margin-bottom: 0;
+  }
+  .ticker-item {
+    flex: 1; background: #111; border-radius: 16px; padding: 20px 24px;
+    border-top: 3px solid;
+  }
+  .ticker-item.t1 { border-top-color: #00FFB2; }
+  .ticker-item.t2 { border-top-color: #fb0491; }
+  .ticker-item.t3 { border-top-color: #00D4FF; }
+  .ticker-label { font-size: 12px; font-weight: 700; letter-spacing: 4px; text-transform: uppercase; color: #666; margin-bottom: 6px; }
+  .ticker-value { font-family: 'Press Start 2P', monospace; font-size: 16px; }
+  .ticker-item.t1 .ticker-value { color: #00FFB2; }
+  .ticker-item.t2 .ticker-value { color: #fb0491; }
+  .ticker-item.t3 .ticker-value { color: #00D4FF; }
+  .ticker-sub { font-size: 14px; color: #888; margin-top: 4px; }
+</style>
+</head>
+<body>
+  <div class="bg-glow-top"></div><div class="bg-glow-mid"></div><div class="bg-glow-bot"></div>
+
+  <div class="header">
+    <div class="logo-wrap">
+      <img class="logo-icon" src="img/logo-icon.png" alt="bd">
+      <div class="logo-wordmark">WE<span>bd</span>EX</div>
+    </div>
+    <div class="badge">TOKEN-BD</div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow"><div class="hero-eyebrow-line"></div><div class="hero-eyebrow-text">#token-bd</div></div>
+    <div class="hero-title">Token<br><span class="hl">BD</span></div>
+    <div class="hero-version">CADA 2H</div>
+    <div class="hero-tagline">💰 O TOKEN QUE NÃO DORME.</div>
+    <div class="hero-sub">Supply, holders e market cap em tempo real.</div>
+  </div>
+
+  <div class="bot-visual">
+    <div class="bot-glow"></div>
+    <img class="bot-img" src="img/bot-wallet.png" alt="bdZinho Finance">
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Ticker de métricas -->
+  <div class="token-ticker" style="padding-top:28px;">
+    <div class="ticker-item t1">
+      <div class="ticker-label">Supply</div>
+      <div class="ticker-value" data-live="supply">LIVE</div>
+      <div class="ticker-sub">Circulante atual</div>
+    </div>
+    <div class="ticker-item t2">
+      <div class="ticker-label">Holders</div>
+      <div class="ticker-value" data-live="holders_total">TOP</div>
+      <div class="ticker-sub">Carteiras ativas</div>
+    </div>
+    <div class="ticker-item t3">
+      <div class="ticker-label">M.Cap</div>
+      <div class="ticker-value" data-live="market_cap">BDX</div>
+      <div class="ticker-sub">Market cap</div>
+    </div>
+  </div>
+
+  <div class="features" style="display:flex !important">
+    <div class="features-label">O que monitoramos</div>
+    <div class="feature-card c2"><div class="feature-icon">🐳</div><div><div class="feature-name">Baleias</div><div class="feature-desc">Movimentações de grandes carteiras detectadas automaticamente.</div></div></div>
+    <div class="feature-card c3"><div class="feature-icon">📊</div><div><div class="feature-name">Relatório 2h</div><div class="feature-desc">Snapshot completo a cada 2 horas, sem falhas.</div></div></div>
+    <div class="feature-card c1"><div class="feature-icon">🔔</div><div><div class="feature-name">Alertas</div><div class="feature-desc">Variações fora do padrão notificadas imediatamente.</div></div></div>
+  </div>
+
+  <div class="quote-section" style="padding-top:8px;">
+    <div class="quote-eyebrow">Dados a cada 2 horas. <span>Todo dia.</span></div>
+    <div class="quote-text">Sem exceção.</div>
+  </div>
+
+  <div class="cta-section">
+    <div class="closing-line">Token BD — <span>transparente</span> por natureza.</div>
+    <div class="pills">
+      <div class="pill p1"><span class="pill-icon">💰</span>Token BD<span class="pill-arrow">→</span></div>
+      <div class="pill p2"><span class="pill-icon">📈</span>WEbdEX Pro<span class="pill-arrow">→</span></div>
+    </div>
+  </div>
+
+  <script src="live-data.js" data-card="token-bd"></script>
+  <div class="footer">
+    <div class="footer-logo"><img class="footer-logo-img" src="img/logo-icon.png" alt="bd"><span style="font-family:'Press Start 2P',monospace;font-size:12px;color:#888">WE<span style="color:#fb0491">bd</span>EX Protocol</span></div>
+    <div class="footer-tag">— bdZinho <em>🤖</em></div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1080">
+<title>Canal #gm-wagmi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="viewport-fix.js"></script>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="animations.css">
+<style>
+  :root { --accent: #fb0491; --accent2: #00FFB2; --accent-rgb: 251,4,145; --accent2-rgb: 0,255,178; }
+  .logo-wrap { display:flex; align-items:center; gap:18px; }
+  .logo-icon { width:60px; height:60px; border-radius:14px; }
+  .logo-wordmark { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:-0.5px; }
+  .logo-wordmark span { color:#fb0491; }
+  /* sunrise gradient overlay */
+  .bg-sunrise {
+    position: absolute; top: 0; left: 0; right: 0; height: 400px;
+    background: linear-gradient(180deg, rgba(251,100,20,0.06) 0%, transparent 100%);
+    pointer-events: none; z-index: 0;
+  }
+  .bot-img { height: 510px !important; filter: drop-shadow(0 0 70px rgba(251,4,145,0.40)) drop-shadow(0 0 40px rgba(255,140,0,0.15)) !important; }
+  /* wagmi cards */
+  .wagmi-cards {
+    padding: 20px 72px 16px; display: flex; gap: 14px; flex-shrink: 0; position: relative; z-index: 1;
+  }
+  .wagmi-card {
+    flex: 1; background: #111; border-radius: 18px; padding: 22px 20px; text-align: center;
+    border-bottom: 3px solid;
+  }
+  .wagmi-card.w1 { border-bottom-color: #fb0491; }
+  .wagmi-card.w2 { border-bottom-color: #FFB800; }
+  .wagmi-card.w3 { border-bottom-color: #00FFB2; }
+  .wagmi-icon { font-size: 34px; margin-bottom: 8px; }
+  .wagmi-title { font-size: 13px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 6px; }
+  .wagmi-card.w1 .wagmi-title { color: #fb0491; }
+  .wagmi-card.w2 .wagmi-title { color: #FFB800; }
+  .wagmi-card.w3 .wagmi-title { color: #00FFB2; }
+  .wagmi-desc { font-size: 16px; color: rgba(255,255,255,0.65); line-height: 1.4; }
+  /* big gm text */
+  .gm-text {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 64px;
+    color: #fb0491;
+    text-align: center;
+    padding: 0 72px;
+    flex-shrink: 0;
+    position: relative; z-index: 1;
+    letter-spacing: -1px;
+    margin-bottom: 4px;
+  }
+  .wagmi-text {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 32px;
+    color: #00FFB2;
+    text-align: center;
+    padding: 0 72px 24px;
+    flex-shrink: 0;
+    position: relative; z-index: 1;
+    letter-spacing: -1px;
+  }
+</style>
+</head>
+<body>
+  <div class="bg-glow-top"></div><div class="bg-glow-mid"></div><div class="bg-glow-bot"></div>
+  <div class="bg-sunrise"></div>
+
+  <div class="header">
+    <div class="logo-wrap">
+      <img class="logo-icon" src="img/logo-icon.png" alt="bd">
+      <div class="logo-wordmark">WE<span>bd</span>EX</div>
+    </div>
+    <div class="badge">7H RITUAL</div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow"><div class="hero-eyebrow-line"></div><div class="hero-eyebrow-text">#gm-wagmi</div></div>
+    <div class="hero-title">Bom<br><span class="hl">Dia</span></div>
+    <div class="hero-version">07:00 AM</div>
+    <div class="hero-tagline">☀️ RITUAL DIÁRIO DA WEB3.</div>
+    <div class="hero-sub">Todo dia às 7h. bdZinho acorda antes de você.</div>
+  </div>
+
+  <div class="bot-visual">
+    <div class="bot-glow"></div>
+    <img class="bot-img" src="img/bot-hero.png" alt="bdZinho GM">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="gm-text">GM ☀️</div>
+  <div class="wagmi-text">WAGMI 🤝</div>
+  <script src="live-data.js" data-card="gm-wagmi"></script>
+
+  <div class="wagmi-cards">
+    <div class="wagmi-card w1">
+      <div class="wagmi-icon">📰</div>
+      <div class="wagmi-title">Manchetes</div>
+      <div class="wagmi-desc">Top news do mercado Web3</div>
+    </div>
+    <div class="wagmi-card w2">
+      <div class="wagmi-icon">🎯</div>
+      <div class="wagmi-title">Meta do Dia</div>
+      <div class="wagmi-desc">Foco e direção para o dia</div>
+    </div>
+    <div class="wagmi-card w3">
+      <div class="wagmi-icon">🌡️</div>
+      <div class="wagmi-title">Sentimento</div>
+      <div class="wagmi-desc">Mercado bull ou bear hoje?</div>
+    </div>
+  </div>
+
+  <div class="quote-section">
+    <div class="quote-eyebrow">O mercado não espera. <span>Você também</span></div>
+    <div class="quote-text">não deveria.</div>
+  </div>
+
+  <div class="cta-section">
+    <div class="closing-line">Começa o dia <span>informado</span>.</div>
+    <div class="pills">
+      <div class="pill p1"><span class="pill-icon">☀️</span>GM Todo Dia<span class="pill-arrow">→</span></div>
+      <div class="pill p2"><span class="pill-icon">🤖</span>bdZinho IA<span class="pill-arrow">→</span></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-logo"><img class="footer-logo-img" src="img/logo-icon.png" alt="bd"><span style="font-family:'Press Start 2P',monospace;font-size:12px;color:#888">WE<span style="color:#fb0491">bd</span>EX Protocol</span></div>
+    <div class="footer-tag">— bdZinho <em>🤖</em></div>
+  </div>
+</body>
+</html>

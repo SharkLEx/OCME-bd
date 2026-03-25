@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1080">
+<title>Canal #bdzinho-ia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="viewport-fix.js"></script>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="animations.css">
+<style>
+  :root { --accent: #fb0491; --accent2: #d90048; --accent-rgb: 251,4,145; --accent2-rgb: 217,0,72; }
+  .logo-wrap { display:flex; align-items:center; gap:18px; }
+  .logo-icon { width:60px; height:60px; border-radius:14px; }
+  .logo-wordmark { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:-0.5px; }
+  .logo-wordmark span { color:#fb0491; }
+  /* bot face full-width close-up — intimate feel */
+  .bot-img { height: 520px !important; filter: drop-shadow(0 0 80px rgba(251,4,145,0.45)) !important; }
+  /* chat bubbles */
+  .chat-preview {
+    padding: 20px 72px 16px; display: flex; flex-direction: column; gap: 10px;
+    flex-shrink: 0; position: relative; z-index: 1;
+  }
+  .chat-bubble {
+    max-width: 75%; padding: 14px 20px; border-radius: 20px;
+    font-size: 18px; line-height: 1.4;
+  }
+  .chat-bubble.user {
+    align-self: flex-end;
+    background: rgba(251,4,145,0.18);
+    border: 1px solid rgba(251,4,145,0.35);
+    color: rgba(255,255,255,0.90);
+    border-bottom-right-radius: 4px;
+  }
+  .chat-bubble.bot {
+    align-self: flex-start;
+    background: #111;
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.85);
+    border-bottom-left-radius: 4px;
+  }
+  .chat-bubble.bot .sender {
+    font-size: 12px; font-weight: 700; letter-spacing: 2px;
+    color: #fb0491; text-transform: uppercase; margin-bottom: 4px;
+  }
+  /* pulse ring on bot */
+  .bot-ring {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    width: 200px; height: 200px; border-radius: 50%;
+    border: 2px solid rgba(251,4,145,0.25);
+    pointer-events: none; z-index: 0;
+  }
+</style>
+</head>
+<body>
+  <div class="bg-glow-top"></div><div class="bg-glow-mid"></div><div class="bg-glow-bot"></div>
+
+  <div class="header">
+    <div class="logo-wrap">
+      <img class="logo-icon" src="img/logo-icon.png" alt="bd">
+      <div class="logo-wordmark">WE<span>bd</span>EX</div>
+    </div>
+    <div class="badge">IA CHAT</div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow"><div class="hero-eyebrow-line"></div><div class="hero-eyebrow-text">#bdzinho-ia</div></div>
+    <div class="hero-title">bd<span class="hl">Zinho</span><br>IA</div>
+    <div class="hero-version">ONLINE</div>
+    <div class="hero-tagline">🤖 CONVERSE. PERGUNTE. APRENDA.</div>
+    <div class="hero-sub">O robô que fala português e entende Web3.</div>
+  </div>
+
+  <div class="bot-visual">
+    <div class="bot-glow"></div>
+    <div class="bot-ring"></div>
+    <img class="bot-img" src="img/bot-face.png" alt="bdZinho IA">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="chat-preview">
+    <div class="features-label" style="font-size:14px;font-weight:700;letter-spacing:5px;color:#888;text-transform:uppercase;margin-bottom:6px;">O que perguntar</div>
+    <div class="chat-bubble user">O que é DeFi?</div>
+    <div class="chat-bubble bot">
+      <div class="sender">bdZinho 🤖</div>
+      DeFi é finanças descentralizadas — sem banco, sem intermediário. Você controla.
+    </div>
+    <div class="chat-bubble user">Analisa minha carteira 0x...</div>
+    <div class="chat-bubble bot">
+      <div class="sender">bdZinho 🤖</div>
+      Claro! Deixa eu checar na Polygon agora... 🔍
+    </div>
+  <script src="live-data.js" data-card="bdzinho-ia"></script>
+  </div>
+
+  <div class="features" style="display:flex !important; padding-top: 4px !important; padding-bottom: 12px !important;">
+    <div class="feature-card c4"><div class="feature-icon">🧠</div><div><div class="feature-name">Memória Persistente</div><div class="feature-desc">Lembra de você e do seu histórico de perguntas.</div></div></div>
+  </div>
+
+  <div class="quote-section" style="padding: 8px 72px;">
+    <div class="quote-eyebrow">Iniciante ou expert? <span>Tanto faz.</span></div>
+    <div class="quote-text">Ele explica.</div>
+  </div>
+
+  <div class="cta-section">
+    <div class="closing-line"><span>Fala com o robô</span>. Agora.</div>
+    <div class="pills">
+      <div class="pill p1"><span class="pill-icon">💬</span>Iniciar Chat<span class="pill-arrow">→</span></div>
+      <div class="pill p2"><span class="pill-icon">📚</span>WEbdEX Academy<span class="pill-arrow">→</span></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-logo"><img class="footer-logo-img" src="img/logo-icon.png" alt="bd"><span style="font-family:'Press Start 2P',monospace;font-size:12px;color:#888">WE<span style="color:#fb0491">bd</span>EX Protocol</span></div>
+    <div class="footer-tag">— bdZinho <em>🤖</em></div>
+  </div>
+</body>
+</html>

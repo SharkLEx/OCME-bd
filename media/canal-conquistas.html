@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1080">
+<title>Canal #conquistas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="viewport-fix.js"></script>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="animations.css">
+<style>
+  :root { --accent: #fb0491; --accent2: #00FFB2; --accent-rgb: 251,4,145; --accent2-rgb: 0,255,178; }
+  .logo-wrap { display:flex; align-items:center; gap:18px; }
+  .logo-icon { width:60px; height:60px; border-radius:14px; }
+  .logo-wordmark { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:-0.5px; }
+  .logo-wordmark span { color:#fb0491; }
+  /* milestones badges */
+  .milestones {
+    padding: 28px 72px; display: flex; flex-direction: column; gap: 12px;
+    flex-shrink: 0; position: relative; z-index: 1;
+  }
+  .milestone-row { display: flex; gap: 12px; }
+  .milestone-badge {
+    flex: 1; background: #111; border-radius: 50px; padding: 16px 24px;
+    display: flex; align-items: center; gap: 14px;
+    border: 1px solid rgba(251,4,145,0.25);
+  }
+  .milestone-badge.gold { border-color: rgba(255,215,0,0.35); }
+  .milestone-badge.green { border-color: rgba(0,255,178,0.30); }
+  .milestone-badge.cyan { border-color: rgba(0,212,255,0.30); }
+  .mb-icon { font-size: 28px; flex-shrink: 0; }
+  .mb-text { font-size: 18px; font-weight: 700; }
+  .milestone-badge .mb-text { color: #fff; }
+  .milestone-badge.gold .mb-text { color: #FFD700; }
+  .milestone-badge.green .mb-text { color: #00FFB2; }
+  .milestone-badge.cyan .mb-text { color: #00D4FF; }
+  /* podium hero style */
+  .bot-img { height: 510px !important; filter: drop-shadow(0 0 70px rgba(251,4,145,0.45)) drop-shadow(0 0 30px rgba(255,215,0,0.20)) !important; }
+</style>
+</head>
+<body>
+  <div class="bg-glow-top"></div><div class="bg-glow-mid"></div><div class="bg-glow-bot"></div>
+
+  <div class="header">
+    <div class="logo-wrap">
+      <img class="logo-icon" src="img/logo-icon.png" alt="bd">
+      <div class="logo-wordmark">WE<span>bd</span>EX</div>
+    </div>
+    <div class="badge">CONQUISTAS</div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow"><div class="hero-eyebrow-line"></div><div class="hero-eyebrow-text">#conquistas</div></div>
+    <div class="hero-title">Cada<br><span class="hl">Vitória</span></div>
+    <div class="hero-version">IMPORTA</div>
+    <div class="hero-tagline">🏆 MARCOS. RECORDS. HISTÓRIA.</div>
+    <div class="hero-sub">Cada novo holder é uma conquista do protocolo.</div>
+  </div>
+
+  <div class="bot-visual">
+    <div class="bot-glow"></div>
+    <img class="bot-img" src="img/bot-hero.png" alt="bdZinho Conquistas">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="milestones">
+    <div class="features-label" style="font-size:14px;font-weight:700;letter-spacing:5px;color:#888;text-transform:uppercase;padding:0 0 4px;">O que celebramos</div>
+    <div class="milestone-row">
+      <div class="milestone-badge gold"><span class="mb-icon">🏆</span><span class="mb-text" data-live="milestone_text">Novos milestones do protocolo</span></div>
+    </div>
+    <div class="milestone-row">
+      <div class="milestone-badge green"><span class="mb-icon">👤</span><span class="mb-text" data-live="new_wallets_text">Novas carteiras conectadas</span></div>
+    </div>
+    <div class="milestone-row">
+      <div class="milestone-badge"><span class="mb-icon">📈</span><span class="mb-text">Recordes históricos</span></div>
+    </div>
+    <div class="milestone-row">
+      <div class="milestone-badge cyan"><span class="mb-icon">🎯</span><span class="mb-text">Metas da comunidade batidas</span></div>
+    </div>
+  </div>
+
+  <div class="quote-section">
+    <div class="quote-eyebrow">Cada carteira nova é um voto de <span>confiança.</span></div>
+    <div class="quote-text">Celebra.</div>
+  </div>
+
+  <div class="cta-section">
+    <div class="closing-line">Sua conquista <span>vira história</span> aqui.</div>
+    <div class="pills">
+      <div class="pill p1"><span class="pill-icon">🏆</span>Ver Conquistas<span class="pill-arrow">→</span></div>
+      <div class="pill p2"><span class="pill-icon">📊</span>WEbdEX Stats<span class="pill-arrow">→</span></div>
+    </div>
+  </div>
+
+  <script src="live-data.js" data-card="conquistas"></script>
+  <div class="footer">
+    <div class="footer-logo"><img class="footer-logo-img" src="img/logo-icon.png" alt="bd"><span style="font-family:'Press Start 2P',monospace;font-size:12px;color:#888">WE<span style="color:#fb0491">bd</span>EX Protocol</span></div>
+    <div class="footer-tag">— bdZinho <em>🤖</em></div>
+  </div>
+</body>
+</html>

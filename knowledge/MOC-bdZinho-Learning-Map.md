@@ -236,6 +236,24 @@ TÉCNICA → DEPLOY → RESILIÊNCIA
 
 ---
 
+## 🌐 DIMENSÃO 8 — Market Intelligence (o mercado em que vivo)
+
+*Conhecer o mercado é falar com autoridade sobre contexto externo.*
+
+| Nota | O que bdZinho aprende |
+|------|----------------------|
+| [[044-defi-trends-q1q2-2026]] | TVL DeFi $130-140B, CAGR 43,3%, RWA +106%, narrativas 2026 |
+| [[045-polygon-2026]] | POL migration, AggLayer, stablecoin ATH $3,28B |
+| [[046-brasil-cripto-2026]] | 26M investidores, VASP Fev/2026, DeCripto Jul/2026 |
+| [[047-stablecoins-usdt-usdc-polygon]] | USDC 51%, USDT0 omnichain, liquidez record |
+| [[048-subscription-benchmarks-2026]] | $25-300/mês, staking do token, profit-sharing |
+| [[049-competitors-landscape]] | MEV bots vs ciclo 21h — são mercados DIFERENTES |
+| [[050-strategic-gaps-webdex]] | 4 gaps identificados: copy trading, staking BD, DeCripto, USDC |
+
+→ [[MOC-Market-Intelligence-2026]] — Mapa detalhado desta dimensão
+
+---
+
 ## 📊 Status do Knowledge Graph
 
 | Dimensão | Notas | Status |
@@ -247,8 +265,9 @@ TÉCNICA → DEPLOY → RESILIÊNCIA
 | Marketing | 028-031 | ✅ Completo |
 | Marca/Brand | 035-037 | ✅ Completo |
 | Fluxos | 038-039 | ✅ Completo |
+| **Market Intelligence** | **044-050** | ✅ **Completo (2026-03-25)** |
 
-**Total: 43 notas atômicas. 7 dimensões cobertas. Um mapa completo.**
+**Total: 50 notas atômicas. 8 dimensões cobertas. bdZinho conhece o mercado em que vive.**
 
 ---
 

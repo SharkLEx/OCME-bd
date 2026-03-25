@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=1080">
+<title>Canal #relatório-diário</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="viewport-fix.js"></script>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="animations.css">
+<style>
+  :root { --accent: #fb0491; --accent2: #00D4FF; --accent-rgb: 251,4,145; --accent2-rgb: 0,212,255; }
+  .logo-wrap { display:flex; align-items:center; gap:18px; }
+  .logo-icon { width:60px; height:60px; border-radius:14px; }
+  .logo-wordmark { font-family:'Syne',sans-serif; font-weight:800; font-size:28px; letter-spacing:-0.5px; }
+  .logo-wordmark span { color:#fb0491; }
+  .bot-img { height: 490px !important; }
+  /* ciclo 21h visual */
+  .ciclo-visual {
+    padding: 24px 72px; flex-shrink: 0; position: relative; z-index: 1;
+  }
+  .ciclo-label { font-size: 14px; font-weight: 700; letter-spacing: 5px; color: #888; text-transform: uppercase; margin-bottom: 14px; }
+  .ciclo-bar-wrap {
+    background: #111; border-radius: 12px; padding: 20px 28px;
+    border: 1px solid rgba(251,4,145,0.20);
+    margin-bottom: 12px;
+  }
+  .ciclo-bar-title { font-size: 14px; color: #888; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .ciclo-bar-row { display: flex; align-items: center; gap: 16px; }
+  .ciclo-bar { flex: 1; height: 8px; background: #222; border-radius: 4px; overflow: hidden; }
+  .ciclo-bar-fill { height: 100%; border-radius: 4px; }
+  .ciclo-bar-fill.pink { background: linear-gradient(90deg, #d90048, #fb0491); width: 73%; }
+  .ciclo-bar-fill.cyan { background: linear-gradient(90deg, #0080ff, #00D4FF); width: 88%; }
+  .ciclo-bar-fill.green { background: linear-gradient(90deg, #00a868, #00FFB2); width: 61%; }
+  .ciclo-bar-pct { font-size: 16px; font-weight: 800; min-width: 48px; text-align: right; }
+  .ciclo-bar-wrap.p .ciclo-bar-pct { color: #fb0491; }
+  .ciclo-bar-wrap.c .ciclo-bar-pct { color: #00D4FF; }
+  .ciclo-bar-wrap.g .ciclo-bar-pct { color: #00FFB2; }
+</style>
+</head>
+<body>
+  <div class="bg-glow-top"></div><div class="bg-glow-mid"></div><div class="bg-glow-bot"></div>
+
+  <div class="header">
+    <div class="logo-wrap">
+      <img class="logo-icon" src="img/logo-icon.png" alt="bd">
+      <div class="logo-wordmark">WE<span>bd</span>EX</div>
+    </div>
+    <div class="badge">DIÁRIO</div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow"><div class="hero-eyebrow-line"></div><div class="hero-eyebrow-text">#relatório-diário</div></div>
+    <div class="hero-title">Ciclo<br><span class="hl">21 Horas</span></div>
+    <div class="hero-version">CADA DIA</div>
+    <div class="hero-tagline">📊 RELATÓRIO. SEM FALHA.</div>
+    <div class="hero-sub">Performance completa do protocolo todo dia às 21h.</div>
+  </div>
+
+  <div class="bot-visual">
+    <div class="bot-glow"></div>
+    <img class="bot-img" src="img/bot-smart.png" alt="bdZinho Smart">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="ciclo-visual">
+    <div class="ciclo-label">Métricas do ciclo</div>
+    <div class="ciclo-bar-wrap p">
+      <div class="ciclo-bar-title">Atividade on-chain</div>
+      <div class="ciclo-bar-row">
+        <div class="ciclo-bar"><div class="ciclo-bar-fill pink" data-live="onchain_pct_width" data-live-prop="style.width"></div></div>
+        <div class="ciclo-bar-pct" data-live="onchain_pct">73%</div>
+      </div>
+    </div>
+    <div class="ciclo-bar-wrap c">
+      <div class="ciclo-bar-title">Holders ativos</div>
+      <div class="ciclo-bar-row">
+        <div class="ciclo-bar"><div class="ciclo-bar-fill cyan" data-live="holders_pct_width" data-live-prop="style.width"></div></div>
+        <div class="ciclo-bar-pct" data-live="holders_pct">88%</div>
+      </div>
+    </div>
+    <div class="ciclo-bar-wrap g">
+      <div class="ciclo-bar-title">Volume de swaps</div>
+      <div class="ciclo-bar-row">
+        <div class="ciclo-bar"><div class="ciclo-bar-fill green" data-live="swaps_pct_width" data-live-prop="style.width"></div></div>
+        <div class="ciclo-bar-pct" data-live="swaps_pct">61%</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="features" style="display:flex !important; padding-top: 0 !important; padding-bottom: 16px !important;">
+    <div class="feature-card c1"><div class="feature-icon">🔮</div><div><div class="feature-name">Previsão</div><div class="feature-desc">Tendência do próximo ciclo baseada em dados.</div></div></div>
+    <div class="feature-card c3"><div class="feature-icon">📧</div><div><div class="feature-name">Síntese completa</div><div class="feature-desc">Resumo executivo de todas as métricas do dia.</div></div></div>
+  </div>
+
+  <div class="quote-section" style="padding-top: 8px;">
+    <div class="quote-eyebrow">Todos os dias às 21h. <span>Sem exceção.</span></div>
+    <div class="quote-text">Você merece saber.</div>
+  </div>
+
+  <div class="cta-section">
+    <div class="closing-line"><span>Dados reais</span>. Decisões melhores.</div>
+    <div class="pills">
+      <div class="pill p1"><span class="pill-icon">📊</span>Relatório Diário<span class="pill-arrow">→</span></div>
+      <div class="pill p2"><span class="pill-icon">📈</span>WEbdEX Pro<span class="pill-arrow">→</span></div>
+    </div>
+  </div>
+
+  <script src="live-data.js" data-card="relatorio-diario"></script>
+  <div class="footer">
+    <div class="footer-logo"><img class="footer-logo-img" src="img/logo-icon.png" alt="bd"><span style="font-family:'Press Start 2P',monospace;font-size:12px;color:#888">WE<span style="color:#fb0491">bd</span>EX Protocol</span></div>
+    <div class="footer-tag">— bdZinho <em>🤖</em></div>
+  </div>
+</body>
+</html>
