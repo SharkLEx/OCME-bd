@@ -81,6 +81,7 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
                 return ImageFont.truetype(path, size)
             except Exception:
                 continue
+    logger.warning("[image] Nenhuma fonte TrueType encontrada — usando fallback bitmap (qualidade degradada)")
     return ImageFont.load_default()
 
 
@@ -128,14 +129,6 @@ def _draw_accent_bar(draw: ImageDraw.Draw, y: int, h: int = 4, color=_ACCENT) ->
     """Barra de acento horizontal."""
     draw.rectangle([(0, y), (_W, y + h)], fill=color)
 
-
-def _draw_glows(draw: ImageDraw.Draw) -> None:
-    """Glow sutil nos cantos para profundidade."""
-    for i in range(30):
-        alpha = int(40 * (1 - i / 30))
-        col = (*_ACCENT[:3], alpha)
-        # top-left glow
-        draw.ellipse([(-50 + i, -50 + i, 150 - i, 150 - i)], outline=(*_ACCENT, alpha), width=1)
 
 
 def _text_center(draw: ImageDraw.Draw, x_center: int, y: int,

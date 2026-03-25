@@ -366,12 +366,28 @@ def agendador_21h():
                         # ── MATRIX-3.6: Card visual + post Discord (fail-open) ──────
                         if _MATRIX36_ENABLED and _WEBHOOK_CONTENT_CARD:
                             _m36_key = f"matrix36_21h_{hoje}"
-                            if get_config(_m36_key, "") != "ok":
+                            _m36_val = get_config(_m36_key, "")
+                            _m36_skip = _m36_val == "ok"
+                            if not _m36_skip and _m36_val.startswith("pending:"):
                                 try:
+                                    _m36_ts = int(_m36_val.split(":", 1)[1])
+                                    _m36_skip = (time.time() - _m36_ts) < 600
+                                except (ValueError, IndexError):
+                                    pass
+                            if not _m36_skip:
+                                try:
+                                    # Guard salvo ANTES do thread (protege contra restart do container)
+                                    set_config(_m36_key, f"pending:{int(time.time())}")
                                     import threading as _thr
+                                    # Digest passado diretamente — evita round-trip ao banco
+                                    _m36_digest = {
+                                        "traders": _p_traders, "trades": _p_total,
+                                        "wr_pct": _p_wr, "pnl_usd": _p_bruto,
+                                        "fee_bd": _p_bd, "tvl_usd": _tvl_usd, "date": hoje,
+                                    }
                                     def _post_card_bg():
                                         try:
-                                            _card_buf = gerar_card_ciclo()
+                                            _card_buf = gerar_card_ciclo(_m36_digest)
                                             _card_ok = _post_card_discord(
                                                 webhook_url=_WEBHOOK_CONTENT_CARD,
                                                 image_buf=_card_buf,

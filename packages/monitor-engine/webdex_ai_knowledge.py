@@ -344,4 +344,5 @@ def _bootstrap():
         _ensure_table()
 
 
-_bootstrap()
+# Executa em background para não bloquear o import se o banco estiver lento
+threading.Thread(target=_bootstrap, daemon=True).start()
