@@ -1053,29 +1053,41 @@ BLOCO 7 — TOKEN BD: ECONOMIA E UTILIDADE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 TOKEN BD — O QUE É:
-Token oficial de utilidade do WEbdEX. NÃO é ativo especulativo, NÃO promete
-retorno por si só, NÃO funciona por staking. É utility token — habilita
+Token oficial de utilidade do WEbdEX. Contrato: 0xf49dA0F454d212B80F40693cdDd452D8Caa2fa6d (Polygon ERC-20).
+NÃO é ativo especulativo, NÃO promete retorno por si só. É utility token — habilita
 funções, acessos e direitos dentro do ecossistema. Representa pertencimento
 funcional ao protocolo.
 
 SUPPLY E EMISSÃO:
-  Total supply: 369.369.369 BD
+  Total supply: 369.369.369 BD (hard cap imutável — nenhum novo token criado jamais)
   Em circulação no mercado: ~4,92% do supply total
-  Emissão baseada em uso real — não inflacionária por promessa
-  Mecanismos de reabsorção: holding, fundos de retorno, brokerage, cursos
+  Fee por operação: 0,00963 BD por arbitragem triangular
+  Emissão baseada em uso real — não inflacionária
 
-MODELO HOLDING (não staking) — o que o holding permite:
-  → Participar de processos futuros de validação
-  → Realizar transações P2P dentro da comunidade
-  → Participar dos fundos de retorno
-  → Atuar como IB (brokerage descentralizado)
-  → Acessar cursos, formações e ferramentas futuras
+DISTRIBUIÇÃO INICIAL (369.369.369 BD):
+  70% Vault (Cofre): 258.558.558 BD — reserva para ICO controlado
+  20% Task Marketplace: 73.873.874 BD — incentivos e pagamentos do ecossistema
+  10% Ações Diversas: 36.936.937 BD — parcerias e contingências
 
-HUB ECONÔMICO — controle de inflação inteligente:
-  Recebe BD: 0,00963 BD por operação de arbitragem + % de cursos + % de tarefas
-  Redistribui: automaticamente entre desenvolvimento, marketing,
-               operações, incentivos comunitários, reservas estratégicas
-  Swapbook: converte BD para stablecoins/POL automaticamente quando necessário
+TOKEN PASS (96,3 BD holding) — o que desbloqueia:
+  → Arbitragem automática no protocolo
+  → Publicação de cursos no marketplace
+  → Participação no programa de afiliados
+  → Execução de tarefas no Task Marketplace
+  → Atuação como IB (brokerage descentralizado)
+
+COMPRA/VENDA DE BD — APENAS P2P:
+  Toda negociação é feita exclusivamente de forma P2P. Três rotas:
+  1. Swapbook P2P nativo (betav5.webdex.fyi) — plataforma oficial de listagem
+  2. Canais oficiais do Discord — principal ponto de conexão entre usuários
+  3. Grupos oficiais (Telegram/WhatsApp) — comunidade facilita as trocas
+  Pares aceitos: USDT, USDC, DAI, POL | Preço referência: ~$0,38/BD
+  NÃO existe Uniswap, CEX ou outra rota ativa no momento.
+
+HUB ECONÔMICO — controle de inflação (redistribuição das fees):
+  Recebe: 0,00963 BD/op + 9,63-19,26% cursos + 9,63% tarefas
+  Redistribui: 30% Vault → 20% Tecnologia → 14% Marketing → 9% Devs (fixo, imutável)
+               → 9% Task Marketplace → 9% Ações Diversas → 6% Gas Vault → 3% Governance
   % Devs: 9% — fixo, não alterável por governança
 
 CIRCULARIDADE ECONÔMICA:
