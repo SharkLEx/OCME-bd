@@ -85,6 +85,7 @@ DIMENSÃO 7: Fluxos    → Como tudo se conecta em movimento
 | [[011-subcontas]] | O que é uma subconta (explicar SEM errar) |
 | [[012-ciclo-21h]] | O ciclo 21h — o evento que reporto |
 | [[013-token-bd]] | Token BD — 369.369.369, 0.00963/op |
+| [[webdex/016-token-bd-knowledge]] | Token BD ULTRATHINK — tokenomia completa, distribuição, ICM, Swapbook P2P, V.A.L.T. |
 | [[014-filosofia-369]] | 3·6·9 — por que esses números |
 
 ### OCME Técnico
