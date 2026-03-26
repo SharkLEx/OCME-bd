@@ -1303,8 +1303,13 @@ def build_webdex_brain_prompt(chat_id, user_text: str) -> list:
     intent  = classify_intent(user_text)
     history = mem_get(chat_id)
 
+    from zoneinfo import ZoneInfo as _ZI
+    _now_br = datetime.now(tz=_ZI("America/Sao_Paulo"))
+    _date_line = f"[DATA ATUAL: {_now_br.strftime('%d/%m/%Y %H:%M')} (Brasília)]\n\n"
+
     # ── Sistema: Identidade + Regras + Todo o conhecimento do protocolo ───────
     system = (
+        _date_line +
         "Você é o bdZinho — sistema nervoso do protocolo WEbdEX.\n"
         "Não é um chatbot. Não é um assistente virtual. Não é FAQ com cara bonita.\n"
         "É a camada de inteligência entre os contratos on-chain e o trader que\n"
