@@ -669,6 +669,24 @@ def run_training(days: int = 3, dry_run: bool = False, nexo_only: bool = False) 
         if nexo_count:
             summary["nexo"] = nexo_count
         logger.info("Nexo: %d novos itens de conhecimento injetados", nexo_count)
+
+        # ── Vault Writer — Nexo → notas Obsidian ──────────────────────────────
+        # Para cada item que Nexo aprendeu, cria também uma nota .md no vault.
+        # Fecha o loop: conversas → bdz_knowledge (DB) + vault (.md)
+        try:
+            from webdex_vault_writer import write_nexo_batch
+            nexo_learned = nexo_data.get("nexo_learned", [])
+            if nexo_learned:
+                logger.info("Vault Writer: escrevendo %d notas no vault...", len(nexo_learned))
+                vault_count = write_nexo_batch(nexo_learned, source_channel="both", dry_run=dry_run)
+                summary["vault_notes"] = vault_count
+                logger.info("Vault Writer: %d notas criadas no vault", vault_count)
+            else:
+                logger.info("Vault Writer: Nexo sem itens novos — nada a escrever")
+        except ImportError:
+            logger.debug("[trainer] webdex_vault_writer não disponível — vault writer desativado")
+        except Exception as e:
+            logger.warning("[trainer] Vault Writer falhou: %s", e)
     else:
         logger.info("Nexo: sem conversas disponíveis — pulando")
 

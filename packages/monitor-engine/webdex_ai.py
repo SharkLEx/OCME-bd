@@ -1060,7 +1060,6 @@ funcional ao protocolo.
 
 SUPPLY E EMISSÃO:
   Total supply: 369.369.369 BD (hard cap imutável — nenhum novo token criado jamais)
-  Em circulação no mercado: ~4,92% do supply total
   Fee por operação: 0,00963 BD por arbitragem triangular
   Emissão baseada em uso real — não inflacionária
 
