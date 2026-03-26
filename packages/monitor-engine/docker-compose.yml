@@ -20,10 +20,12 @@ services:
     volumes:
       - monitor_data:/app/data
       - monitor_logs:/app/logs
+      - /opt/vault:/app/vault
     environment:
       - DB_PATH=/app/data/webdex_v5_final.db
       - DATA_DIR=/app/data
       - METRICS_PORT=9090
+      - VAULT_LOCAL_PATH=/app/vault
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/health')"]
       interval: 30s

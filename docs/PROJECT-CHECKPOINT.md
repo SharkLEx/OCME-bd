@@ -4,6 +4,114 @@
 
 ## Contexto Ativo
 
+**Sessão 2026-03-26 noite — VAULT ATIVO + BUGS CORRIGIDOS ✅**
+
+### Entregues nesta sessão:
+
+**BUG 2 — Botão 🔌 Conectar para novos usuários ✅**
+- `main_kb()` agora mostra "🔌 Conectar" condicionalmente para usuários sem wallet
+- Usuários conectados NÃO veem o botão (comportamento correto)
+
+**BUG 3 — NameError em auto_resume_notify ✅**
+- `main_kb(m.chat.id)` → `main_kb(cid)` — `m` não existia no escopo
+- Deployado via docker cp + docker restart ocme-monitor
+
+**Vault Obsidian ATIVO ✅**
+- Descoberta: vault existe em `/ocme_data/vault/` (Docker volume) + `/opt/vault/` (host)
+- Sync automático criado: `/opt/sync_vault.sh` — cron `0 * * * *` (cada hora)
+- `056-dai-integration.md` sincronizada e confirmada no Discord bot
+- `vault_reader.search_vault('DAI integração')` → 3 resultados ✅
+- bdZinho Discord pode usar tool `buscar_vault` com knowledge completo
+
+**Docker-compose atualizados (local):**
+- `orchestrator/docker-compose.yml`: volume `/opt/vault:/app/vault:ro` + `VAULT_PATH`
+- `monitor-engine/docker-compose.yml`: volume `/opt/vault:/app/vault` + `VAULT_LOCAL_PATH`
+
+**Verificações:**
+- Ciclo 21h: 5821 trades, 27/29 wallets — FUNCIONANDO ✅
+- Filtros: lógica OK — query/handler corretos ✅
+- Container ocme-monitor: UP healthy após restart ✅
+
+---
+
+**Sessão 2026-03-26 tarde — DAI MONITORING DEPLOYADO ✅**
+
+### DAI adicionado ao monitor v4 ✅
+- `TOKEN_DAI = 0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063` (18 decimals, Polygon)
+- Loop de polling: `[TOKEN_USDT, TOKEN_LOOP, TOKEN_DAI]`
+- Relatório 2h + diário: campos 🟡 DAI in/out, líquido = USDT+DAI
+- Deploy: `docker cp` + `docker restart` — container healthy, v4 worker ativo
+- Capital_cache: DAI já aparece no breakdown real de usuário (AG_C_bd $18.414)
+- **Próximo:** commit + push via @devops
+
+**Sessão 2026-03-26 tarde — OCME CRASH RESOLVIDO E DEPLOYADO ✅**
+
+### Incidente ocme-monitor — FECHADO ✅
+
+**Causa raiz (2 bugs simultâneos):**
+1. `webdex_db.py`: cursor global compartilhado entre 20 threads → SIGSEGV em Python 3.12
+2. Container rodava imagem OLD (INSERT 11 colunas) vs source com 15 cols vs tabela com 17 cols
+
+**Fixes deployados (commits `0f29bab` + `82174b4` — branch feat/epic-7-monitor-engine):**
+- `webdex_db.py`: `_ConnProxy` + `_CursorProxy` com `threading.local()` — cada thread tem sua própria conexão SQLite
+- `webdex_monitor.py`: INSERT atualizado para 17 colunas (inclui `contract_address`, `gas_pol`)
+- `webdex_observability.py`: `check_same_thread=False` em ambos os `sqlite3.connect()`
+- Docker image rebuiltada e force-recreated com os fixes
+
+**Status pós-fix:**
+- Container: `Up 8+ min (healthy)` — RestartCount=0
+- anomaly_worker: ✅ rodando com 4492 subcontas (era o gatilho do segfault)
+- VIGIA lag: recuperando (10014 → 7937 blocos, ~15min para realtime)
+- Operações: 105.163 registradas, trades chegando normalmente
+
+**Pendências restantes:**
+1. 🟡 Push do branch `feat/epic-7-monitor-engine` para remote (quando Alex quiser)
+2. 🟡 Watchdog externo via n8n (pingar healthcheck a cada 5min)
+3. 🟡 Merge do branch de fix para main no VPS
+
+**Sessão 2026-03-26 — Vault RAG + Smith audit CLEAN ✅ DEPLOYADO**
+
+Commits deployados no submodule orchestrator:
+- `c2b912d` fix(vault): C-1 race condition + C-2 prompt injection + H-2 size limit + H-3 memory leak
+
+Entregas desta sessão:
+- **vault_reader.py** (NOVO): RAG completo — indexa 59+ notas Obsidian, busca por relevância
+- **webdex_tools_discord.py** (MODIFICADO): tool `buscar_vault` adicionada — bdZinho lê o vault em tempo real
+- **webdex_vault_writer.py** (NOVO, monitor-engine): Nexo escreve notas aprendidas no vault (fecha o loop)
+- **webdex_ai.py** (MODIFICADO): remove circulação sem fonte (Smith LOW)
+- **bdzinho_v3_announcement.html** (REESCRITO): logo circular + cards TVL/win rate/vault/token
+- **Smith audit**: 4 findings resolvidos → INFECTED → CLEAN
+  - C-1: race condition em _load() → _load_lock + double-check
+  - C-2: prompt injection via vault → _sanitize_excerpt() aplicado
+  - H-2: notas >50KB ignoradas (proteção de memória)
+  - H-3: _rate_data cresce sem evicção → evict periódico a cada hora
+- Bot WEbdEX#7787 online e saudável após restart
+
+**M-4 RESOLVIDO ✅**: vault compartilhado via `monitor-engine_monitor_data` Docker volume
+- `ocme-monitor` escreve em `/app/data/vault/` (rw)
+- `orchestrator-discord` lê de `/ocme_data/vault/` (ro) — mesmo volume
+- Nexo aprende → escreve `.md` → bdZinho lê na próxima query. Loop fechado.
+- 59 notas migradas, vault_status: available=true, notes_count=59
+
+**Sessão 2026-03-26 — bdPro ULTRATHINK DeFi Avançado + Playground Foundry ✅**
+
+Notas Obsidian criadas (curriculum bdPro — Dimensão 10):
+- `knowledge/solidity-dev/013-agregadores-defi.md` — 1inch (Router V5 + API), 0x Protocol, Paraswap, routing de liquidez, execução on-chain, segurança, Python off-chain (OCME)
+- `knowledge/solidity-dev/014-chainlink-oracles.md` — AggregatorV3Interface, feeds Polygon (MATIC/USD, ETH/USD, USDT/USD), validações staleness/roundIncomplete, TWAP Uniswap V3 via tickCumulatives, integração WEbdEXSubscription V2
+- `knowledge/solidity-dev/015-permit2-aprovacoes.md` — EIP-712 domain separator, EIP-2612 Permit (OZ ERC20Permit), Uniswap Permit2 (0x000...22D4), SignatureTransfer vs AllowanceTransfer, frontend ethers v6, WEbdEXSubscription com 3 métodos
+- `knowledge/solidity-dev/016-webdex-contracts-playground.md` — Documentação do playground Foundry real (sol-016)
+
+Playground Foundry criado: `packages/webdex-contracts/`
+- `src/WEbdEXSubscriptionV2.sol` — contrato com 3 métodos: classic/EIP-2612/Permit2 + Chainlink oracle
+- `src/interfaces/` — IPermit2, IAggregatorV3, I1inchRouter
+- `test/SubscriptionV2.t.sol` — testes unitários completos (mocks + fuzz)
+- `test/ForkTest.t.sol` — testes fork Polygon Mainnet (USDT real + Chainlink real + Permit2 real)
+- `script/Deploy.s.sol` — deploy Amoy + Mainnet com verificação PolygonScan
+- `foundry.toml` — config completo + remappings OZ v5 + Chainlink
+
+Smith audit: todas as notas (sol-013 a sol-016) CLEAN ✅
+Status total: 71 notas Obsidian / 10 dimensões
+
 **Sessão 2026-03-25 madrugada (Token BD ULTRATHINK) — CONCLUÍDA ✅**
 
 Commits deployados:

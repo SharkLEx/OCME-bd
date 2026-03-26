@@ -123,6 +123,12 @@ def main_kb(chat_id=None):
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
     kb.row("📊 Resultados", "🤖 bdZinho")
     kb.row("🌐 Protocolo", "⚙️ Config")
+    if chat_id:
+        u = get_user(chat_id)
+        if not u or not u.get("wallet"):
+            kb.row("🔌 Conectar")
+    if chat_id and is_admin(chat_id):
+        kb.row("🛠️ ADM")
     return kb
 
 
@@ -232,7 +238,7 @@ def require_auth(func):
     def wrapper(m, *args, **kwargs):
         u = get_user(m.chat.id)
         if not u or not u.get("wallet"):
-            return send_support(m.chat.id, "⚠️ Conecte primeiro em 🔌 Conectar.", reply_markup=main_kb())
+            return send_support(m.chat.id, "⚠️ Conecte primeiro em 🔌 Conectar.", reply_markup=main_kb(m.chat.id))
         try:
             # Se u já foi passado externamente, usa ele (evita duplo get_user)
             # Caso contrário usa o que buscamos acima
@@ -245,7 +251,7 @@ def require_auth(func):
                 send_support(
                     m.chat.id,
                     "⚠️ Ocorreu um erro ao processar sua solicitação. Tente novamente.",
-                    reply_markup=main_kb()
+                    reply_markup=main_kb(m.chat.id)
                 )
             except Exception:
                 pass
@@ -262,7 +268,7 @@ def auto_resume_notify():
             send_support(
                 cid,
                 "✅ Bot reiniciado e online.\n\nUse os botões abaixo (não precisa /start).",
-                reply_markup=main_kb(),
+                reply_markup=main_kb(cid),
                 disable_web_page_preview=True
             )
             time.sleep(0.05)
@@ -295,7 +301,7 @@ def start(m):
         send_support(
             m.chat.id,
             f"✅ Você já está conectado.\n\n🎛️ Filtro atual: <b>{esc(sf)}</b>\n🗓️ Período: <b>{esc(u.get('periodo','24h'))}</b>\n\nUse os botões abaixo.",
-            reply_markup=main_kb()
+            reply_markup=main_kb(m.chat.id)
         )
     else:
         welcome_caption = (
@@ -305,8 +311,8 @@ def start(m):
             "📊 Monitore suas subcontas, trades e capital em tempo real.\n\n"
             "🔌 Clique em <b>Conectar</b> para configurar sua wallet."
         )
-        if not send_logo_photo(m.chat.id, welcome_caption, reply_markup=main_kb()):
-            send_support(m.chat.id, welcome_caption, reply_markup=main_kb())
+        if not send_logo_photo(m.chat.id, welcome_caption, reply_markup=main_kb(m.chat.id)):
+            send_support(m.chat.id, welcome_caption, reply_markup=main_kb(m.chat.id))
 
 
 def _rpc_skip_kb():
@@ -378,13 +384,13 @@ def btn_conectar(m):
 @bot.message_handler(func=lambda m: m.text == "▶️ Ativar")
 def btn_ativar(m):
     upsert_user(m.chat.id, active=1)
-    send_support(m.chat.id, "▶️ Monitoramento <b>ATIVADO</b>.", reply_markup=main_kb())
+    send_support(m.chat.id, "▶️ Monitoramento <b>ATIVADO</b>.", reply_markup=main_kb(m.chat.id))
 
 
 @bot.message_handler(func=lambda m: m.text == "⏸️ Pausar")
 def btn_pausar(m):
     upsert_user(m.chat.id, active=0)
-    send_support(m.chat.id, "⏸️ Monitoramento <b>PAUSADO</b>.", reply_markup=main_kb())
+    send_support(m.chat.id, "⏸️ Monitoramento <b>PAUSADO</b>.", reply_markup=main_kb(m.chat.id))
 
 
 # ==============================================================================
@@ -631,7 +637,7 @@ def wallet_info(m, u):
         f"\n"
         f"<i>⚡ WEbdEX · New Digital Economy</i>"
     )
-    send_support(m.chat.id, msg, reply_markup=main_kb())
+    send_support(m.chat.id, msg, reply_markup=main_kb(m.chat.id))
 
 
 # ==============================================================================
@@ -679,10 +685,10 @@ def ids_saldo(m, u):
 
         if not has:
             msg += "(Sem saldo)"
-        send_support(m.chat.id, msg, reply_markup=main_kb())
+        send_support(m.chat.id, msg, reply_markup=main_kb(m.chat.id))
 
     except Exception as e:
-        send_support(m.chat.id, f"Erro: {code(e)}", reply_markup=main_kb())
+        send_support(m.chat.id, f"Erro: {code(e)}", reply_markup=main_kb(m.chat.id))
 
 
 # ==============================================================================
@@ -976,7 +982,7 @@ def dashboard(m, u):
 
     txt, nets = _dashboard_build_text(u)
     if txt is None:
-        return send_support(m.chat.id, "⚠️ Sem dados para o Dashboard PRO (com o filtro atual).", reply_markup=main_kb())
+        return send_support(m.chat.id, "⚠️ Sem dados para o Dashboard PRO (com o filtro atual).", reply_markup=main_kb(m.chat.id))
 
     send_support(m.chat.id, txt, reply_markup=_dashboard_kb())
 
@@ -1077,7 +1083,7 @@ def painel(m, u):
     if txt is None:
         return send_support(m.chat.id,
             f"⚠️ Sem dados no ciclo atual.\n🕘 Desde: <b>{since[11:16]} BRT</b>",
-            reply_markup=main_kb())
+            reply_markup=main_kb(m.chat.id))
     send_support(m.chat.id, txt, reply_markup=_painel_kb())
 
 
@@ -1163,7 +1169,7 @@ def _consolidado_callback(c):
 def consolidado_24h(m, u):
     txt = _consolidado_build_text(u)
     if txt is None:
-        return send_support(m.chat.id, "⚠️ Sem dados nas últimas 24h (com o filtro atual).", reply_markup=main_kb())
+        return send_support(m.chat.id, "⚠️ Sem dados nas últimas 24h (com o filtro atual).", reply_markup=main_kb(m.chat.id))
     send_support(m.chat.id, txt, reply_markup=_consolidado_kb())
 
 
@@ -1256,7 +1262,7 @@ def ranking_lucro(m, u):
         lbl     = _period_label(periodo)
         return send_support(m.chat.id,
             f"⚠️ Sem trades para ranquear.\n🗓️ Período: <b>{esc(lbl)}</b>",
-            reply_markup=main_kb())
+            reply_markup=main_kb(m.chat.id))
     send_support(m.chat.id, txt, reply_markup=_ranking_lucro_kb())
 
 
@@ -1271,7 +1277,7 @@ def ciclo_subconta(m, u):
 
     data = load_trade_times_by_sub(u["wallet"], hours, only_sub=sf)
     if not data:
-        return send_support(m.chat.id, "⚠️ Sem trades no período para calcular ciclo (com o filtro atual).", reply_markup=main_kb())
+        return send_support(m.chat.id, "⚠️ Sem trades no período para calcular ciclo (com o filtro atual).", reply_markup=main_kb(m.chat.id))
 
     now = datetime.now()
     lines = [f"🧬 <b>CICLO DA SUBCONTA</b> ({esc(u['periodo'])})"]
@@ -1307,7 +1313,7 @@ def ciclo_subconta(m, u):
         )
         lines.append(f"   últimos gaps: {code(last_gaps_txt)}")
 
-    send_support(m.chat.id, "\n".join(lines), reply_markup=main_kb())
+    send_support(m.chat.id, "\n".join(lines), reply_markup=main_kb(m.chat.id))
 
     # IA interpreta o padrão de ciclo (async — não bloqueia)
     if all_gaps_sorted and len(all_gaps_sorted) >= 5:
@@ -1452,7 +1458,7 @@ def ranking_consistencia(m, u):
     if not txt:
         return send_support(m.chat.id,
             "⚠️ Poucos dados para ranking (precisa ≥ 5 gaps por subconta).",
-            reply_markup=main_kb())
+            reply_markup=main_kb(m.chat.id))
     try:
         bot.send_message(m.chat.id, txt, parse_mode="HTML",
                          reply_markup=_ranking_period_kb("consist", periodo))
@@ -1473,7 +1479,7 @@ def ranking_ciclo(m, u):
     if not txt:
         return send_support(m.chat.id,
             "⚠️ Poucos dados para ranking (precisa ≥ 3 gaps por subconta).",
-            reply_markup=main_kb())
+            reply_markup=main_kb(m.chat.id))
     try:
         bot.send_message(m.chat.id, txt, parse_mode="HTML",
                          reply_markup=_ranking_period_kb("ciclo", periodo))
@@ -1491,7 +1497,7 @@ def analise_temporal(m, u):
     bot.send_chat_action(m.chat.id, "typing")
     wallet = (u.get("wallet") or "").lower().strip()
     if not wallet:
-        return send_support(m.chat.id, "⚠️ Configure sua wallet primeiro.", reply_markup=main_kb())
+        return send_support(m.chat.id, "⚠️ Configure sua wallet primeiro.", reply_markup=main_kb(m.chat.id))
     hours = period_to_hours(u.get("periodo") or "24h")
     dt = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
     try:
@@ -1507,7 +1513,7 @@ def analise_temporal(m, u):
                 GROUP BY hr ORDER BY hr
             """, (dt, wallet)).fetchall()
         if not rows:
-            return send_support(m.chat.id, "⚠️ Sem trades no período para análise.", reply_markup=main_kb())
+            return send_support(m.chat.id, "⚠️ Sem trades no período para análise.", reply_markup=main_kb(m.chat.id))
 
         # Hora mais ativa e mais lucrativa
         best_cnt  = max(rows, key=lambda r: int(r[1] or 0))
@@ -1546,10 +1552,10 @@ def analise_temporal(m, u):
             bar = "█" * min(10, int(cnt))
             lines.append(f"  {hr}h {dot} <code>{bar}</code> {cnt}t ${net:+.2f}")
         lines += ["", "━━━━━━━━━━━━━━━━━━━━"]
-        send_support(m.chat.id, "\n".join(lines), reply_markup=main_kb())
+        send_support(m.chat.id, "\n".join(lines), reply_markup=main_kb(m.chat.id))
     except Exception as e:
         logger.warning("[analise_temporal] %s", e)
-        send_support(m.chat.id, "⚠️ Erro ao gerar análise.", reply_markup=main_kb())
+        send_support(m.chat.id, "⚠️ Erro ao gerar análise.", reply_markup=main_kb(m.chat.id))
 
 
 def _ops_build_text():
@@ -1594,7 +1600,7 @@ def ops(m):
         send_support(m.chat.id, _ops_build_text(), reply_markup=_ops_kb())
     except Exception as e:
         logger.warning("[ops] %s", e)
-        send_support(m.chat.id, "⚠️ Erro ao buscar ops.", reply_markup=main_kb())
+        send_support(m.chat.id, "⚠️ Erro ao buscar ops.", reply_markup=main_kb(m.chat.id))
 
 
 def _audit_build_text():
@@ -1694,11 +1700,11 @@ def audit(m):
     try:
         txt = _audit_build_text()
         if txt is None:
-            return send_support(m.chat.id, "⚠️ Sem dados.", reply_markup=main_kb())
+            return send_support(m.chat.id, "⚠️ Sem dados.", reply_markup=main_kb(m.chat.id))
         send_support(m.chat.id, txt, reply_markup=_audit_kb())
     except Exception as e:
         logger.warning("[audit] %s", e)
-        send_support(m.chat.id, "⚠️ Erro na auditoria.", reply_markup=main_kb())
+        send_support(m.chat.id, "⚠️ Erro na auditoria.", reply_markup=main_kb(m.chat.id))
 
 
 def _alerts_build_text(u):
@@ -1840,7 +1846,7 @@ def sts(m):
         blk = int(web3.eth.block_number)
     except Exception:
         blk = 0
-    send_support(m.chat.id, f"📡 <b>Status</b>\nBloco: <b>{blk}</b>\nRPC Core: <b>OK</b>", reply_markup=main_kb())
+    send_support(m.chat.id, f"📡 <b>Status</b>\nBloco: <b>{blk}</b>\nRPC Core: <b>OK</b>", reply_markup=main_kb(m.chat.id))
 
 
 @bot.message_handler(func=lambda m: m.text == "⚙️ Config")
@@ -1852,11 +1858,11 @@ def cfg(m):
         send_support(
             m.chat.id,
             f"⚙️ <b>Config</b>\nWallet: {code((u.get('wallet') or 'N/A'))}\nAmbiente: <b>{esc(u.get('env') or 'N/A')}</b>\nPeríodo: <b>{esc(u.get('periodo') or '24h')}</b>\nFiltro: <b>{esc(sf)}</b>",
-            reply_markup=main_kb()
+            reply_markup=main_kb(m.chat.id)
         )
     except Exception as e:
         logger.warning("[cfg] %s", e)
-        send_support(m.chat.id, "⚠️ Erro ao carregar config.", reply_markup=main_kb())
+        send_support(m.chat.id, "⚠️ Erro ao carregar config.", reply_markup=main_kb(m.chat.id))
 
 
 @bot.message_handler(func=lambda m: m.text == "❓ Ajuda")
@@ -2201,7 +2207,7 @@ def kpis_menu(m):
 
 @bot.message_handler(func=lambda m: m.text == "⬅️ Voltar")
 def voltar_menu(m):
-    send_support(m.chat.id, "✅ Menu principal.", reply_markup=main_kb())
+    send_support(m.chat.id, "✅ Menu principal.", reply_markup=main_kb(m.chat.id))
 
 
 _KPI_TEXT = {
@@ -2255,7 +2261,7 @@ def posicoes_abertas(m, u):
     bot.send_chat_action(m.chat.id, "typing")
     wallet = (u.get("wallet") or "").lower().strip()
     if not wallet:
-        return send_support(m.chat.id, "⚠️ Wallet não configurada.", reply_markup=main_kb())
+        return send_support(m.chat.id, "⚠️ Wallet não configurada.", reply_markup=main_kb(m.chat.id))
 
     try:
         with DB_LOCK:
@@ -2268,7 +2274,7 @@ def posicoes_abertas(m, u):
                 LIMIT 30
             """, (wallet,)).fetchall()
     except Exception as _e:
-        return send_support(m.chat.id, f"⚠️ Erro ao ler posições: {_e}", reply_markup=main_kb())
+        return send_support(m.chat.id, f"⚠️ Erro ao ler posições: {_e}", reply_markup=main_kb(m.chat.id))
 
     if not rows:
         return send_support(
@@ -2276,7 +2282,7 @@ def posicoes_abertas(m, u):
             "📍 <b>Posições</b>\n\n"
             "Nenhuma subconta rastreada ainda.\n"
             "As posições aparecem aqui após o primeiro trade capturado.",
-            reply_markup=main_kb()
+            reply_markup=main_kb(m.chat.id)
         )
 
     # Agrupa por ambiente
@@ -2349,7 +2355,7 @@ def posicoes_abertas(m, u):
         out.append(f"💼  Capital: <b>—</b> <i>(worker ainda carregando)</i>")
     out.append("<i>⚡ WEbdEX · New Digital Economy</i>")
 
-    send_support(m.chat.id, "\n".join(out), reply_markup=main_kb())
+    send_support(m.chat.id, "\n".join(out), reply_markup=main_kb(m.chat.id))
 
 
 # ==============================================================================
@@ -2434,7 +2440,7 @@ def _sync_thread(chat_id: int, env: str, from_blk: int, to_blk: int):
                     f"Range: <b>{from_blk}</b> → <b>{to_blk}</b>\n\n"
                     f"Isso roda em background."
                 ),
-                reply_markup=main_kb(),
+                reply_markup=main_kb(m.chat.id),
             )
 
             step = max(100, int(MONITOR_SYNC_STEP))
@@ -2461,11 +2467,11 @@ def _sync_thread(chat_id: int, env: str, from_blk: int, to_blk: int):
                     f"Ambiente: <b>{esc(env)}</b>\n"
                     f"Até bloco: <b>{to_blk}</b>"
                 ),
-                reply_markup=main_kb(),
+                reply_markup=main_kb(m.chat.id),
             )
         except Exception as e:
             HEALTH["last_error"] = f"sync: {e}"
-            send_support(chat_id, f"⚠️ Sync falhou: {code(e)}", reply_markup=main_kb())
+            send_support(chat_id, f"⚠️ Sync falhou: {code(e)}", reply_markup=main_kb(m.chat.id))
         finally:
             HEALTH["sync_running"] = 0
 
@@ -2524,7 +2530,7 @@ def comunidade(m):
     if not rows:
         return send_support(m.chat.id,
             "⚠️ Sem dados suficientes para o ranking comunitário (mínimo 5 trades por wallet).",
-            reply_markup=main_kb())
+            reply_markup=main_kb(m.chat.id))
 
     ranking = []
     for wallet, env, total, wins, gross, gas, gross_wins in rows:
@@ -2589,7 +2595,7 @@ def comunidade(m):
 
     try:
         bot.send_message(m.chat.id, "\n".join(lines).rstrip(),
-                         parse_mode="HTML", reply_markup=main_kb())
+                         parse_mode="HTML", reply_markup=main_kb(m.chat.id))
     except Exception as e:
         logger.warning("[comunidade] send error: %s", e)
         send_html(m.chat.id, "\n".join(lines).rstrip())
@@ -2727,7 +2733,7 @@ def protocolo(m):
     ]
     try:
         bot.send_message(m.chat.id, "\n".join(lines),
-                         parse_mode="HTML", reply_markup=main_kb())
+                         parse_mode="HTML", reply_markup=main_kb(m.chat.id))
     except Exception as e:
         logger.warning("[protocolo] send error: %s", e)
         send_html(m.chat.id, "\n".join(lines))
@@ -2804,17 +2810,17 @@ def step_handler(m):
     _WIZARD_BUTTONS = {"cancelar", "⏭️ Pular RPC", "⬅️ Voltar", "⬅️ Menu"}
     if txt in _KNOWN_BUTTONS and txt not in _WIZARD_BUTTONS:
         upsert_user(m.chat.id, pending="")
-        bot.send_message(m.chat.id, "↩️ Ação cancelada.", reply_markup=main_kb())
+        bot.send_message(m.chat.id, "↩️ Ação cancelada.", reply_markup=main_kb(m.chat.id))
         return
 
     if txt.lower() == "cancelar":
         upsert_user(m.chat.id, pending="")
-        send_support(m.chat.id, "↩️ Ação cancelada.", reply_markup=main_kb())
+        send_support(m.chat.id, "↩️ Ação cancelada.", reply_markup=main_kb(m.chat.id))
         return
 
     if txt == "⬅️ Voltar":
         upsert_user(m.chat.id, pending="")
-        send_support(m.chat.id, "↩️ Menu principal.", reply_markup=main_kb())
+        send_support(m.chat.id, "↩️ Menu principal.", reply_markup=main_kb(m.chat.id))
         return
 
     # 1) Wizard Conectar
@@ -2858,7 +2864,7 @@ def step_handler(m):
                 f"• Ambiente: <b>{esc(u['env'])}</b>\n"
                 f"• {rpc_msg}\n\n"
                 f"▶️ Monitoramento <b>ativado</b>.",
-                reply_markup=main_kb()
+                reply_markup=main_kb(m.chat.id)
             )
         else:
             # Wallet desconhecida — ainda precisa escolher env
@@ -2870,27 +2876,27 @@ def step_handler(m):
 
     if u["pending"] == "ASK_ENV":
         if txt not in ["AG_C_bd", "bd_v5"]:
-            return send_support(m.chat.id, "⚠️ Escolha válida: AG_C_bd ou bd_v5.", reply_markup=main_kb())
+            return send_support(m.chat.id, "⚠️ Escolha válida: AG_C_bd ou bd_v5.", reply_markup=main_kb(m.chat.id))
         upsert_user(m.chat.id, env=txt, active=1, pending="")
-        send_support(m.chat.id, f"✅ Configurado: <b>{txt}</b>\n▶️ Monitoramento ativado.", reply_markup=main_kb())
+        send_support(m.chat.id, f"✅ Configurado: <b>{txt}</b>\n▶️ Monitoramento ativado.", reply_markup=main_kb(m.chat.id))
         return
 
     # 2) Wizard Período
     if u["pending"] == "ASK_PERIOD":
         if txt not in ("24h", "7d", "30d"):
-            return send_support(m.chat.id, "⚠️ Selecione: 24h / 7d / 30d.", reply_markup=main_kb())
+            return send_support(m.chat.id, "⚠️ Selecione: 24h / 7d / 30d.", reply_markup=main_kb(m.chat.id))
         upsert_user(m.chat.id, periodo=txt, pending="")
-        send_support(m.chat.id, f"🗓️ Período atualizado para <b>{esc(txt)}</b>.", reply_markup=main_kb())
+        send_support(m.chat.id, f"🗓️ Período atualizado para <b>{esc(txt)}</b>.", reply_markup=main_kb(m.chat.id))
         return
 
     # 3) Wizard Filtro Subconta
     if u["pending"] == "ASK_FILTER_SUB":
         if txt.lower() in ("todas", "all"):
             upsert_user(m.chat.id, sub_filter="", pending="")
-            return send_support(m.chat.id, "🎛️ Filtro aplicado: <b>Todas</b>.", reply_markup=main_kb())
+            return send_support(m.chat.id, "🎛️ Filtro aplicado: <b>Todas</b>.", reply_markup=main_kb(m.chat.id))
 
         upsert_user(m.chat.id, sub_filter=txt.strip(), pending="")
-        return send_support(m.chat.id, f"🎛️ Filtro aplicado: <b>{esc(txt.strip())}</b>.", reply_markup=main_kb())
+        return send_support(m.chat.id, f"🎛️ Filtro aplicado: <b>{esc(txt.strip())}</b>.", reply_markup=main_kb(m.chat.id))
 
     # 4) Wizard Buscar Tx
     if u["pending"] == "ASK_TX":
@@ -2901,7 +2907,7 @@ def step_handler(m):
 
         r = find_tx_in_db(txh)
         if not r:
-            return send_support(m.chat.id, "❌ Não encontrei essa tx no DB (ainda).\n\nDica: rode um 🔄 Sync OnChain para o range do bloco.", reply_markup=main_kb())
+            return send_support(m.chat.id, "❌ Não encontrei essa tx no DB (ainda).\n\nDica: rode um 🔄 Sync OnChain para o range do bloco.", reply_markup=main_kb(m.chat.id))
 
         # PnL do dia para esta wallet
         _pnl_dia = 0.0
@@ -2933,7 +2939,7 @@ def step_handler(m):
             f"📊  PnL do dia (wallet): <b>{_pnl_sign2}${_pnl_dia:.2f} USD</b>\n"
             f'🔗  <a href="{_poly}">Ver no Polygonscan ↗</a>\n'
         )
-        return send_support(m.chat.id, msg, reply_markup=main_kb(), disable_web_page_preview=True)
+        return send_support(m.chat.id, msg, reply_markup=main_kb(m.chat.id), disable_web_page_preview=True)
 
     # 5) Wizard Sync Range
     if u["pending"] == "ASK_SYNC_FROM":
@@ -2983,7 +2989,7 @@ def step_handler(m):
 
         if tb <= 0 or fb <= 0:
             upsert_user(m.chat.id, pending="")
-            return send_support(m.chat.id, "⚠️ Range inválido.", reply_markup=main_kb())
+            return send_support(m.chat.id, "⚠️ Range inválido.", reply_markup=main_kb(m.chat.id))
 
         if fb > tb:
             fb, tb = tb, fb
@@ -2994,7 +3000,7 @@ def step_handler(m):
         return
 
     upsert_user(m.chat.id, pending="")
-    send_support(m.chat.id, "Ok.", reply_markup=main_kb())
+    send_support(m.chat.id, "Ok.", reply_markup=main_kb(m.chat.id))
 
 
 # ==============================================================================
@@ -3019,7 +3025,7 @@ def export_csv(m, u):
         rows = cursor.fetchall()
 
     if not rows:
-        return send_support(m.chat.id, "⚠️ Sem trades para exportar (com o filtro atual).", reply_markup=main_kb())
+        return send_support(m.chat.id, "⚠️ Sem trades para exportar (com o filtro atual).", reply_markup=main_kb(m.chat.id))
 
     filename = f"webdex_export_{u['wallet'][:6]}_{u.get('periodo','24h')}.csv"
     with open(filename, "w", newline="", encoding="utf-8") as f:
@@ -3030,9 +3036,9 @@ def export_csv(m, u):
 
     try:
         with open(filename, "rb") as f:
-            bot.send_document(m.chat.id, f, caption=f"📤 Export CSV ({esc(u.get('periodo','24h'))})", reply_markup=main_kb())
+            bot.send_document(m.chat.id, f, caption=f"📤 Export CSV ({esc(u.get('periodo','24h'))})", reply_markup=main_kb(m.chat.id))
     except Exception as e:
-        send_support(m.chat.id, f"⚠️ Falha ao enviar CSV: {code(e)}", reply_markup=main_kb())
+        send_support(m.chat.id, f"⚠️ Falha ao enviar CSV: {code(e)}", reply_markup=main_kb(m.chat.id))
 
 
 # ==============================================================================
@@ -3055,7 +3061,7 @@ def resumo_semanal(m, u):
         rows = cursor.fetchall()
 
     if not rows:
-        return send_support(m.chat.id, "⚠️ Sem trades na última semana.", reply_markup=main_kb())
+        return send_support(m.chat.id, "⚠️ Sem trades na última semana.", reply_markup=main_kb(m.chat.id))
 
     rank = []
     total_liq = 0.0
@@ -3077,7 +3083,7 @@ def resumo_semanal(m, u):
         dot = "🟢" if liq >= 0 else "🔴"
         out.append(f"{i:02d}) {dot} {esc(sub)} — <b>${liq:+.4f}</b> | trades {cnt}")
 
-    send_support(m.chat.id, "\n".join(out), reply_markup=main_kb())
+    send_support(m.chat.id, "\n".join(out), reply_markup=main_kb(m.chat.id))
 
 
 # ==============================================================================
@@ -3251,7 +3257,7 @@ def inatividade_report(m, u):
         return send_support(
             m.chat.id,
             "⚠️ Sem trades no período atual para calcular inatividade (com o filtro atual).",
-            reply_markup=main_kb()
+            reply_markup=main_kb(m.chat.id)
         )
 
     rows = []
@@ -3278,7 +3284,7 @@ def inatividade_report(m, u):
         flag = "🔴" if mins >= lim else "🟢"
         out.append(f"{i:02d}) {flag} {code(sub)} — <b>{mins:.0f} min</b> | trades {n} | last {code(last_dh)}")
 
-    send_support(m.chat.id, "\n".join(out), reply_markup=main_kb())
+    send_support(m.chat.id, "\n".join(out), reply_markup=main_kb(m.chat.id))
 
 
 # ==============================================================================
@@ -3323,7 +3329,7 @@ def cmd_confirmar_esquecimento(m):
             f"O bdZinho não se lembrará de nenhuma conversa anterior.\n"
             f"({deleted} mensagens removidas)",
             parse_mode="HTML",
-            reply_markup=main_kb()
+            reply_markup=main_kb(m.chat.id)
         )
         logger.info("[user] LGPD: memória deletada para chat_id=%s (%d registros)", m.chat.id, deleted)
     except Exception as e:
