@@ -1093,7 +1093,7 @@ def _fl_snapshot_worker():
                     sub_addr     = c_data.get("SUBACCOUNTS", "")
                     mgr_addr     = c_data.get("MANAGER", "")
 
-                    from webdex_config import ADDR_USDT0, ADDR_LPLPUSD
+                    from webdex_config import ADDR_USDT0, ADDR_LPLPUSD, ADDR_DAI
                     from web3 import Web3 as _W3
 
                     _erc20 = lambda a: w3.eth.contract(
@@ -1103,8 +1103,9 @@ def _fl_snapshot_worker():
 
                     lp_usdt_supply = float(_erc20(lp_usdt_addr).functions.totalSupply().call()) / 1e6  if lp_usdt_addr else 0.0
                     lp_loop_supply = float(_erc20(lp_loop_addr).functions.totalSupply().call()) / 1e9  if lp_loop_addr else 0.0
-                    liq_usdt       = float(_erc20(ADDR_USDT0).functions.balanceOf(_W3.to_checksum_address(sub_addr)).call()) / 1e6  if sub_addr else 0.0
-                    liq_loop       = float(_erc20(ADDR_LPLPUSD).functions.balanceOf(_W3.to_checksum_address(sub_addr)).call()) / 1e9 if sub_addr else 0.0
+                    liq_usdt       = float(_erc20(ADDR_USDT0).functions.balanceOf(_W3.to_checksum_address(sub_addr)).call()) / 1e6    if sub_addr else 0.0
+                    liq_loop       = float(_erc20(ADDR_LPLPUSD).functions.balanceOf(_W3.to_checksum_address(sub_addr)).call()) / 1e9   if sub_addr else 0.0
+                    liq_dai        = float(_erc20(ADDR_DAI).functions.balanceOf(_W3.to_checksum_address(sub_addr)).call()) / 1e18      if sub_addr else 0.0
                     gas_pol        = float(w3.from_wei(w3.eth.get_balance(_W3.to_checksum_address(mgr_addr)), "ether")) if mgr_addr else 0.0
 
                     # TVL = supply de LP tokens (sem dependência de price feed externo)
@@ -1113,16 +1114,17 @@ def _fl_snapshot_worker():
                     total_usd = (
                         lp_usdt_supply +       # LP_USDT: totalSupply ≈ USD locked
                         lp_loop_supply +       # LP_LOOP: totalSupply ≈ USD locked
+                        liq_dai +              # DAI direto no SubAccounts
                         gas_pol * pol_price    # POL para gas × preço atual
                     )
 
                     with DB_LOCK:
                         conn.execute(
                             """INSERT INTO fl_snapshots
-                               (ts, env, lp_usdt_supply, lp_loop_supply, liq_usdt, liq_loop, gas_pol, pol_price, total_usd)
-                               VALUES (?,?,?,?,?,?,?,?,?)""",
+                               (ts, env, lp_usdt_supply, lp_loop_supply, liq_usdt, liq_loop, liq_dai, gas_pol, pol_price, total_usd)
+                               VALUES (?,?,?,?,?,?,?,?,?,?)""",
                             (ts_now, env_key, lp_usdt_supply, lp_loop_supply,
-                             liq_usdt, liq_loop, gas_pol, pol_price, total_usd)
+                             liq_usdt, liq_loop, liq_dai, gas_pol, pol_price, total_usd)
                         )
                         conn.commit()
 

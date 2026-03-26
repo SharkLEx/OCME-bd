@@ -1432,18 +1432,19 @@ def _fl_manager_gas(w3, mgr_addr: str) -> float:
         return -1.0
 
 def _fl_save_snapshot(env: str, lp_u: float, lp_l: float,
-                      liq_u: float, liq_l: float, gas_pol: float, pol_price: float):
+                      liq_u: float, liq_l: float, gas_pol: float, pol_price: float,
+                      liq_d: float = 0.0):
     try:
         from webdex_db import now_br
         ts        = now_br().strftime("%Y-%m-%d %H:%M:%S")
-        total_usd = max(liq_u, 0) + max(liq_l, 0)
+        total_usd = max(liq_u, 0) + max(liq_l, 0) + max(liq_d, 0)
         with DB_LOCK:
             conn.execute(
                 "INSERT INTO fl_snapshots "
-                "(ts,env,lp_usdt_supply,lp_loop_supply,liq_usdt,liq_loop,gas_pol,pol_price,total_usd) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                "(ts,env,lp_usdt_supply,lp_loop_supply,liq_usdt,liq_loop,liq_dai,gas_pol,pol_price,total_usd) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (ts, env, max(lp_u, 0), max(lp_l, 0),
-                 max(liq_u, 0), max(liq_l, 0), max(gas_pol, 0), pol_price, total_usd)
+                 max(liq_u, 0), max(liq_l, 0), max(liq_d, 0), max(gas_pol, 0), pol_price, total_usd)
             )
             conn.commit()
     except Exception:
@@ -1453,13 +1454,13 @@ def _fl_last_snapshot(env: str) -> dict:
     try:
         with DB_LOCK:
             row = conn.execute(
-                "SELECT ts,lp_usdt_supply,lp_loop_supply,liq_usdt,liq_loop,gas_pol "
+                "SELECT ts,lp_usdt_supply,lp_loop_supply,liq_usdt,liq_loop,COALESCE(liq_dai,0),gas_pol "
                 "FROM fl_snapshots WHERE env=? ORDER BY id DESC LIMIT 1",
                 (env,)
             ).fetchone()
         if row:
             return {"ts": row[0], "lp_usdt": row[1], "lp_loop": row[2],
-                    "liq_usdt": row[3], "liq_loop": row[4], "gas": row[5]}
+                    "liq_usdt": row[3], "liq_loop": row[4], "liq_dai": row[5], "gas": row[6]}
     except Exception:
         pass
     return {}
@@ -1543,6 +1544,7 @@ def _fl_build_text(env_data: dict, ts_now: str, gwei: float, pol_price: float) -
         s_l  = d["lp_loop_supply"]
         lq_u = d["liq_usdt"]
         lq_l = d["liq_loop"]
+        lq_d = d.get("liq_dai", -1.0)
         gp   = d["gas_pol"]
         st   = d["stat"]
 
@@ -1560,10 +1562,12 @@ def _fl_build_text(env_data: dict, ts_now: str, gwei: float, pol_price: float) -
         # Liquidez
         d_lu = _fl_delta_str(lq_u, prev.get("liq_usdt", 0))
         d_ll = _fl_delta_str(lq_l, prev.get("liq_loop", 0))
+        d_ld = _fl_delta_str(lq_d, prev.get("liq_dai", 0))
         lines += [
             "  ├─ 💧 <b>Liquidez (SubAccounts)</b>",
             f"  │    💵 USDT:  <b>{_fl_fmt(lq_u, 2)}</b>{esc(d_lu)}",
             f"  │    🔄 LOOP:  <b>{_fl_fmt(lq_l, 4)}</b>{esc(d_ll)}",
+            f"  │    🟡 DAI:   <b>{_fl_fmt(lq_d, 2)}</b>{esc(d_ld)}",
         ]
 
         # Ratio Capital / Supply
@@ -1601,6 +1605,7 @@ def _fl_build_text(env_data: dict, ts_now: str, gwei: float, pol_price: float) -
     if len(env_data) >= 2:
         total_usdt = sum(max(d["liq_usdt"], 0) for d in env_data.values())
         total_loop = sum(max(d["liq_loop"], 0) for d in env_data.values())
+        total_dai  = sum(max(d.get("liq_dai", 0), 0) for d in env_data.values())
         lines += ["", "🌐 <b>CONSOLIDADO PROTOCOLO</b>"]
 
         if total_usdt > 0:
@@ -1623,6 +1628,16 @@ def _fl_build_text(env_data: dict, ts_now: str, gwei: float, pol_price: float) -
                 pct = v / total_loop * 100
                 lines.append(f"  │    {ic2} {esc(env_data[en]['tag'])}: {_fl_pct_bar(pct, 8)} <b>{pct:.1f}%</b>  ({v:,.4f})")
 
+        if total_dai > 0:
+            lines.append(f"  ├─ 🟡 DAI total:  <b>${total_dai:,.2f}</b>")
+            for en in ("bd_v5", "AG_C_bd"):
+                if en not in env_data:
+                    continue
+                ic2 = "🔵" if "v5" in en.lower() else "🟠"
+                v   = max(env_data[en].get("liq_dai", 0), 0)
+                pct = v / total_dai * 100
+                lines.append(f"  │    {ic2} {esc(env_data[en]['tag'])}: {_fl_pct_bar(pct, 8)} <b>{pct:.1f}%</b>  (${v:,.2f})")
+
         tot  = _fl_proto_stats_total(days=30)
         wr_t = tot["wins"] / tot["trades"] * 100 if tot["trades"] else 0
         lines += [
@@ -1644,7 +1659,7 @@ def _fl_kb() -> types.InlineKeyboardMarkup:
 
 def _fl_fetch_all() -> tuple:
     """Coleta todos os dados on-chain para o dashboard. Retorna (env_data, ts_now, gwei, pol_price)."""
-    from webdex_config import CONTRACTS, ADDR_USDT0, ADDR_LPLPUSD, RPC_CAPITAL
+    from webdex_config import CONTRACTS, ADDR_USDT0, ADDR_LPLPUSD, ADDR_DAI, RPC_CAPITAL
     from webdex_chain import chain_pol_price, web3_for_rpc
     from webdex_db import now_br
     import concurrent.futures as _cf
@@ -1666,19 +1681,21 @@ def _fl_fetch_all() -> tuple:
 
         lp_usdt_s = _fl_supply(w3, lp_usdt_addr, 6) if lp_usdt_addr else -1.0
         lp_loop_s = _fl_supply(w3, lp_loop_addr, 9) if lp_loop_addr else -1.0
-        liq_usdt  = _fl_balance(w3, ADDR_USDT0,   sub_addr, 6) if sub_addr else -1.0
-        liq_loop  = _fl_balance(w3, ADDR_LPLPUSD, sub_addr, 9) if sub_addr else -1.0
+        liq_usdt  = _fl_balance(w3, ADDR_USDT0,   sub_addr, 6)  if sub_addr else -1.0
+        liq_loop  = _fl_balance(w3, ADDR_LPLPUSD, sub_addr, 9)  if sub_addr else -1.0
+        liq_dai   = _fl_balance(w3, ADDR_DAI,     sub_addr, 18) if sub_addr else -1.0
         gas_pol   = _fl_manager_gas(w3, mgr_addr) if mgr_addr else -1.0
         prev      = _fl_last_snapshot(env_name)
 
         _fl_save_snapshot(env_name, lp_usdt_s, lp_loop_s,
-                          liq_usdt, liq_loop, gas_pol, pol_price)
+                          liq_usdt, liq_loop, gas_pol, pol_price, liq_d=liq_dai)
         return {
             "tag":            c_info["TAG"],
             "lp_usdt_supply": lp_usdt_s,
             "lp_loop_supply": lp_loop_s,
             "liq_usdt":       liq_usdt,
             "liq_loop":       liq_loop,
+            "liq_dai":        liq_dai,
             "gas_pol":        gas_pol,
             "prev":           prev,
             "stat":           _fl_proto_stats(env_name, days=30),
