@@ -417,9 +417,10 @@ TOKENS_TO_WATCH = [
 ]
 
 TOKEN_CONFIG = {
-    Web3.to_checksum_address(ADDR_LPLPUSD): {"dec": 9, "sym": "LP-USD", "icon": "🟣"},
-    Web3.to_checksum_address(ADDR_LPUSDT0): {"dec": 6, "sym": "LP-V5",  "icon": "🟣"},
-    Web3.to_checksum_address(ADDR_USDT0):   {"dec": 6, "sym": "USDT0",  "icon": "🔵"},
+    Web3.to_checksum_address(ADDR_LPLPUSD): {"dec": 9,  "sym": "LP-USD", "icon": "🟣"},
+    Web3.to_checksum_address(ADDR_LPUSDT0): {"dec": 6,  "sym": "LP-V5",  "icon": "🟣"},
+    Web3.to_checksum_address(ADDR_USDT0):   {"dec": 6,  "sym": "USDT0",  "icon": "🔵"},
+    Web3.to_checksum_address(ADDR_DAI):     {"dec": 18, "sym": "DAI",    "icon": "🟡"},
 }
 TOKENS_MAP = {addr.lower(): meta for addr, meta in TOKEN_CONFIG.items()}
 
