@@ -4,6 +4,32 @@
 
 ## Contexto Ativo
 
+**Sessão 2026-03-25 madrugada (Token BD ULTRATHINK) — CONCLUÍDA ✅**
+
+Commits deployados:
+- `7a5ee01` feat(ultrathink): Token BD ULTRATHINK — Obsidian `016-token-bd-knowledge.md` + voice_discord.py atualizado
+- `8fa8632` feat(tokenomia): Token BD knowledge completo no system prompt bdZinho (submodule)
+
+**Token BD ULTRATHINK ✅ DEPLOYADO:**
+- Nota Obsidian: `knowledge/webdex/016-token-bd-knowledge.md` (supply, distribuição, ICM, Swapbook, V.A.L.T., casos de uso)
+- bdZinho Discord: seção TOKEN BD de 5→15 linhas com tokenomia completa
+- Container orchestrator-discord: healthy, bot WEbdEX#7787 online
+
+**Sessão 2026-03-25 noite (OCME Infra Hardening v2 + #conquistas) — CONCLUÍDA ✅**
+
+Commits deployados no VPS:
+- `b4497f0` OOM fix: docker-compose memory 768M → 1536M
+- `9464ea5` #conquistas redesign + cursor bug fix em webdex_milestones
+- `ffc7226` **CRÍTICO: webdex_db.py thread-local connections** — elimina segfault SQLite
+
+**Causa raiz dos crashes "toda hora" ENCONTRADA E CORRIGIDA:**
+- `dmesg` revelou: segfault em `_sqlite3.cpython-312.so` — 20+ threads, 1 conexão SQLite
+- Fix: `_ConnProxy` + `_CursorProxy` com `threading.local()` em webdex_db.py
+- Container: Restarts=0 desde 21:43, MEM=44%, logs CLEAN
+
+**#conquistas Discord:** canal = feed saúde do protocolo (nova_carteira + daily summary)
+**Próximo:** Epic 13 (Dashboard Externo Next.js+SIWE)
+
 **Sessão 2026-03-25 madrugada — CONCLUÍDA ✅**
 
 Entregas (commit `d0685ae` pushado + deployado VPS):
