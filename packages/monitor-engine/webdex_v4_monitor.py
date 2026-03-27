@@ -1,7 +1,7 @@
 """
 webdex_v4_monitor.py — Monitor do Subaccount v4 WEbdEX
 =======================================================
-Monitora movimentações de USDT e LOOP no subaccount v4 na Polygon.
+Monitora movimentações de USDT, LOOP e DAI no subaccount v4 na Polygon.
 Relatório Discord a cada 2 horas via webhook dedicado.
 
 Contratos:
@@ -11,6 +11,7 @@ Contratos:
 Tokens:
   USDT : 0xc2132D05D31c914a87C6611C10748AEb04B58e8F (6 decimals)
   LOOP : 0xc4CF5093676e8a61404f51bC6Ceaec5279Ce8645 (9 decimals)
+  DAI  : 0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063 (18 decimals)
 """
 from __future__ import annotations
 
@@ -33,10 +34,12 @@ V4_MANAGER      = "0x9b4314878f58C3Ca53EC0087AcC8c9A30DF773E0"
 
 TOKEN_USDT = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F"
 TOKEN_LOOP = "0xc4CF5093676e8a61404f51bC6Ceaec5279Ce8645"
+TOKEN_DAI  = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
 
 TOKEN_INFO = {
     TOKEN_USDT.lower(): {"sym": "USDT", "dec": 6,  "icon": "🔵"},
     TOKEN_LOOP.lower(): {"sym": "LOOP", "dec": 9,  "icon": "🟣"},
+    TOKEN_DAI.lower():  {"sym": "DAI",  "dec": 18, "icon": "🟡"},
 }
 
 POLL_INTERVAL   = 300        # segundos entre polls (5 min)
@@ -290,12 +293,14 @@ def _build_report_embed(period_start: datetime, period_end: datetime,
         if biggest is None or amount > biggest["amount"]:
             biggest = {"amount": amount, "sym": sym, "hash": ev["tx_hash"], "type": etype}
 
-    # Calcular líquido USDT
+    # Calcular líquido por stablecoin (USDT + DAI) e totais
     in_usdt  = totals["deposit"].get("USDT", 0)
     out_usdt = totals["withdrawal"].get("USDT", 0)
     in_loop  = totals["deposit"].get("LOOP", 0)
     out_loop = totals["withdrawal"].get("LOOP", 0)
-    liquido  = in_usdt - out_usdt
+    in_dai   = totals["deposit"].get("DAI", 0)
+    out_dai  = totals["withdrawal"].get("DAI", 0)
+    liquido  = (in_usdt + in_dai) - (out_usdt + out_dai)
 
     liquido_icon = "📈" if liquido >= 0 else "📉"
     color = 0x00C853 if liquido >= 0 else 0xD32F2F  # verde / vermelho
@@ -305,12 +310,14 @@ def _build_report_embed(period_start: datetime, period_end: datetime,
         "━━━━━━━━━━━━━━━━━━━━━━━━",
         f"**Entradas:**",
         f"  🔵 USDT: `+${in_usdt:,.2f}`",
+        f"  🟡 DAI:  `+${in_dai:,.2f}`",
         f"  🟣 LOOP: `+{in_loop:,.4f}`",
         f"**Saídas:**",
         f"  🔵 USDT: `-${out_usdt:,.2f}`",
+        f"  🟡 DAI:  `-${out_dai:,.2f}`",
         f"  🟣 LOOP: `-{out_loop:,.4f}`",
         "━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"{liquido_icon} **Líquido USDT:** `{'+'if liquido>=0 else ''}${liquido:,.2f}`",
+        f"{liquido_icon} **Líquido USD:** `{'+'if liquido>=0 else ''}${liquido:,.2f}`",
         f"📊 **Operações:** `{len(events)}`",
     ]
 
@@ -366,7 +373,9 @@ def _flush_daily_report(conn: sqlite3.Connection, day_start: datetime, day_end: 
     out_usdt = agg.get(("USDT", "withdrawal"), 0.0)
     in_loop  = agg.get(("LOOP", "deposit"),    0.0)
     out_loop = agg.get(("LOOP", "withdrawal"), 0.0)
-    liquido  = (in_usdt + in_loop) - (out_usdt + out_loop)
+    in_dai   = agg.get(("DAI",  "deposit"),    0.0)
+    out_dai  = agg.get(("DAI",  "withdrawal"), 0.0)
+    liquido  = (in_usdt + in_dai) - (out_usdt + out_dai)
     total_txs = len(rows)
 
     # Maior tx do dia
@@ -385,11 +394,11 @@ def _flush_daily_report(conn: sqlite3.Connection, day_start: datetime, day_end: 
         "color": color,
         "fields": [
             {"name": "🔵 Entradas USDT",  "value": f"`+${in_usdt:,.4f}`",   "inline": True},
-            {"name": "🟣 Entradas LOOP",  "value": f"`+${in_loop:,.4f}`",   "inline": True},
-            {"name": "\u200b",             "value": "\u200b",                 "inline": True},
+            {"name": "🟡 Entradas DAI",   "value": f"`+${in_dai:,.4f}`",    "inline": True},
+            {"name": "🟣 Entradas LOOP",  "value": f"`+{in_loop:,.4f}`",    "inline": True},
             {"name": "🔴 Saídas USDT",    "value": f"`-${out_usdt:,.4f}`",  "inline": True},
-            {"name": "🔴 Saídas LOOP",    "value": f"`-${out_loop:,.4f}`",  "inline": True},
-            {"name": "\u200b",             "value": "\u200b",                 "inline": True},
+            {"name": "🔴 Saídas DAI",     "value": f"`-${out_dai:,.4f}`",   "inline": True},
+            {"name": "🔴 Saídas LOOP",    "value": f"`-{out_loop:,.4f}`",   "inline": True},
             {
                 "name": "💰 Saldo Líquido do Dia",
                 "value": f"**`{'+'if liquido>=0 else ''}{liquido:,.4f} USD`**",
@@ -406,7 +415,8 @@ def _flush_daily_report(conn: sqlite3.Connection, day_start: datetime, day_end: 
 
     sent = _send_discord_report({"embeds": [embed]})
     logger.info("[v4] Relatório diário: %d txs | +$%.4f | -$%.4f | Discord=%s",
-                total_txs, in_usdt + in_loop, out_usdt + out_loop, "OK" if sent else "FAIL")
+                total_txs, in_usdt + in_dai + in_loop, out_usdt + out_dai + out_loop,
+                "OK" if sent else "FAIL")
 
 
 def _send_discord_report(embed_payload: dict) -> bool:
@@ -527,7 +537,7 @@ def v4_subaccount_worker() -> None:
                 continue
 
             all_events = []
-            for token_addr in [TOKEN_USDT, TOKEN_LOOP]:
+            for token_addr in [TOKEN_USDT, TOKEN_LOOP, TOKEN_DAI]:
                 evs = _fetch_transfer_events(w3, token_addr, from_block, to_block)
                 all_events.extend(evs)
 

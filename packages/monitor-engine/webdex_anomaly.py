@@ -424,7 +424,7 @@ def _anomaly_check_cycle() -> None:
         try:
             with DB_LOCK:
                 row = cursor.execute(
-                    "SELECT chat_id FROM users WHERE wallet=? AND chat_id IS NOT NULL LIMIT 1",
+                    "SELECT chat_id FROM users WHERE wallet=? AND chat_id IS NOT NULL AND active=1 LIMIT 1",
                     (wallet,)
                 ).fetchone()
             chat_id = int(row[0]) if row else None

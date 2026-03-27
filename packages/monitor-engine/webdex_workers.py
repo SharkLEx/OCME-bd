@@ -157,6 +157,8 @@ def sentinela():
                     continue
                 gwei = web3.eth.gas_price / 10**9
                 for cid, m in meta.items():
+                    if not m.get("active", 1):
+                        continue
                     if gwei > LIMITE_GWEI:
                         send_html(cid, f"🔥 <b>GÁS ALTO:</b> <code>{gwei:.0f} Gwei</code>")
                     try:

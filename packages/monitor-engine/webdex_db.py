@@ -785,7 +785,7 @@ def upsert_user(chat_id: int, **fields):
 
 def get_connected_users():
     with DB_LOCK:
-        rows = cursor.execute("SELECT chat_id FROM users WHERE wallet<>''").fetchall()
+        rows = cursor.execute("SELECT chat_id FROM users WHERE wallet<>'' AND active=1").fetchall()
     return [int(r[0]) for r in rows]
 
 

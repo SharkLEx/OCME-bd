@@ -250,7 +250,7 @@ def _get_chat_id_for_wallet(wallet: str) -> Optional[int]:
     """Retorna chat_id do usuário registrado com esta wallet, ou None."""
     with DB_LOCK:
         row = cursor.execute(
-            "SELECT chat_id FROM users WHERE LOWER(wallet) = LOWER(?) AND chat_id IS NOT NULL LIMIT 1",
+            "SELECT chat_id FROM users WHERE LOWER(wallet) = LOWER(?) AND chat_id IS NOT NULL AND active=1 LIMIT 1",
             (wallet,),
         ).fetchone()
     if row:

@@ -240,7 +240,7 @@ def _milestone_check_cycle() -> None:
     try:
         with DB_LOCK:
             users = conn.execute(
-                "SELECT chat_id, wallet FROM users WHERE chat_id IS NOT NULL AND wallet IS NOT NULL"
+                "SELECT chat_id, wallet FROM users WHERE chat_id IS NOT NULL AND wallet IS NOT NULL AND active=1"
             ).fetchall()
     except Exception as e:
         logger.warning("[milestones] erro ao listar usuários: %s", e)
