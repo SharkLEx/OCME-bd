@@ -555,11 +555,12 @@ def _extract_conversation_learner(dry_run: bool = False) -> int:
         cutoff = (datetime.now(tz=timezone.utc) - timedelta(hours=48)).isoformat()
         cur.execute(
             """
-            SELECT user_message, created_at
+            SELECT content, created_at
             FROM ai_conversations
             WHERE created_at >= %s
-              AND user_message IS NOT NULL
-              AND LENGTH(user_message) > 10
+              AND role = 'user'
+              AND content IS NOT NULL
+              AND LENGTH(content) > 10
             ORDER BY created_at DESC
             LIMIT 500
             """,
