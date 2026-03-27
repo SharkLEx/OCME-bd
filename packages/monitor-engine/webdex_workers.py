@@ -29,8 +29,12 @@ from webdex_discord_sync import (
     notify_protocolo_relatorio_onchain, notify_gm, _WEBHOOK_GM,
     notify_operacoes_horario, notify_swaps_horario, notify_onchain_heartbeat,
     _WEBHOOK_OPERACOES, _WEBHOOK_SWAPS, _WEBHOOK_RELATORIO, _WEBHOOK_ONCHAIN,
+    _WEBHOOK_CONQUISTAS,
     get_pulse_stats_and_reset,
 )
+
+# P&L marcos diários (USD) — alerta no Discord quando ultrapassados
+_PNL_MARCOS = [500, 1_000, 5_000, 10_000, 25_000, 50_000]
 
 try:
     from webdex_local_animate import animate_and_post as _animate
@@ -576,6 +580,51 @@ def agendador_21h():
         time.sleep(30)
 
 # ==============================================================================
+# 🏆 LEADERBOARD SEMANAL — #conquistas (sextas 23h UTC = 20h BRT)
+# ==============================================================================
+
+def _leaderboard_semanal():
+    """Envia leaderboard semanal de wallets no Discord #conquistas."""
+    if not (_animate and _WEBHOOK_CONQUISTAS):
+        return
+    try:
+        semana_inicio = (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+        with DB_LOCK:
+            rows = cursor.execute("""
+                SELECT wallet, sub_conta,
+                       COUNT(*) as total,
+                       COUNT(CASE WHEN profit>0 THEN 1 END) as wins,
+                       ROUND(SUM(profit),4) as pnl
+                FROM protocol_ops
+                WHERE ts >= ?
+                  AND wallet IS NOT NULL AND wallet != ''
+                GROUP BY wallet, sub_conta
+                ORDER BY pnl DESC
+                LIMIT 5
+            """, (semana_inicio,)).fetchall()
+        if not rows:
+            return
+        lines = []
+        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+        for i, (wallet, sub, total, wins, pnl) in enumerate(rows):
+            wr = (wins / total * 100) if total > 0 else 0
+            tag = sub or (wallet[:6] + "..." + wallet[-4:] if wallet else "?")
+            sign = "+" if pnl >= 0 else ""
+            lines.append(f"{medals[i]} `{tag}` — **{sign}${pnl:.2f}** · {wr:.0f}% WR · {total} ops")
+        desc = "\n".join(lines)
+        _animate(
+            "milestone", _WEBHOOK_CONQUISTAS,
+            "🏆 TOP 5 DA SEMANA — WEbdEX Protocol",
+            f"Melhores performers dos últimos 7 dias:\n\n{desc}\n\n"
+            f"*Semana de {semana_inicio[:10]} a {datetime.utcnow().strftime('%Y-%m-%d')}*",
+            0xFFD700,
+        )
+        logger.info("[leaderboard] Semanal enviado — %d wallets", len(rows))
+    except Exception as _le:
+        logger.warning("[leaderboard] erro: %s", _le)
+
+
+# ==============================================================================
 # ⏰ AGENDADOR HORÁRIO — #operações, #swaps e heartbeat #webdex-on-chain
 # ==============================================================================
 
@@ -672,6 +721,13 @@ def agendador_horario():
                             0x00FFB2 if pnl_2h >= 0 else 0xFF4444,
                         )
 
+                # ── Leaderboard semanal → #conquistas (sextas 23h UTC) ─────────
+                if now.weekday() == 4 and now.hour == 23:  # sexta-feira
+                    _lb_key = f"leaderboard_{now.strftime('%Y-%W')}"
+                    if not get_config(_lb_key):
+                        _leaderboard_semanal()
+                        set_config(_lb_key, "1")
+
                 # ── Snapshot Intraday 2H → Telegram ADM + #relatório-diário ──
                 # Roda às horas pares UTC (skip hora 21 — agendador_21h cobre)
                 if now.hour != 21 and now.hour % 2 == 0:
@@ -732,6 +788,31 @@ def agendador_horario():
                             _s_liquido  = _s_bruto - _s_gas_usd
                             _s_media    = (_s_liquido / _s_total) if _s_total > 0 else 0.0
                             _s_gas_med  = (_s_gas_usd / _s_total) if _s_total > 0 else 0.0
+
+                            # ── Marco P&L diário → #conquistas ─────────────────
+                            if _WEBHOOK_CONQUISTAS and _animate:
+                                try:
+                                    with DB_LOCK:
+                                        _pnl_dia_row = cursor.execute(
+                                            "SELECT ROUND(SUM(profit),4) FROM protocol_ops "
+                                            "WHERE ts >= date('now','localtime')"
+                                        ).fetchone()
+                                    _pnl_dia = float(_pnl_dia_row[0] or 0) if _pnl_dia_row else 0.0
+                                    for _marco in _PNL_MARCOS:
+                                        _mkey = f"marco_pnl_{now.strftime('%Y-%m-%d')}_{_marco}"
+                                        if _pnl_dia >= _marco and not get_config(_mkey):
+                                            set_config(_mkey, "1")
+                                            _animate(
+                                                "milestone", _WEBHOOK_CONQUISTAS,
+                                                f"🏆 MARCO: ${_marco:,} DE P&L!",
+                                                f"O protocolo WEbdEX cruzou **${_marco:,} USD** de lucro hoje!\n"
+                                                f"💰 P&L atual: `${_pnl_dia:,.2f}` — e ainda não parou. 🚀",
+                                                0xFFD700,
+                                            )
+                                            logger.info("[agendador_horario] Marco $%s disparado!", _marco)
+                                            break  # um marco por vez
+                                except Exception as _mk_err:
+                                    logger.debug("[agendador_horario] marco check falhou: %s", _mk_err)
 
                             if _s_total > 0:
                                 _snap_label = f"2H {hora_str}"

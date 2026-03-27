@@ -551,11 +551,11 @@ def _extract_conversation_learner(dry_run: bool = False) -> int:
         conn = psycopg2.connect(_DATABASE_URL)
         cur  = conn.cursor()
 
-        # Mensagens dos usuários nas últimas 48h
+        # Mensagens dos usuários nas últimas 48h (Telegram + Discord — platform-agnostic)
         cutoff = (datetime.now(tz=timezone.utc) - timedelta(hours=48)).isoformat()
         cur.execute(
             """
-            SELECT content, created_at
+            SELECT content, created_at, platform
             FROM ai_conversations
             WHERE created_at >= %s
               AND role = 'user'
@@ -567,6 +567,9 @@ def _extract_conversation_learner(dry_run: bool = False) -> int:
             (cutoff,),
         )
         rows = cur.fetchall()
+        _tg_count = sum(1 for r in rows if (r[2] or '') == 'telegram')
+        _dc_count  = sum(1 for r in rows if (r[2] or '') == 'discord')
+        logger.info("[conversation_learner] %d msgs: %d Telegram / %d Discord", len(rows), _tg_count, _dc_count)
 
         # Palavras-chave ignoradas (stopwords PT)
         _STOPWORDS = {
