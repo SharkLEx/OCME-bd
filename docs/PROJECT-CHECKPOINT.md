@@ -1,8 +1,30 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-26 (auto-refresh)
+> Ultima atualizacao: 2026-03-27 (auto-refresh)
 
 ## Contexto Ativo
+
+**Sessão 2026-03-27 — Sprint 1+2 Intelligence Layer DEPLOYADO ✅**
+
+### Status VPS (2026-03-27 ~02:50 UTC)
+- `ocme-monitor`: healthy, **21 threads** (novo: `deterministic_trainer_worker`)
+- `orchestrator-discord`: healthy, `vision_discord.py` carregado ✅
+- Vault `/opt/vault/learned/`: 3 notas auto-geradas às 02:43 UTC ✅
+
+### PENDENTE CRÍTICO
+```bash
+# Adicionar ANTHROPIC_API_KEY no VPS (sem isso, LLM trainer usa OpenRouter — créditos baixos)
+echo 'ANTHROPIC_API_KEY=sk-ant-api03-SUA_CHAVE' >> /opt/ocme-monitor/packages/monitor-engine/.env
+docker restart ocme-monitor
+```
+
+### Próximos passos
+- [ ] Adicionar `ANTHROPIC_API_KEY` no `.env` do VPS
+- [ ] Testar vision Discord: enviar imagem mencionando @bdZinho
+- [ ] Testar áudio Telegram: enviar voice message
+- [ ] (Opcional) `docker exec ocme-monitor pip install openai-whisper` para áudio v1
+
+---
 
 **Sessão 2026-03-26 noite — VAULT ATIVO + BUGS CORRIGIDOS ✅**
 

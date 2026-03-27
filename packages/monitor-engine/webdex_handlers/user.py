@@ -3619,34 +3619,63 @@ _audio_rate_cache: dict[int, float] = {}
 _audio_rate_lock  = threading.Lock()
 
 
+_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+
 def _transcribe_ogg(audio_bytes: bytes) -> str | None:
     """
-    Transcreve áudio OGG/OGA via Whisper local.
-    Requer: pip install openai-whisper
-    Retorna texto ou None se falhar.
+    Transcreve áudio OGG/OGA via OpenAI Whisper API.
+    Usa OPENAI_API_KEY — custo ~$0.006/min, sem dependências pesadas.
+    Fallback: tenta openai-whisper local se API key não disponível.
+    Retorna texto transcrito ou None se falhar.
     """
     import tempfile, os as _os
+
+    # ── Primário: OpenAI Whisper API ─────────────────────────────────────────
+    if _OPENAI_API_KEY:
+        try:
+            import requests as _req
+            with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+                tmp.write(audio_bytes)
+                tmp_path = tmp.name
+            try:
+                with open(tmp_path, "rb") as f:
+                    resp = _req.post(
+                        "https://api.openai.com/v1/audio/transcriptions",
+                        headers={"Authorization": f"Bearer {_OPENAI_API_KEY}"},
+                        files={"file": ("audio.ogg", f, "audio/ogg")},
+                        data={"model": "whisper-1", "language": "pt"},
+                        timeout=60,
+                    )
+                resp.raise_for_status()
+                text = resp.json().get("text", "").strip()
+                if text:
+                    logger.debug("[audio] Whisper API OK — %d chars", len(text))
+                    return text
+            finally:
+                _os.unlink(tmp_path)
+        except Exception as e:
+            logger.warning("[audio] Whisper API falhou, tentando local: %s", e)
+
+    # ── Fallback: openai-whisper local ───────────────────────────────────────
     try:
         import whisper as _whisper
     except ImportError:
-        logger.warning("[audio] openai-whisper não instalado — pip install openai-whisper")
+        logger.warning("[audio] Sem OPENAI_API_KEY e openai-whisper não instalado")
         return None
 
     try:
-        # Salva bytes em arquivo temporário
         with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
             tmp.write(audio_bytes)
             tmp_path = tmp.name
-
         try:
             model = _whisper.load_model("base")
             result = model.transcribe(tmp_path, language="pt", fp16=False)
             return result.get("text", "").strip() or None
         finally:
             _os.unlink(tmp_path)
-
     except Exception as e:
-        logger.warning("[audio] Whisper falhou: %s", e)
+        logger.warning("[audio] Whisper local falhou: %s", e)
         return None
 
 

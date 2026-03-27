@@ -527,6 +527,196 @@ def _extract_anomaly_digest(dry_run: bool = False) -> int:
     return 1 if wrote else 0
 
 
+# ── Fonte 5: Conversation Learner (PostgreSQL) ────────────────────────────────
+
+def _extract_conversation_learner(dry_run: bool = False) -> int:
+    """
+    Lê ai_conversations das últimas 48h e extrai:
+    - Temas mais discutidos (por word frequency em user_message)
+    - Perguntas frequentes ainda não cobertas em bdz_knowledge
+    - Palavras-chave emergentes (top 20)
+
+    Gera nota mensal que o bdZinho usa para se auto-atualizar.
+    100% determinístico — sem LLM, zero custo.
+    """
+    if not _DATABASE_URL:
+        logger.debug("[determ] DATABASE_URL não configurado — pulando conversation_learner")
+        return 0
+
+    month = _month()
+    note_path = _LEARNED_DIR / f"conversation-learner-{month}.md"
+
+    try:
+        import psycopg2
+        conn = psycopg2.connect(_DATABASE_URL)
+        cur  = conn.cursor()
+
+        # Mensagens dos usuários nas últimas 48h
+        cutoff = (datetime.now(tz=timezone.utc) - timedelta(hours=48)).isoformat()
+        cur.execute(
+            """
+            SELECT user_message, created_at
+            FROM ai_conversations
+            WHERE created_at >= %s
+              AND user_message IS NOT NULL
+              AND LENGTH(user_message) > 10
+            ORDER BY created_at DESC
+            LIMIT 500
+            """,
+            (cutoff,),
+        )
+        rows = cur.fetchall()
+
+        # Palavras-chave ignoradas (stopwords PT)
+        _STOPWORDS = {
+            "de","a","o","que","e","do","da","em","um","para","é","com","uma",
+            "os","no","se","na","por","mais","as","dos","como","mas","foi","ao",
+            "ele","das","tem","à","seu","sua","ou","ser","quando","muito","há",
+            "nos","já","está","eu","também","só","pelo","pela","até","isso",
+            "ela","entre","era","depois","sem","mesmo","aos","ter","seus",
+            "quem","nas","me","esse","eles","estão","você","tinha","foram",
+            "essa","num","nem","suas","meu","às","minha","têm","numa","pelos",
+            "elas","havia","seja","qual","será","nós","tenho","lhe","deles",
+            "essas","esses","pelas","este","dele","tu","te","vocês","vos",
+            "lhes","meus","minhas","teu","tua","teus","tuas","nosso","nossa",
+            "nossos","nossas","dela","delas","esta","estes","estas","aquele",
+            "aquela","aqueles","aquelas","isto","aquilo","estou","está","estamos",
+            "estão","estive","estava","estávamos","estavam","esterei","estará",
+        }
+
+        # Extrai palavras e conta frequências
+        word_counter: Counter = Counter()
+        bigram_counter: Counter = Counter()
+        total_msgs = len(rows)
+
+        for (msg, _) in rows:
+            if not msg:
+                continue
+            # Normaliza
+            import re
+            words = re.findall(r'\b[a-záéíóúãõâêôçàü]{3,}\b', msg.lower())
+            words = [w for w in words if w not in _STOPWORDS]
+            word_counter.update(words)
+
+            # Bigramas (pares de palavras)
+            bigrams = [f"{words[i]} {words[i+1]}" for i in range(len(words)-1)]
+            bigram_counter.update(bigrams)
+
+        if not word_counter:
+            conn.close()
+            return 0
+
+        top_words   = word_counter.most_common(25)
+        top_bigrams = bigram_counter.most_common(15)
+
+        # Temas por categoria (heurística baseada em keywords WEbdEX)
+        _THEME_MAP = {
+            "trading":    ["trade","swap","compra","venda","posição","entrada","saída","stop","gain","loss"],
+            "defi":       ["defi","protocolo","pool","liquidez","tvl","yield","farm","stake","staking"],
+            "token_bd":   ["token","bd","tokenomics","supply","holder","contrato","deploy"],
+            "portfolio":  ["carteira","portfolio","capital","saldo","usdt","matic","pol"],
+            "tecnico":    ["erro","bug","falha","problema","não funciona","como","ajuda","suporte"],
+            "mercado":    ["preço","mercado","alta","baixa","bull","bear","análise","tendência"],
+        }
+
+        theme_counts: dict = {t: 0 for t in _THEME_MAP}
+        for (word, count) in word_counter.most_common(100):
+            for theme, keywords in _THEME_MAP.items():
+                if any(kw in word for kw in keywords):
+                    theme_counts[theme] += count
+
+        top_themes = sorted(theme_counts.items(), key=lambda x: x[1], reverse=True)
+
+        # Verifica quais temas já estão cobertos no bdz_knowledge
+        covered_topics: set = set()
+        try:
+            cur.execute("SELECT topic FROM bdz_knowledge WHERE active = true")
+            covered_topics = {row[0].lower() for row in cur.fetchall()}
+        except Exception:
+            pass
+
+        conn.close()
+
+        # ── Monta nota ───────────────────────────────────────────────────────
+        today = _today()
+        lines = [
+            "---",
+            "type: learned",
+            f"title: \"Conversation Learner — {month}\"",
+            "tags:",
+            "  - learned/conversation",
+            "  - bdz/auto-learning",
+            f"updated: {today}",
+            "---",
+            "",
+            f"# Conversation Learner — {month}",
+            "",
+            f"> Análise de **{total_msgs} mensagens** das últimas 48h.",
+            f"> Atualizado automaticamente: {today}",
+            "",
+            "## Palavras Mais Frequentes (Top 25)",
+            "",
+        ]
+
+        for i, (word, count) in enumerate(top_words, 1):
+            lines.append(f"{i:2}. `{word}` — {count}x")
+
+        lines += [
+            "",
+            "## Temas Detectados",
+            "",
+        ]
+        for theme, count in top_themes:
+            if count > 0:
+                covered = "✅" if theme in covered_topics else "⚠️ gap"
+                lines.append(f"- **{theme}**: {count} menções ({covered})")
+
+        lines += [
+            "",
+            "## Bigramas Mais Comuns (Top 15)",
+            "",
+        ]
+        for bigram, count in top_bigrams:
+            lines.append(f"- `{bigram}` — {count}x")
+
+        lines += [
+            "",
+            "## Ação Sugerida",
+            "",
+        ]
+
+        # Sugere gaps de conhecimento
+        gaps = [t for t, c in top_themes if c > 0 and t not in covered_topics]
+        if gaps:
+            lines.append(f"- Adicionar ao `bdz_knowledge`: {', '.join(gaps)}")
+        else:
+            lines.append("- Todos os temas detectados já têm cobertura em `bdz_knowledge` ✅")
+
+        if top_words:
+            top3 = [w for w, _ in top_words[:3]]
+            lines.append(f"- Palavras mais buscadas: **{', '.join(top3)}** — verificar cobertura nas respostas")
+
+        lines += [
+            "",
+            "---",
+            f"*Gerado automaticamente pelo Deterministic Trainer em {datetime.now(tz=timezone.utc).isoformat()}*",
+        ]
+
+        content = "\n".join(lines)
+        # Nota mensal — atualiza toda vez (não usa dedup de 20h)
+        try:
+            (_LEARNED_DIR / f"conversation-learner-{month}.md").write_text(content, encoding="utf-8")
+            logger.info("[determ] conversation_learner: nota atualizada (%d msgs, %d palavras únicas)", total_msgs, len(word_counter))
+            return 1
+        except Exception as e:
+            logger.warning("[determ] conversation_learner: falha ao escrever nota: %s", e)
+            return 0
+
+    except Exception as e:
+        logger.warning("[determ] conversation_learner falhou: %s", e)
+        return 0
+
+
 # ── Orquestrador ──────────────────────────────────────────────────────────────
 
 def run_deterministic_training(dry_run: bool = False) -> dict:
@@ -542,10 +732,11 @@ def run_deterministic_training(dry_run: bool = False) -> dict:
     summary: dict = {}
 
     extractors = [
-        ("protocol_stats",   _extract_operations_stats),
-        ("faq_patterns",     _extract_faq_patterns),
-        ("knowledge_snapshot", _extract_knowledge_summary),
-        ("anomaly_digest",   _extract_anomaly_digest),
+        ("protocol_stats",      _extract_operations_stats),
+        ("faq_patterns",        _extract_faq_patterns),
+        ("knowledge_snapshot",  _extract_knowledge_summary),
+        ("anomaly_digest",      _extract_anomaly_digest),
+        ("conversation_learner", _extract_conversation_learner),
     ]
 
     for name, fn in extractors:
