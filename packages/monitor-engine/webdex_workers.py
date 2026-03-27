@@ -672,40 +672,70 @@ def agendador_horario():
                             0x00FFB2 if pnl_2h >= 0 else 0xFF4444,
                         )
 
-                # ── Snapshot Intraday 2h → #relatório-diário + #webdex-on-chain ──
-                # Story 15.4: skip hora 21 (agendador_21h cobre o fechamento)
-                if now.hour != 21:
-                    _snap_key = f"snap2h_{now.strftime('%Y-%m-%d')}_{now.hour}"
+                # ── Snapshot Intraday 4H → Telegram ADM + #relatório-diário ──
+                # Roda às 0h, 4h, 8h, 12h, 16h, 20h BRT (skip hora 21 — agendador_21h cobre)
+                if now.hour != 21 and now.hour % 4 == 0:
+                    _snap_key = f"snap4h_{now.strftime('%Y-%m-%d')}_{now.hour}"
                     if not get_config(_snap_key):
                         try:
-                            _dt_lim_brt = _ciclo_21h_since()
-                            _dt_lim_utc = (
-                                datetime.strptime(_dt_lim_brt, "%Y-%m-%d %H:%M:%S") + timedelta(hours=3)
-                            ).strftime("%Y-%m-%d %H:%M:%S")
+                            # Janela: últimas 4 horas (UTC)
+                            _4h_utc = (datetime.utcnow() - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M:%S")
+                            # Label da janela em BRT
+                            _brt_start = (now - timedelta(hours=4)).strftime("%d/%m  ·  %H:%M")
+                            _brt_end   = now.strftime("%H:%M BRT")
+                            _janela_label = f"{_brt_start} às {_brt_end}"
+
                             with DB_LOCK:
                                 _s_row = cursor.execute("""
                                     SELECT COUNT(DISTINCT wallet),
                                            COUNT(CASE WHEN profit>0 THEN 1 END),
                                            COUNT(*),
                                            ROUND(SUM(fee_bd),6),
-                                           ROUND(SUM(CASE WHEN profit>0 THEN profit ELSE 0 END),4)
+                                           ROUND(SUM(profit),4),
+                                           ROUND(SUM(gas_pol),4),
+                                           MAX(CASE WHEN profit>0 THEN profit ELSE 0 END),
+                                           MIN(CASE WHEN profit<0 THEN profit ELSE 0 END)
                                     FROM protocol_ops WHERE ts>=?
-                                """, (_dt_lim_utc,)).fetchone()
+                                """, (_4h_utc,)).fetchone()
                                 _tvl_row = cursor.execute("""
                                     SELECT ROUND(SUM(f.total_usd),2)
                                     FROM fl_snapshots f
                                     INNER JOIN (SELECT env, MAX(ts) AS max_ts FROM fl_snapshots GROUP BY env) latest
                                       ON f.env=latest.env AND f.ts=latest.max_ts
                                 """).fetchone()
-                            _s_traders = int(_s_row[0] or 0)
-                            _s_wins    = int(_s_row[1] or 0)
-                            _s_total   = int(_s_row[2] or 0)
-                            _s_bd      = float(_s_row[3] or 0)
-                            _s_bruto   = float(_s_row[4] or 0)
-                            _s_wr      = (_s_wins / _s_total * 100) if _s_total > 0 else 0.0
-                            _s_tvl     = float(_tvl_row[0] or 0) if _tvl_row else 0.0
+                                _coin_row = cursor.execute("""
+                                    SELECT coin, COUNT(*) as cnt FROM protocol_ops
+                                    WHERE ts>=? AND coin IS NOT NULL AND coin != ''
+                                    GROUP BY coin ORDER BY cnt DESC LIMIT 1
+                                """, (_4h_utc,)).fetchone()
+                                _streak_row = cursor.execute("""
+                                    SELECT COUNT(*) FROM (
+                                        SELECT profit FROM protocol_ops
+                                        WHERE ts>=? ORDER BY ts DESC
+                                    ) WHERE profit > 0
+                                """, (_4h_utc,)).fetchone()
+
+                            _s_traders  = int(_s_row[0] or 0)
+                            _s_wins     = int(_s_row[1] or 0)
+                            _s_total    = int(_s_row[2] or 0)
+                            _s_bd       = float(_s_row[3] or 0)
+                            _s_bruto    = float(_s_row[4] or 0)
+                            _s_gas_pol  = float(_s_row[5] or 0)
+                            _s_max_pos  = float(_s_row[6] or 0)
+                            _s_max_neg  = float(_s_row[7] or 0)
+                            _s_losses   = _s_total - _s_wins
+                            _s_wr       = (_s_wins / _s_total * 100) if _s_total > 0 else 0.0
+                            _s_tvl      = float(_tvl_row[0] or 0) if _tvl_row else 0.0
+                            _s_ativo    = str(_coin_row[0]) if _coin_row else ""
+                            _s_seq      = int(_streak_row[0] or 0) if _streak_row else 0
+                            _s_gas_usd  = _s_gas_pol * 0.35  # POL ≈ $0.35
+                            _s_liquido  = _s_bruto - _s_gas_usd
+                            _s_media    = (_s_liquido / _s_total) if _s_total > 0 else 0.0
+                            _s_gas_med  = (_s_gas_usd / _s_total) if _s_total > 0 else 0.0
+
                             if _s_total > 0:
                                 _snap_label = f"Intraday {hora_str}"
+                                # Discord (mantém formato atual)
                                 _snap_sent  = notify_protocolo_relatorio(
                                     hoje=now.strftime("%Y-%m-%d"),
                                     tvl_usd=_s_tvl,
@@ -726,13 +756,47 @@ def agendador_horario():
                                     p_bruto=_s_bruto,
                                     label=_snap_label,
                                 )
+                                # Telegram broadcast 4H (novo formato)
+                                try:
+                                    _tg_4h = notify_protocolo_relatorio_telegram(
+                                        hoje=now.strftime("%Y-%m-%d"),
+                                        tvl_usd=_s_tvl,
+                                        bd_periodo=_s_bd,
+                                        p_traders=_s_traders,
+                                        p_wr=_s_wr,
+                                        p_bruto=_s_bruto,
+                                        top_traders=[],
+                                        label=_snap_label,
+                                        p_total=_s_total,
+                                        p_liquido=_s_liquido,
+                                        p_media_op=_s_media,
+                                        gas_pol=_s_gas_pol,
+                                        gas_usd=_s_gas_usd,
+                                        gas_medio_op=_s_gas_med,
+                                        maior_positivo=_s_max_pos,
+                                        maior_negativo=_s_max_neg,
+                                        ativo_mais_op=_s_ativo,
+                                        sequencia=_s_seq,
+                                        janela_label=_janela_label,
+                                        p_wins=_s_wins,
+                                        p_losses=_s_losses,
+                                    )
+                                    with DB_LOCK:
+                                        _adm_ids = cursor.execute(
+                                            "SELECT chat_id FROM users WHERE active=1 AND is_admin=1"
+                                        ).fetchall()
+                                    for (uid,) in (_adm_ids or []):
+                                        send_html(uid, _tg_4h)
+                                except Exception as _tg4_err:
+                                    logger.warning("[agendador_horario] broadcast 4H Telegram falhou: %s", _tg4_err)
+
                                 if _snap_sent:
                                     set_config(_snap_key, "1")
-                                    logger.info("[agendador_horario] snapshot intraday %s enviado.", hora_str)
+                                    logger.info("[agendador_horario] snapshot 4H %s enviado.", hora_str)
                                 else:
-                                    logger.warning("[agendador_horario] snapshot intraday %s falhou — retry no próximo tick.", hora_str)
+                                    logger.warning("[agendador_horario] snapshot 4H %s falhou — retry.", hora_str)
                         except Exception as _se:
-                            logger.warning("[agendador_horario] snapshot intraday erro: %s", _se)
+                            logger.warning("[agendador_horario] snapshot 4H erro: %s", _se)
 
                 logger.info(
                     "[agendador_horario] %s — %d ops, %d swaps",

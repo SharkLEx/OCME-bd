@@ -496,8 +496,80 @@ def notify_protocolo_relatorio_telegram(
     p_bruto: float,
     top_traders: list,
     label: str = "Ciclo 21h",
+    # campos extras para relatório 4H detalhado
+    p_total: int = 0,
+    p_liquido: float = 0.0,
+    p_media_op: float = 0.0,
+    gas_pol: float = 0.0,
+    gas_usd: float = 0.0,
+    gas_medio_op: float = 0.0,
+    ciclo_medio: str = "",
+    maior_positivo: float = 0.0,
+    maior_negativo: float = 0.0,
+    maior_mov_usd: float = 0.0,
+    maior_mov_token: str = "USDT",
+    ativo_mais_op: str = "",
+    sequencia: int = 0,
+    janela_label: str = "",
+    p_wins: int = 0,
+    p_losses: int = 0,
 ) -> str:
     """Versão Telegram HTML do relatório protocolo. Retorna string para broadcast."""
+    # ── Formato 4H detalhado (brand WEbdEX) ────────────────────────────────
+    is_4h = bool(janela_label or p_total > 0)
+    if is_4h:
+        emoji_pnl = "📈" if p_bruto >= 0 else "📉"
+        pl_liq    = f"+${p_liquido:,.2f}" if p_liquido >= 0 else f"-${abs(p_liquido):,.2f}"
+        pl_bruto  = f"+{p_bruto:,.4f} DAI" if p_bruto >= 0 else f"-{abs(p_bruto):,.4f} DAI"
+        pl_liq_usd = f"+${p_liquido:,.2f}" if p_liquido >= 0 else f"-${abs(p_liquido):,.2f}"
+        media_str  = f"+${p_media_op:,.4f}" if p_media_op >= 0 else f"-${abs(p_media_op):,.4f}"
+        _janela    = janela_label or hoje
+        _seq_line  = f"Sequência atual: <b>{sequencia} wins seguidos</b> 🔥\n" if sequencia >= 3 else f"Sequência atual: {sequencia} wins\n"
+        _ativo_line = f"Ativo mais operado: <b>{ativo_mais_op}</b>\n" if ativo_mais_op else ""
+        _ciclo_line = f"Ciclo médio: <b>{ciclo_medio}</b>  ·  " if ciclo_medio else ""
+        _maior_mov  = f"↓${maior_mov_usd:,.2f} {maior_mov_token}" if maior_mov_usd > 0 else "—"
+        _gas_pol_str = f"{gas_pol:,.4f} POL · ${gas_usd:.2f}" if gas_pol > 0 else f"${gas_usd:.2f}"
+        _gas_medio_str = f"${gas_medio_op:.4f}" if gas_medio_op > 0 else "—"
+        _wins_losses = f"{p_wins}W / {p_losses}L" if (p_wins + p_losses) > 0 else ""
+
+        msg = (
+            f"📊 <b>WEbdEX ENGINE</b>  ·  Relatório Operacional 4H\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📅 {_janela}\n"
+            f"🌐 Ambiente: <b>{tvl_usd and 'bd_v5' or 'bd_v5'}</b>  ·  Ativos: DAI · USDT · LOOP\n"
+            f"\n"
+            f"┈┈┈┈┈┈ 💰 RESULTADO DO PERÍODO ┈┈┈┈┈┈\n"
+            f"Operações: <b>{p_total}</b>  ·  🎯 Assertividade: <b>{p_wr:.0f}%</b>\n"
+            f"Resultado bruto: <b>{pl_bruto}</b>\n"
+            f"Resultado líquido: <b>{pl_liq_usd}</b>\n"
+            f"Média/operação: <b>{media_str}</b>\n"
+            f"\n"
+            f"┈┈┈┈┈┈ ⛽ CUSTOS ┈┈┈┈┈┈\n"
+            f"Gas: <code>{_gas_pol_str}</code>\n"
+            f"Fee protocolo: <code>{bd_periodo:,.4f} BD</code>\n"
+            f"Custo médio/op: <code>{_gas_medio_str}</code>\n"
+            f"\n"
+            f"┈┈┈┈┈┈ ⚡ DESEMPENHO ┈┈┈┈┈┈\n"
+            f"Subcontas ativas: <b>{p_traders}</b>  ·  {_ciclo_line}Ciclo médio: —\n" if not ciclo_medio else
+            f"Subcontas ativas: <b>{p_traders}</b>  ·  Ciclo médio: <b>{ciclo_medio}</b>\n"
+        )
+        msg += (
+            f"Maior positivo: <b>+${maior_positivo:,.2f}</b>  ·  Maior negativo: <b>-${abs(maior_negativo):,.2f}</b>\n"
+            f"Maior movimentação: <b>{_maior_mov}</b>\n"
+            f"\n"
+            f"┈┈┈┈┈┈ 🔧 MOTOR ┈┈┈┈┈┈\n"
+            f"{_ativo_line}"
+            f"{_seq_line}"
+            f"\n"
+            f"┈┈┈┈┈┈ {emoji_pnl} ACUMULADO DO DIA ┈┈┈┈┈┈\n"
+            f"Trades: <b>{p_total}</b>  ·  Assertividade: <b>{p_wr:.0f}%</b>\n"
+            f"P&amp;L: <b>{pl_liq_usd}</b>  ·  {_wins_losses}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<i>WEbdEX · New Digital Economy</i>"
+        )
+        return msg
+
+    # ── Formato legado Ciclo 21h ────────────────────────────────────────────
     emoji  = "🟢" if p_bruto >= 0 else "🔴"
     pl_str = f"+${p_bruto:,.2f}" if p_bruto >= 0 else f"-${abs(p_bruto):,.2f}"
     msg = (

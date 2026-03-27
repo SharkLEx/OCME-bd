@@ -456,35 +456,34 @@ def notificar(
                   else "bdZinho monitora · protocolo ON 🔵")
         )
 
+        # ── Novo formato OpenPosition (brand WEbdEX) ───────────────────────
+        _result_icon = "✅" if val >= 0 else "❌"
+        _pnl_icon    = "📈" if pnl_hj >= 0 else "📉"
+        _net_compact = f"💰 <b>{val:+.4f} {esc(token)}</b>  ·  <b>{esc(net_str)}</b> líquido\n" if net_str else f"💰 <b>{val:+.4f} {esc(token)}</b>\n"
+        _gas_compact = f"⛽ Gas: <code>{gas_pol:.4f} POL</code>" if gas_pol and gas_pol > 0 else f"⛽ Gas: <code>${gas_usd:.4f}</code>"
+        _fee_compact = f"  ·  💎 Fee: <code>{pass_fee_bd:.4f} BD</code>" if (pass_fee_bd and pass_fee_bd > 0) else ""
+        _bloco_compact = f"Bloco {bloco:,}  ·  " if (bloco and bloco > 0) else ""
+        _hora_compact  = now_br().strftime("%H:%Mh")
+        _streak_compact = f"🔥  <b>{streak} wins seguidos</b>\n" if streak >= 3 else ""
+
         msg = (
-            f"⚡ <b>WEbdEX ENGINE</b>  ·  <code>{esc(tag)}</code>\n"
+            f"{_result_icon} <b>WEbdEX ENGINE</b>  ·  OpenPosition\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆔 #{trades_hj}  ·  {code(sub)}\n"
+            f"🪙 Ativo: <b>{esc(token)}</b>\n"
             f"\n"
-            f"{exec_icon}  <b>CICLO CONFIRMADO</b>  ·  #{trades_hj}\n"
-            f"👤  {code(sub)}\n"
-            f"🔄  Estratégia: <b>{esc(strat)}</b>  ·  🪙 <b>{esc(token)}</b>\n"
+            f"{_net_compact}"
+            f"{_gas_compact}{_fee_compact}\n"
             f"\n"
-            f"┈┈┈┈┈┈ RESULTADO ┈┈┈┈┈┈\n"
-            f"\n"
-            f"{p_emoji}  <b>{val:+.4f} {esc(token)}</b>\n"
-            f"{net_line}"
-            f"{gas_line}\n"
-            f"{pass_line + chr(10) if pass_line else ''}"
-            f"\n"
-            f"{_chain_compact}"
+            f"⛓️ Polygon  ·  {_bloco_compact}{_hora_compact}\n"
             f"{cycle_line}"
-            f'🔗  <a href="https://polygonscan.com/tx/{esc(tx)}">Ver transação ↗</a>\n'
+            f"🎯 Assertividade dia: <b>{wr_hj:.0f}%</b>\n"
+            f"{_pnl_icon} P&amp;L dia: <b>{pnl_sign}${pnl_hj:.2f}</b>  ·  {wins_hj}W / {losses_hj}L\n"
+            f"{_streak_compact}"
             f"\n"
-            f"{sub_section}"
-            f"┈┈┈┈┈┈ HOJE ┈┈┈┈┈┈\n"
-            f"\n"
-            f"📊  <b>{trades_hj} trades</b>  ·  WinRate <b>{wr_hj:.0f}%</b>  {wr_emoji}\n"
-            f"<code>    {wr_bar}</code>\n"
-            f"💰  P&L: <b>{pnl_sign}${pnl_hj:.2f}</b>  ·  {wins_hj}W / {losses_hj}L\n"
-            f"{streak_line}"
-            f"\n"
+            f'🔗 <a href="https://polygonscan.com/tx/{esc(tx)}">Ver on-chain ↗</a>\n'
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"<i>⚡ WEbdEX · {_footer}</i>"
+            f"<i>WEbdEX · New Digital Economy</i>"
         )
         send_html(chat_id, msg, disable_web_page_preview=True)
     except Exception as e:
