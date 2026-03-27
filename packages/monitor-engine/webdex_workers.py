@@ -672,16 +672,16 @@ def agendador_horario():
                             0x00FFB2 if pnl_2h >= 0 else 0xFF4444,
                         )
 
-                # ── Snapshot Intraday 4H → Telegram ADM + #relatório-diário ──
-                # Roda às 0h, 4h, 8h, 12h, 16h, 20h BRT (skip hora 21 — agendador_21h cobre)
-                if now.hour != 21 and now.hour % 4 == 0:
-                    _snap_key = f"snap4h_{now.strftime('%Y-%m-%d')}_{now.hour}"
+                # ── Snapshot Intraday 2H → Telegram ADM + #relatório-diário ──
+                # Roda às horas pares UTC (skip hora 21 — agendador_21h cobre)
+                if now.hour != 21 and now.hour % 2 == 0:
+                    _snap_key = f"snap2h_{now.strftime('%Y-%m-%d')}_{now.hour}"
                     if not get_config(_snap_key):
                         try:
-                            # Janela: últimas 4 horas (UTC)
-                            _4h_utc = (datetime.utcnow() - timedelta(hours=4)).strftime("%Y-%m-%d %H:%M:%S")
+                            # Janela: últimas 2 horas (UTC)
+                            _2h_utc = (datetime.utcnow() - timedelta(hours=2)).strftime("%Y-%m-%d %H:%M:%S")
                             # Label da janela em BRT
-                            _brt_start = (now - timedelta(hours=4)).strftime("%d/%m  ·  %H:%M")
+                            _brt_start = (now - timedelta(hours=2)).strftime("%d/%m  ·  %H:%M")
                             _brt_end   = now.strftime("%H:%M BRT")
                             _janela_label = f"{_brt_start} às {_brt_end}"
 
@@ -696,7 +696,7 @@ def agendador_horario():
                                            MAX(CASE WHEN profit>0 THEN profit ELSE 0 END),
                                            MIN(CASE WHEN profit<0 THEN profit ELSE 0 END)
                                     FROM protocol_ops WHERE ts>=?
-                                """, (_4h_utc,)).fetchone()
+                                """, (_2h_utc,)).fetchone()
                                 _tvl_row = cursor.execute("""
                                     SELECT ROUND(SUM(f.total_usd),2)
                                     FROM fl_snapshots f
@@ -707,13 +707,13 @@ def agendador_horario():
                                     SELECT coin, COUNT(*) as cnt FROM protocol_ops
                                     WHERE ts>=? AND coin IS NOT NULL AND coin != ''
                                     GROUP BY coin ORDER BY cnt DESC LIMIT 1
-                                """, (_4h_utc,)).fetchone()
+                                """, (_2h_utc,)).fetchone()
                                 _streak_row = cursor.execute("""
                                     SELECT COUNT(*) FROM (
                                         SELECT profit FROM protocol_ops
                                         WHERE ts>=? ORDER BY ts DESC
                                     ) WHERE profit > 0
-                                """, (_4h_utc,)).fetchone()
+                                """, (_2h_utc,)).fetchone()
 
                             _s_traders  = int(_s_row[0] or 0)
                             _s_wins     = int(_s_row[1] or 0)
@@ -734,7 +734,7 @@ def agendador_horario():
                             _s_gas_med  = (_s_gas_usd / _s_total) if _s_total > 0 else 0.0
 
                             if _s_total > 0:
-                                _snap_label = f"Intraday {hora_str}"
+                                _snap_label = f"2H {hora_str}"
                                 # Discord (mantém formato atual)
                                 _snap_sent  = notify_protocolo_relatorio(
                                     hoje=now.strftime("%Y-%m-%d"),
@@ -790,11 +790,12 @@ def agendador_horario():
                                 except Exception as _tg4_err:
                                     logger.warning("[agendador_horario] broadcast 4H Telegram falhou: %s", _tg4_err)
 
+                                # Marca snap como enviado independente do Discord (Telegram é suficiente)
+                                set_config(_snap_key, "1")
                                 if _snap_sent:
-                                    set_config(_snap_key, "1")
-                                    logger.info("[agendador_horario] snapshot 4H %s enviado.", hora_str)
+                                    logger.info("[agendador_horario] snapshot 2H %s enviado (Discord+Telegram).", hora_str)
                                 else:
-                                    logger.warning("[agendador_horario] snapshot 4H %s falhou — retry.", hora_str)
+                                    logger.info("[agendador_horario] snapshot 2H %s enviado (Telegram; Discord falhou).", hora_str)
                         except Exception as _se:
                             logger.warning("[agendador_horario] snapshot 4H erro: %s", _se)
 
