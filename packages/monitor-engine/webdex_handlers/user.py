@@ -3607,3 +3607,124 @@ def vision_photo_handler(m):
         reply_markup=main_kb(chat_id),
     )
     logger.info("[vision] Análise enviada para chat_id=%s", chat_id)
+
+
+# ==============================================================================
+# 🎙️ AUDIO: transcrição de áudio via Whisper + resposta bdZinho
+# ==============================================================================
+
+# Rate limit dedicado para áudio (cooldown 20s)
+_AUDIO_COOLDOWN_S = 20
+_audio_rate_cache: dict[int, float] = {}
+_audio_rate_lock  = threading.Lock()
+
+
+def _transcribe_ogg(audio_bytes: bytes) -> str | None:
+    """
+    Transcreve áudio OGG/OGA via Whisper local.
+    Requer: pip install openai-whisper
+    Retorna texto ou None se falhar.
+    """
+    import tempfile, os as _os
+    try:
+        import whisper as _whisper
+    except ImportError:
+        logger.warning("[audio] openai-whisper não instalado — pip install openai-whisper")
+        return None
+
+    try:
+        # Salva bytes em arquivo temporário
+        with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+
+        try:
+            model = _whisper.load_model("base")
+            result = model.transcribe(tmp_path, language="pt", fp16=False)
+            return result.get("text", "").strip() or None
+        finally:
+            _os.unlink(tmp_path)
+
+    except Exception as e:
+        logger.warning("[audio] Whisper falhou: %s", e)
+        return None
+
+
+@bot.message_handler(content_types=["voice"])
+def audio_voice_handler(m):
+    """
+    Usuário envia áudio/voz → Whisper transcreve → bdZinho responde em texto.
+    v1: resposta apenas em texto (TTS em versão futura).
+    """
+    chat_id = m.chat.id
+
+    # Rate limit
+    now = time.time()
+    with _audio_rate_lock:
+        last = _audio_rate_cache.get(chat_id, 0.0)
+        remaining = _AUDIO_COOLDOWN_S - (now - last)
+        if remaining > 0:
+            bot.send_message(
+                chat_id,
+                f"⏳ Aguarde <b>{int(remaining)}s</b> antes de enviar outro áudio.",
+                parse_mode="HTML",
+            )
+            return
+        _audio_rate_cache[chat_id] = now
+
+    wait_msg = bot.send_message(
+        chat_id,
+        "🎙️ <b>bdZinho ouvindo...</b> ⏳\n"
+        "<i>Transcrevendo seu áudio, pode levar até 20 segundos.</i>",
+        parse_mode="HTML",
+    )
+
+    transcript = None
+    try:
+        file_info  = bot.get_file(m.voice.file_id)
+        audio_bytes = bot.download_file(file_info.file_path)
+        transcript  = _transcribe_ogg(audio_bytes)
+    except Exception as e:
+        logger.warning("[audio] Erro ao baixar/transcrever voz chat_id=%s: %s", chat_id, e)
+
+    # Remove mensagem de espera
+    try:
+        bot.delete_message(chat_id, wait_msg.message_id)
+    except Exception:
+        pass
+
+    if not transcript:
+        bot.send_message(
+            chat_id,
+            "❌ <b>Não consegui transcrever o áudio.</b>\n\n"
+            "Verifique se o microfone está funcionando ou tente enviar uma mensagem de texto.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    # Exibe transcrição + resposta
+    bot.send_message(
+        chat_id,
+        f"🎙️ <i>Você disse:</i> \"{esc(transcript[:200])}\"\n\n"
+        f"💭 <b>Processando...</b>",
+        parse_mode="HTML",
+    )
+
+    try:
+        answer = ai_answer_ptbr(transcript, chat_id=chat_id)
+    except Exception as e:
+        logger.warning("[audio] ai_answer_ptbr falhou chat_id=%s: %s", chat_id, e)
+        answer = None
+
+    if not answer:
+        bot.send_message(
+            chat_id,
+            "❌ Não consegui gerar uma resposta. Tente novamente.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    send_html(chat_id, f"🤖 {answer}", reply_markup=main_kb(chat_id))
+    logger.info("[audio] Áudio transcrito e respondido para chat_id=%s", chat_id)

@@ -32,6 +32,14 @@ from webdex_network_notify import network_notify_worker
 from notification_engine import notification_engine_worker
 from webdex_v4_monitor import v4_subaccount_worker
 
+# Story 18.x — Nightly Trainers
+try:
+    from webdex_deterministic_trainer import deterministic_trainer_worker
+    _DETERM_TRAINER_AVAILABLE = True
+except ImportError:
+    deterministic_trainer_worker = None  # type: ignore[assignment]
+    _DETERM_TRAINER_AVAILABLE = False
+
 # Importar handlers — registra os @bot.message_handler
 import webdex_handlers.admin   # noqa: F401
 import webdex_handlers.user    # noqa: F401
@@ -61,6 +69,10 @@ _THREAD_REGISTRY: dict[str, callable] = {
     # Epic 19 — Monitor v4 Subaccount + Canal Discord
     "v4_subaccount_worker":       v4_subaccount_worker,
 }
+
+# Story 18.x — Nightly trainers (opcionais — falha silenciosa no startup)
+if _DETERM_TRAINER_AVAILABLE and deterministic_trainer_worker:
+    _THREAD_REGISTRY["deterministic_trainer_worker"] = deterministic_trainer_worker
 
 
 def _start_threads():
@@ -159,7 +171,7 @@ def auto_resume_notify():
         from webdex_bot_core import send_html
         with DB_LOCK:
             rows = cursor.execute(
-                "SELECT chat_id, wallet FROM users WHERE chat_id IS NOT NULL"
+                "SELECT chat_id, wallet FROM users WHERE chat_id IS NOT NULL AND active=1"
             ).fetchall()
         logger.info("[main] Notificando %d usuários sobre reinício...", len(rows))
         for (cid, wallet) in rows:

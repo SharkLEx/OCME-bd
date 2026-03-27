@@ -37,10 +37,12 @@ logging.basicConfig(
 logger = logging.getLogger("bdz_trainer")
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_AI_BASE_URL = os.getenv("AI_BASE_URL", "https://openrouter.ai/api/v1")
-_AI_API_KEY  = os.getenv("OPENROUTER_API_KEY") or os.getenv("AI_API_KEY", "")
-_TRAINER_MODEL = os.getenv("TRAINER_MODEL", "deepseek/deepseek-chat")  # modelo barato para análise
-_DATABASE_URL  = os.getenv("DATABASE_URL", "")
+_ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+_AI_BASE_URL       = os.getenv("AI_BASE_URL", "https://openrouter.ai/api/v1")
+_AI_API_KEY        = os.getenv("OPENROUTER_API_KEY") or os.getenv("AI_API_KEY", "")
+# Modelo padrão: Anthropic direto (haiku = barato + rápido). Fallback: OpenRouter
+_TRAINER_MODEL     = os.getenv("TRAINER_MODEL", "claude-haiku-4-5-20251001")
+_DATABASE_URL      = os.getenv("DATABASE_URL", "")
 
 
 # ── Fonte de dados: ai_memory ─────────────────────────────────────────────────
@@ -116,19 +118,49 @@ def _fetch_recent_digests(days: int = 7) -> list[dict]:
 # ── LLM call ─────────────────────────────────────────────────────────────────
 
 def _llm_extract(system: str, user: str, temperature: float = 0.3) -> Optional[str]:
-    """Chama o LLM para extrair conhecimento. Retorna texto ou None."""
+    """
+    Chama o LLM para extrair conhecimento.
+    Prioridade: Anthropic SDK direto → OpenRouter fallback.
+    Retorna texto ou None.
+    """
+    # ── Primário: Anthropic SDK (mais barato, mais confiável) ─────────────────
+    if _ANTHROPIC_API_KEY:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=_ANTHROPIC_API_KEY)
+            # Usa o modelo configurado; se começa com "claude-" usa Anthropic direto
+            model = _TRAINER_MODEL if _TRAINER_MODEL.startswith("claude-") else "claude-haiku-4-5-20251001"
+            msg = client.messages.create(
+                model=model,
+                max_tokens=1500,
+                temperature=temperature,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
+            text = msg.content[0].text.strip() if msg.content else ""
+            if text:
+                logger.debug("[trainer] Anthropic SDK OK (model=%s)", model)
+                return text
+        except Exception as e:
+            logger.warning("[trainer] Anthropic SDK falhou, tentando OpenRouter: %s", e)
+
+    # ── Fallback: OpenRouter ───────────────────────────────────────────────────
     if not _AI_API_KEY:
-        logger.error("AI_API_KEY não configurada — trainer não pode rodar")
+        logger.error("[trainer] ANTHROPIC_API_KEY e OPENROUTER_API_KEY não configuradas")
         return None
     try:
+        # Para OpenRouter usa modelo compatível
+        or_model = _TRAINER_MODEL if "/" in _TRAINER_MODEL else "anthropic/claude-haiku-4-5"
         resp = requests.post(
             f"{_AI_BASE_URL}/chat/completions",
             headers={
                 "Authorization": f"Bearer {_AI_API_KEY}",
                 "Content-Type": "application/json",
+                "HTTP-Referer": "https://webdex.app",
+                "X-Title": "bdZinho Nightly Trainer",
             },
             json={
-                "model": _TRAINER_MODEL,
+                "model": or_model,
                 "messages": [
                     {"role": "system", "content": system},
                     {"role": "user",   "content": user},
@@ -141,7 +173,7 @@ def _llm_extract(system: str, user: str, temperature: float = 0.3) -> Optional[s
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        logger.warning("LLM call falhou: %s", e)
+        logger.warning("[trainer] OpenRouter fallback falhou: %s", e)
         return None
 
 
@@ -447,12 +479,12 @@ def _fetch_discord_conversations(days: int = 3) -> list[dict]:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT e.content, r.response_text
-                    FROM events e
+                    SELECT e.content, r.response
+                    FROM ai_conversations e
                     JOIN ai_responses r ON r.event_id = e.id
                     WHERE e.created_at >= %s
-                      AND e.event_type = 'mention'
-                      AND r.response_text IS NOT NULL
+                      AND e.role = 'user'
+                      AND r.response IS NOT NULL
                     ORDER BY e.created_at DESC
                     LIMIT 200
                     """,
@@ -488,7 +520,7 @@ def _fetch_existing_knowledge_topics() -> list[str]:
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT topic FROM bdz_knowledge WHERE is_active = TRUE ORDER BY created_at DESC LIMIT 300"
+                    "SELECT topic FROM bdz_knowledge WHERE active = TRUE ORDER BY created_at DESC LIMIT 300"
                 )
                 rows = cur.fetchall()
         finally:

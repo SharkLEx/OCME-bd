@@ -62,6 +62,20 @@ COPY monitor-engine/webdex_config.py \
      monitor-engine/metrics_worker.py \
      monitor-engine/webdex_ai_memory.py \
      monitor-engine/webdex_v4_monitor.py \
+     monitor-engine/webdex_ai_knowledge.py \
+     monitor-engine/webdex_ai_user_profile.py \
+     monitor-engine/webdex_ai_content.py \
+     monitor-engine/webdex_ai_cycle_visual.py \
+     monitor-engine/webdex_ai_digest.py \
+     monitor-engine/webdex_ai_image.py \
+     monitor-engine/webdex_ai_image_gen.py \
+     monitor-engine/webdex_ai_proactive.py \
+     monitor-engine/webdex_ai_vision.py \
+     monitor-engine/webdex_local_animate.py \
+     monitor-engine/webdex_vault_writer.py \
+     monitor-engine/webdex_ai_trainer.py \
+     monitor-engine/webdex_chain_health.py \
+     monitor-engine/webdex_deterministic_trainer.py \
      ./
 
 # Handlers do bot

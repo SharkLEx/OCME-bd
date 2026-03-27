@@ -18,9 +18,13 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-_AI_BASE_URL  = os.getenv("AI_BASE_URL", "https://openrouter.ai/api/v1")
-_AI_API_KEY   = os.getenv("OPENROUTER_API_KEY") or os.getenv("AI_API_KEY", "")
-_VISION_MODEL = os.getenv("VISION_MODEL", "google/gemini-2.5-flash")
+_ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+_AI_BASE_URL       = os.getenv("AI_BASE_URL", "https://openrouter.ai/api/v1")
+_AI_API_KEY        = os.getenv("OPENROUTER_API_KEY") or os.getenv("AI_API_KEY", "")
+# Anthropic Vision model — haiku é rápido e suporta imagens
+_VISION_MODEL_ANTHROPIC = "claude-haiku-4-5-20251001"
+# OpenRouter fallback
+_VISION_MODEL_OR  = os.getenv("VISION_MODEL", "google/gemini-2.5-flash")
 
 # Limite de tamanho da imagem para a API (bytes) — 4MB
 _IMG_SIZE_LIMIT = 4 * 1024 * 1024
@@ -51,13 +55,24 @@ Responda em português.
 """
 
 
+def _detect_mime(image_bytes: bytes) -> str:
+    """Detecta mime type pelos magic bytes."""
+    if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    if image_bytes[:3] == b"GIF":
+        return "image/gif"
+    return "image/jpeg"
+
+
 def analyze_image(
     image_bytes: bytes,
     question: str = "",
     profile_context: str = "",
 ) -> Optional[str]:
     """
-    Analisa uma imagem via Gemini Flash Vision.
+    Analisa uma imagem via Claude Vision (Anthropic SDK) com fallback para OpenRouter.
 
     Args:
         image_bytes:     bytes da imagem (PNG/JPG/WEBP)
@@ -67,12 +82,53 @@ def analyze_image(
     Returns:
         Texto da análise ou None em caso de falha.
     """
-    if not _AI_API_KEY:
-        logger.error("[vision] OPENROUTER_API_KEY não configurada")
+    if len(image_bytes) > _IMG_SIZE_LIMIT:
+        logger.warning("[vision] Imagem muito grande: %d bytes", len(image_bytes))
         return None
 
-    if len(image_bytes) > _IMG_SIZE_LIMIT:
-        logger.warning("[vision] Imagem muito grande: %d bytes — truncando não é possível", len(image_bytes))
+    mime     = _detect_mime(image_bytes)
+    b64      = base64.b64encode(image_bytes).decode("utf-8")
+    system   = _VISION_SYSTEM
+    if profile_context:
+        system = f"{_VISION_SYSTEM}\n\nCONTEXTO DO TRADER:\n{profile_context}"
+    user_text = question.strip() if question.strip() else "Analise esta imagem para mim."
+
+    # ── Primário: Anthropic SDK (Claude Haiku Vision) ─────────────────────────
+    if _ANTHROPIC_API_KEY:
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=_ANTHROPIC_API_KEY)
+            msg = client.messages.create(
+                model=_VISION_MODEL_ANTHROPIC,
+                max_tokens=700,
+                system=system,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": mime,
+                                    "data": b64,
+                                },
+                            },
+                            {"type": "text", "text": user_text},
+                        ],
+                    }
+                ],
+            )
+            text = msg.content[0].text.strip() if msg.content else ""
+            if text:
+                logger.debug("[vision] Anthropic Vision OK")
+                return text
+        except Exception as e:
+            logger.warning("[vision] Anthropic Vision falhou, tentando OpenRouter: %s", e)
+
+    # ── Fallback: OpenRouter (Gemini Flash) ───────────────────────────────────
+    if not _AI_API_KEY:
+        logger.error("[vision] Sem API key disponível (ANTHROPIC nem OPENROUTER)")
         return None
 
     try:
@@ -80,26 +136,6 @@ def analyze_image(
     except ImportError:
         logger.error("[vision] requests não disponível")
         return None
-
-    # Encode para base64
-    b64 = base64.b64encode(image_bytes).decode("utf-8")
-
-    # Detectar mime type pelos magic bytes
-    mime = "image/jpeg"
-    if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
-        mime = "image/png"
-    elif image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
-        mime = "image/webp"
-    elif image_bytes[:3] == b"GIF":
-        mime = "image/gif"
-
-    # Montar system prompt com perfil se disponível
-    system = _VISION_SYSTEM
-    if profile_context:
-        system = f"{_VISION_SYSTEM}\n\nCONTEXTO DO TRADER:\n{profile_context}"
-
-    # Montar user message
-    user_text = question.strip() if question.strip() else "Analise esta imagem para mim."
 
     try:
         resp = requests.post(
@@ -111,7 +147,7 @@ def analyze_image(
                 "X-Title": "WEbdEX bdZinho Vision",
             },
             json={
-                "model": _VISION_MODEL,
+                "model": _VISION_MODEL_OR,
                 "messages": [
                     {"role": "system", "content": system},
                     {
@@ -119,14 +155,9 @@ def analyze_image(
                         "content": [
                             {
                                 "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:{mime};base64,{b64}",
-                                },
+                                "image_url": {"url": f"data:{mime};base64,{b64}"},
                             },
-                            {
-                                "type": "text",
-                                "text": user_text,
-                            },
+                            {"type": "text", "text": user_text},
                         ],
                     },
                 ],
@@ -136,22 +167,12 @@ def analyze_image(
             timeout=60,
         )
         resp.raise_for_status()
-        data = resp.json()
-        text = data["choices"][0]["message"]["content"].strip()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
         return text if text else None
 
-    except requests.exceptions.Timeout:
-        logger.warning("[vision] Timeout na análise de imagem")
-        return None
-    except requests.exceptions.RequestException as e:
-        logger.warning("[vision] Erro HTTP: %s", e)
-        return None
-    except (KeyError, IndexError) as e:
-        logger.warning("[vision] Formato de resposta inesperado: %s", e)
-        return None
     except Exception as e:
-        logger.warning("[vision] Erro inesperado: %s", e)
+        logger.warning("[vision] OpenRouter fallback falhou: %s", e)
         return None
 
 
-logger.info("[vision] bdZinho Vision carregado — model=%s", _VISION_MODEL)
+logger.info("[vision] bdZinho Vision carregado — anthropic=%s | fallback=%s", _VISION_MODEL_ANTHROPIC, _VISION_MODEL_OR)

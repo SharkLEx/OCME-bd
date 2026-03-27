@@ -21,3 +21,10 @@ tzdata
 
 # PostgreSQL — long-term memory (Story 12.1)
 psycopg2-binary>=2.9.0,<3.0.0
+
+# Anthropic SDK — trainer + vision (Story 18.x)
+anthropic>=0.40.0
+
+# Whisper — transcrição de áudio local (Story 18.x audio stub)
+# Instale manualmente se necessário: pip install openai-whisper
+# openai-whisper  # comentado: instala ffmpeg extra, ative se áudio em uso
