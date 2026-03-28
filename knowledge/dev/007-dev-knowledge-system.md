@@ -116,13 +116,27 @@ def get_knowledge_context() -> str:
 
 ### Categorias do bdz_knowledge
 
-| Categoria | Descrição | Exemplos |
-|-----------|-----------|---------|
-| `protocol` | WEbdEX, contratos, TVL | "Como funciona o protocolo" |
-| `market` | DeFi, mercado, tendências | "Yield atual no Polygon" |
-| `faq` | Perguntas frequentes | "O que é subconta?" |
-| `defi` | Conceitos DeFi | "O que é impermanent loss?" |
-| `tokenomia` | Token BD, supply, fee | "Supply: 369.369.369 BD" |
+| Categoria | Itens | Descrição |
+|-----------|-------|-----------|
+| `protocol_patterns` | 21 | Padrões do protocolo WEbdEX |
+| `user_insights` | 19 | Perfis e comportamentos de usuários |
+| `daily_insights` | 15 | Insights do dia a dia |
+| `defi` | 6 | AMM, TVL, yield farming, arbitragem, stablecoins, DeFi vs CeFi *(adicionado 2026-03-28)* |
+| `portfolio` | 4 | Sizing, métricas de performance, P&L, diversificação *(adicionado 2026-03-28)* |
+| `trading` | 3 | Estratégia de arbitragem, gestão de risco, psicologia *(adicionado 2026-03-28)* |
+| `tecnico` | 4 | Auditoria, gas Polygon, verificar TX, carteiras Web3 *(adicionado 2026-03-28)* |
+| `smith_findings` | 9 | Achados do Smith |
+| `webdex_mechanics` | 8 | Mecânicas do protocolo |
+| `market_intelligence` | 6 | Inteligência de mercado |
+| `competitor_intel` | 5 | Análise de concorrentes |
+| `faq_patterns` | 5 | Perguntas frequentes |
+| `marketing_intel` | 5 | Inteligência de marketing |
+| `brasil_market` | 6 | Mercado Brasil cripto |
+| `subscription_intel` | 4 | Inteligência de assinaturas |
+| `strategic_gaps` | 5 | Gaps estratégicos identificados |
+| `polygon_updates` | 6 | Updates da rede Polygon |
+
+**Total:** 134+ itens ativos (2026-03-28)
 
 ### Adicionar novo conhecimento
 

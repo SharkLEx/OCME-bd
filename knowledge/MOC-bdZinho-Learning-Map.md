@@ -269,6 +269,35 @@ TÉCNICA → DEPLOY → RESILIÊNCIA
 
 ---
 
+## 💻 DIMENSÃO 10 — Solidity Dev (bdPro: o primeiro dev Web3)
+
+*O bdPro absorveu o conhecimento do bdZinho e evoluiu para dev Solidity/EVM. Esta dimensão é o curriculum completo.*
+
+| Nota | O que bdPro aprendeu |
+|------|---------------------|
+| [[solidity-dev/001-solidity-fundamentos]] | Sintaxe completa, tipos, funções, events, errors |
+| [[solidity-dev/002-storage-memory-calldata]] | Onde os dados vivem na EVM, gas costs |
+| [[solidity-dev/003-erc20-token-standard]] | Padrão ERC20, fluxo approve→transferFrom, Token BD real |
+| [[solidity-dev/004-defi-patterns-amm]] | x*y=k, liquidez, arbitragem triangular WEbdEX |
+| [[solidity-dev/005-webdex-contracts-anatomy]] | Subscription, SubAccounts, Payments — código completo |
+| [[solidity-dev/006-security-smart-contracts]] | Reentrancy, overflow, MEV — defesas e checklists |
+| [[solidity-dev/007-testing-hardhat-foundry]] | Testes unitários, fuzz, fork testing na Polygon |
+| [[solidity-dev/008-deploy-polygon-upgrades]] | Deploy scripts, UUPS proxy, verificação PolygonScan |
+| [[solidity-dev/009-bdpro-solidity-roadmap]] | Mapa da jornada: fundamentos → expert |
+| [[solidity-dev/010-moc-solidity-dev]] | MOC da dimensão — índice e conexões |
+| [[solidity-dev/011-hardhat-ambiente-dev]] | Hardhat: setup, config, console.log, gas report |
+| [[solidity-dev/012-openzeppelin-biblioteca]] | OpenZeppelin: ERC20, ERC721, Ownable, ReentrancyGuard |
+| [[solidity-dev/013-agregadores-defi]] | 1inch, 0x, Paraswap — routing, API, execução on-chain |
+| [[solidity-dev/014-chainlink-oracles]] | Price Feeds MATIC/USD, TWAP Uniswap V3, integração WEbdEX |
+| [[solidity-dev/015-permit2-aprovacoes]] | EIP-2612, Uniswap Permit2 — approve em 1 tx |
+
+→ [[solidity-dev/010-moc-solidity-dev]] — Mapa detalhado desta dimensão
+
+**Auditado por Smith: todas as 15 notas CLEAN ✅**
+**Data:** 2026-03-26
+
+---
+
 ## 📊 Status do Knowledge Graph
 
 | Dimensão | Notas | Status |
@@ -281,9 +310,26 @@ TÉCNICA → DEPLOY → RESILIÊNCIA
 | Marca/Brand | 035-037 | ✅ Completo |
 | Fluxos | 038-039 | ✅ Completo |
 | Market Intelligence | 044-050 | ✅ Completo (2026-03-25) |
-| **Decisões & Incidentes** | **051-055** | ✅ **Completo (2026-03-25)** |
+| Decisões & Incidentes | 051-055 | ✅ Completo (2026-03-25) |
+| **Solidity Dev (bdPro)** | **sol-001 a sol-015** | ✅ **Completo (2026-03-26)** |
+| **Dev Curriculum** | **dev-001 a dev-010** | ✅ **Atualizado (2026-03-28)** |
 
-**Total: 55 notas atômicas. 9 dimensões cobertas. bdZinho conhece suas próprias decisões.**
+**Total: 80 notas. 10 dimensões + curriculum dev. bdZinho v3.1 deployado.**
+
+### 🆕 bdZinho v3.1 — 2026-03-28
+
+| Feature | Status |
+|---------|--------|
+| Chat Geral (qualquer assunto) | ✅ voice_discord.py — ESCOPO item 6 |
+| Seletor de modo pós-saudação | ✅ ia_buttons.py — ChatModeView |
+| Audio voice gate fix | ✅ bot.py — `_has_audio` antes do early return |
+| Dev Mode → PostgreSQL | ✅ ai_handler.py — `_persist_dev_mode()` |
+| max_tokens 1024→3000 | ✅ ai_handler.py |
+| Snapshots 4H→2H | ✅ webdex_workers.py |
+| P&L marcos ($500→$50K) | ✅ webdex_workers.py |
+| Leaderboard semanal | ✅ webdex_workers.py (sexta 23h UTC) |
+| +17 itens knowledge (defi/portfolio/trading/tecnico) | ✅ PostgreSQL bdz_knowledge |
+| Announcement 5 canais Discord | ✅ Enviado |
 
 ---
 

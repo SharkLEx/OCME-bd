@@ -130,9 +130,42 @@ class BdZinhoMenuView(discord.ui.View):
     # Botão: 🔗 Conectar Wallet → ConectarWalletModal
     # Botão: 💎 Assinar PRO → embed com instrução de pagamento
     # Botão: 📊 Minha Assinatura → status da assinatura
-    # Botão: 🤖 Iniciar Chat → cria thread privada
+    # Botão: 🤖 Iniciar Chat → cria thread + ChatModeView
     # Botão: 🧠 Modo Dev → ativa pensamento estendido (96.3 BD/mês)
 ```
+
+### ChatModeView — Seletor de Modo (v3.1 — 2026-03-28)
+
+Ao abrir uma thread nova, o usuário vê o embed de boas-vindas + dois botões:
+
+```python
+class ChatModeView(discord.ui.View):
+    # Botão: 🔗 Protocolo WEbdEX → foco em P&L, TVL, on-chain
+    # Botão: 🌐 Chat Geral       → qualquer assunto
+```
+
+O botão clicado envia uma mensagem de setup que guia o tom da conversa. Timeout: 5min.
+
+### Audio Gate Fix (v3.1 — 2026-03-28)
+
+Voice messages antes nunca chegavam ao handler porque o `on_message` retornava cedo se o bot não fosse mencionado. Fix: checar `_has_audio` ANTES do early return.
+
+```python
+_has_audio = message.attachments and any(
+    a.content_type and (a.content_type.startswith("audio/") or ...)
+    for a in message.attachments
+)
+if _has_audio and _OPENAI_API_KEY:
+    pass  # cai direto no handler de áudio
+elif not in_bdzinho_thread and not mentioned:
+    return  # early return normal
+```
+
+### Dev Mode — Persistência PostgreSQL (v3.1 — 2026-03-28)
+
+`_dev_mode_users: set[int]` era in-memory e se perdia no restart. Agora persiste em `discord_user_profiles.dev_mode_active`. Funções: `_persist_dev_mode()` + `_load_dev_mode_from_db()` (chamada no import do módulo).
+
+`max_tokens`: Free/PRO = 3000 (era 1024), Dev = 16000.
 
 Para adicionar novo botão:
 ```python

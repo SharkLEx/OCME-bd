@@ -1,0 +1,114 @@
+{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {
+      "query": "tag:moc",
+      "color": {
+        "a": 1,
+        "rgb": 16096779
+      }
+    },
+    {
+      "query": "path:knowledge/bdzinho",
+      "color": {
+        "a": 1,
+        "rgb": 16450705
+      }
+    },
+    {
+      "query": "path:knowledge/webdex OR path:knowledge/ocme",
+      "color": {
+        "a": 1,
+        "rgb": 8141549
+      }
+    },
+    {
+      "query": "path:knowledge/blockchain",
+      "color": {
+        "a": 1,
+        "rgb": 3900150
+      }
+    },
+    {
+      "query": "path:knowledge/defi",
+      "color": {
+        "a": 1,
+        "rgb": 2278750
+      }
+    },
+    {
+      "query": "path:knowledge/dev OR path:knowledge/tech OR path:knowledge/solidity-dev",
+      "color": {
+        "a": 1,
+        "rgb": 440020
+      }
+    },
+    {
+      "query": "path:knowledge/business",
+      "color": {
+        "a": 1,
+        "rgb": 11817737
+      }
+    },
+    {
+      "query": "path:knowledge/market-intelligence",
+      "color": {
+        "a": 1,
+        "rgb": 1357990
+      }
+    },
+    {
+      "query": "path:knowledge/marketing",
+      "color": {
+        "a": 1,
+        "rgb": 15680580
+      }
+    },
+    {
+      "query": "path:knowledge/brand OR path:knowledge/flows",
+      "color": {
+        "a": 1,
+        "rgb": 15485081
+      }
+    },
+    {
+      "query": "path:daily-notes",
+      "color": {
+        "a": 1,
+        "rgb": 7040639
+      }
+    },
+    {
+      "query": "path:agents",
+      "color": {
+        "a": 1,
+        "rgb": 5025872
+      }
+    },
+    {
+      "query": "path:squads",
+      "color": {
+        "a": 1,
+        "rgb": 57062
+      }
+    }
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "textFadeMultiplier": 1,
+  "nodeSizeMultiplier": 1.4,
+  "lineSizeMultiplier": 1.2,
+  "collapse-forces": false,
+  "centerStrength": 0.3,
+  "repelStrength": 14,
+  "linkStrength": 0.8,
+  "linkDistance": 180,
+  "scale": 0.021528718442430272,
+  "close": false
+}

@@ -1,0 +1,168 @@
+/* ═══════════════════════════════════════════════════════════════════
+   WEbdEX Vault Colors — Cores por domínio de responsabilidade
+   Versão: v3.1 — 2026-03-28
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Variáveis de cor por domínio ───────────────────────────────── */
+:root {
+  --color-moc:        #F59E0B;   /* 🟡 MOC / Índice — ouro */
+  --color-bdzinho:    #FB0491;   /* 🩷 bdZinho / Alma — WEbdEX pink */
+  --color-protocol:   #7C3AED;   /* 🟣 Protocolo WEbdEX + OCME — roxo */
+  --color-blockchain: #3B82F6;   /* 🔵 Blockchain — azul elétrico */
+  --color-defi:       #22C55E;   /* 🟢 DeFi — verde */
+  --color-dev:        #06B6D4;   /* 🩵 Dev / Tech / Solidity — ciano */
+  --color-business:   #B45309;   /* 🟤 Negócio — âmbar escuro */
+  --color-market:     #14B8A6;   /* 🩵 Market Intelligence — teal */
+  --color-marketing:  #EF4444;   /* 🔴 Marketing — vermelho */
+  --color-brand:      #EC4899;   /* 🌸 Brand / Flows — pink */
+  --color-daily:      #6B7280;   /* ⚪ Daily Notes — cinza */
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   EXPLORADOR DE ARQUIVOS — Pastas coloridas
+   ══════════════════════════════════════════════════════════════════ */
+
+/* MOC files */
+.nav-file-title[data-path*="MOC"] {
+  color: var(--color-moc) !important;
+  font-weight: 700;
+}
+
+/* bdZinho */
+.nav-folder-title[data-path*="knowledge/bdzinho"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/bdzinho"] .nav-file-title-content {
+  color: var(--color-bdzinho) !important;
+}
+
+/* Protocolo WEbdEX */
+.nav-folder-title[data-path*="knowledge/webdex"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/webdex"] .nav-file-title-content {
+  color: var(--color-protocol) !important;
+}
+
+/* OCME */
+.nav-folder-title[data-path*="knowledge/ocme"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/ocme"] .nav-file-title-content {
+  color: var(--color-protocol) !important;
+  opacity: 0.85;
+}
+
+/* Blockchain */
+.nav-folder-title[data-path*="knowledge/blockchain"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/blockchain"] .nav-file-title-content {
+  color: var(--color-blockchain) !important;
+}
+
+/* DeFi */
+.nav-folder-title[data-path*="knowledge/defi"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/defi"] .nav-file-title-content {
+  color: var(--color-defi) !important;
+}
+
+/* Dev / Tech / Solidity */
+.nav-folder-title[data-path*="knowledge/dev"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/dev"] .nav-file-title-content,
+.nav-folder-title[data-path*="knowledge/tech"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/tech"] .nav-file-title-content,
+.nav-folder-title[data-path*="knowledge/solidity-dev"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/solidity-dev"] .nav-file-title-content {
+  color: var(--color-dev) !important;
+}
+
+/* Business */
+.nav-folder-title[data-path*="knowledge/business"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/business"] .nav-file-title-content {
+  color: var(--color-business) !important;
+}
+
+/* Market Intelligence */
+.nav-folder-title[data-path*="knowledge/market-intelligence"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/market-intelligence"] .nav-file-title-content {
+  color: var(--color-market) !important;
+}
+
+/* Marketing */
+.nav-folder-title[data-path*="knowledge/marketing"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/marketing"] .nav-file-title-content {
+  color: var(--color-marketing) !important;
+}
+
+/* Brand / Flows */
+.nav-folder-title[data-path*="knowledge/brand"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/brand"] .nav-file-title-content,
+.nav-folder-title[data-path*="knowledge/flows"] .nav-folder-title-content,
+.nav-file-title[data-path*="knowledge/flows"] .nav-file-title-content {
+  color: var(--color-brand) !important;
+}
+
+/* Daily Notes */
+.nav-folder-title[data-path*="daily-notes"] .nav-folder-title-content,
+.nav-file-title[data-path*="daily-notes"] .nav-file-title-content {
+  color: var(--color-daily) !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   TAGS — Cores inline no editor
+   ══════════════════════════════════════════════════════════════════ */
+
+.tag[href="#moc"]               { background-color: var(--color-moc) !important; color: #000 !important; }
+.tag[href="#bdzinho"]           { background-color: var(--color-bdzinho) !important; color: #fff !important; }
+.tag[href="#blockchain"]        { background-color: var(--color-blockchain) !important; color: #fff !important; }
+.tag[href="#defi"]              { background-color: var(--color-defi) !important; color: #000 !important; }
+.tag[href="#webdex"]            { background-color: var(--color-protocol) !important; color: #fff !important; }
+.tag[href="#dev"]               { background-color: var(--color-dev) !important; color: #000 !important; }
+.tag[href="#business"]          { background-color: var(--color-business) !important; color: #fff !important; }
+.tag[href="#market-intelligence"] { background-color: var(--color-market) !important; color: #000 !important; }
+.tag[href="#marketing"]         { background-color: var(--color-marketing) !important; color: #fff !important; }
+.tag[href="#brand"]             { background-color: var(--color-brand) !important; color: #fff !important; }
+.tag[href="#learned"]           { background-color: #374151 !important; color: #9CA3AF !important; }
+.tag[href="#ultrathink"]        { background-color: #1E40AF !important; color: #fff !important; }
+
+/* ══════════════════════════════════════════════════════════════════
+   CALLOUTS — Blocos visuais para cada domínio
+   ══════════════════════════════════════════════════════════════════ */
+
+.callout[data-callout="webdex"] {
+  --callout-color: 124, 58, 237;
+  --callout-icon: lucide-zap;
+}
+.callout[data-callout="bdzinho"] {
+  --callout-color: 251, 4, 145;
+  --callout-icon: lucide-bot;
+}
+.callout[data-callout="defi"] {
+  --callout-color: 34, 197, 94;
+  --callout-icon: lucide-trending-up;
+}
+.callout[data-callout="blockchain"] {
+  --callout-color: 59, 130, 246;
+  --callout-icon: lucide-link;
+}
+.callout[data-callout="dev"] {
+  --callout-color: 6, 182, 212;
+  --callout-icon: lucide-code;
+}
+.callout[data-callout="smith"] {
+  --callout-color: 239, 68, 68;
+  --callout-icon: lucide-shield-alert;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   GRAFO — Legenda de cores (comentário visual)
+   ══════════════════════════════════════════════════════════════════ */
+
+/*
+  LEGENDA DO GRAFO WEbdEX:
+  ─────────────────────────
+  🟡 Ouro      #F59E0B  →  MOC / Índices (hubs de navegação)
+  🩷 Pink      #FB0491  →  bdZinho / Alma (identidade do robô)
+  🟣 Roxo      #7C3AED  →  Protocolo WEbdEX + OCME (o que monitora)
+  🔵 Azul      #3B82F6  →  Blockchain (fundamentos técnicos)
+  🟢 Verde     #22C55E  →  DeFi (protocolos financeiros)
+  🩵 Ciano     #06B6D4  →  Dev / Tech / Solidity (código e deploy)
+  🟤 Âmbar     #B45309  →  Negócio (estratégia e unit economics)
+  🩵 Teal      #14B8A6  →  Market Intelligence (pesquisa de mercado)
+  🔴 Vermelho  #EF4444  →  Marketing (comunicação)
+  🌸 Pink      #EC4899  →  Brand / Flows (narrativa e processos)
+  ⚪ Cinza     #6B7280  →  Daily Notes (diário)
+*/
