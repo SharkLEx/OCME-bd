@@ -11,17 +11,20 @@ Pode ser agendado via Task Scheduler do Windows:
   pythonw bin\vps-to-obsidian.py          # Sem janela, silencioso
 """
 import json
+import os
+import pathlib
 import sys
-import time
 import urllib.request
 from datetime import datetime
 
 # ── Config ────────────────────────────────────────────────────────────────────
 VPS_HEALTH_URL  = "http://76.13.100.67:9090/health"
 VPS_METRICS_URL = "http://76.13.100.67:9090/metrics"
-OBSIDIAN_URL    = "https://127.0.0.1:27124"
-OBSIDIAN_KEY    = "b9ac93d39dcf02ad9cb7f550e7e2fabc45b48f275cf447f31a9408db624b8a5f"
 TIMEOUT         = 5
+
+# Vault local — escrita direta no arquivo (evita bug de template duplicado da REST API)
+_SCRIPT_DIR = pathlib.Path(__file__).parent
+VAULT_DIR   = _SCRIPT_DIR.parent / "daily-notes"
 
 DRY_RUN = "--dry-run" in sys.argv
 
@@ -63,29 +66,16 @@ def _fetch_metrics() -> dict[str, float]:
     return result
 
 
-def _obsidian_append(markdown: str) -> bool:
-    """Append markdown na daily note via Obsidian Local REST API."""
-    import ssl
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-
-    data = markdown.encode()
-    req = urllib.request.Request(
-        f"{OBSIDIAN_URL}/periodic/daily/",
-        data=data,
-        method="PATCH",
-        headers={
-            "Authorization": f"Bearer {OBSIDIAN_KEY}",
-            "Content-Type": "text/markdown",
-            "Heading": "",
-        },
-    )
+def _write_to_daily(markdown: str) -> bool:
+    """Append markdown diretamente na daily note (evita bug de template duplicado da REST API)."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    path = VAULT_DIR / f"{today}.md"
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT, context=ctx) as r:
-            return r.status in (200, 204)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(markdown)
+        return True
     except Exception as e:
-        print(f"[ERROR] Obsidian append: {e}", file=sys.stderr)
+        print(f"[ERROR] Write daily note {path}: {e}", file=sys.stderr)
         return False
 
 
@@ -149,11 +139,11 @@ def main():
         return
 
     print("[vps-to-obsidian] Escrevendo na daily note do Obsidian...")
-    ok = _obsidian_append(note)
+    ok = _write_to_daily(note)
     if ok:
         print("[vps-to-obsidian] ✅ Daily note atualizada.")
     else:
-        print("[vps-to-obsidian] ❌ Falha ao escrever no Obsidian. Obsidian está aberto?")
+        print("[vps-to-obsidian] ❌ Falha ao escrever na daily note. Verifique se daily-notes/ existe.")
         sys.exit(1)
 
 
