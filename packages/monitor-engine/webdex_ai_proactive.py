@@ -7,7 +7,8 @@ Triggers:
   post_cycle_nudge  → após ciclo 21h: insight personalizado p/ traders ativos com perfil
   inactivity_nudge  → traders inativos >3 dias com ciclos recentes positivos
 
-Rate limit: 1 mensagem proativa por user por 24h
+Rate limit: 1 mensagem proativa por user por 24h (cooldown 24h via config table)
+            + rate limit granular por feature 'proactive' via webdex_ai (Story 23.2)
 Config key: proactive_{chat_id}_last_ts (epoch inteiro)
 """
 from __future__ import annotations
@@ -37,6 +38,18 @@ try:
     _BOT_ENABLED = True
 except ImportError:
     _BOT_ENABLED = False
+
+# ── Rate limit granular por feature (Story 23.2) — soft import ───────────────
+try:
+    from webdex_ai import (
+        _check_rate_limit as _ai_check_rate_limit,
+        _increment_rate_limit as _ai_increment_rate_limit,
+    )
+    _GRANULAR_RATE_LIMIT_ENABLED = True
+except ImportError:
+    _ai_check_rate_limit = None       # type: ignore
+    _ai_increment_rate_limit = None   # type: ignore
+    _GRANULAR_RATE_LIMIT_ENABLED = False
 
 # ── LLM (OpenRouter) ──────────────────────────────────────────────────────────
 try:
@@ -245,6 +258,17 @@ def post_cycle_nudge(cycle_data: dict) -> None:
                     msg = _call_llm(profile_ctx, cycle_summary)
                     if not msg:
                         msg = _fallback_message(profile, cycle_data)
+
+                    # Story 23.2 — verificar rate limit granular antes de enviar
+                    if _GRANULAR_RATE_LIMIT_ENABLED:
+                        _allowed, _, _ = _ai_check_rate_limit(chat_id, 'proactive')
+                        if not _allowed:
+                            logger.debug(
+                                "[proactive] Rate limit granular atingido para chat_id=%s — skip",
+                                chat_id,
+                            )
+                            continue
+                        _ai_increment_rate_limit(chat_id, 'proactive')
 
                     # Enviar via Telegram
                     send_html(chat_id, msg)

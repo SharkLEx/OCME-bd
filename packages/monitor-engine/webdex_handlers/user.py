@@ -73,6 +73,20 @@ except ImportError:
     _profile_ctx = None  # type: ignore[assignment]
     _VISION_PROFILE_ENABLED = False
 
+# Story 23.2 — Rate limit granular por feature (soft import — graceful degradation)
+try:
+    from webdex_ai import (
+        _check_rate_limit as _ai_check_rate_limit,
+        _increment_rate_limit as _ai_increment_rate_limit,
+        _format_rate_limit_message as _ai_format_rate_limit_msg,
+    )
+    _GRANULAR_RATE_LIMIT_ENABLED = True
+except ImportError:
+    _ai_check_rate_limit = None       # type: ignore[assignment]
+    _ai_increment_rate_limit = None   # type: ignore[assignment]
+    _ai_format_rate_limit_msg = None  # type: ignore[assignment]
+    _GRANULAR_RATE_LIMIT_ENABLED = False
+
 # Image Engine (FLUX + PIL + GLM-OCR) — soft import
 try:
     from webdex_image_engine import (
@@ -3476,7 +3490,19 @@ def img_gen_step(m):
         )
         return
 
-    # Rate limit
+    # Rate limit granular por feature (Story 23.2)
+    if _GRANULAR_RATE_LIMIT_ENABLED:
+        _allowed, _remaining, _reset_in = _ai_check_rate_limit(chat_id, 'image_gen')
+        if not _allowed:
+            bot.send_message(
+                chat_id,
+                _ai_format_rate_limit_msg('image_gen', _remaining, _reset_in),
+                parse_mode="HTML",
+                reply_markup=main_kb(chat_id),
+            )
+            return
+
+    # Rate limit de cooldown anti-flood por segundos (mantido)
     remaining = _img_throttle(chat_id)
     if remaining > 0:
         bot.send_message(
@@ -3517,6 +3543,10 @@ def img_gen_step(m):
         )
         return
 
+    # Incrementa rate limit granular após geração bem-sucedida (Story 23.2)
+    if _GRANULAR_RATE_LIMIT_ENABLED:
+        _ai_increment_rate_limit(chat_id, 'image_gen')
+
     caption = f"🎨 <b>WEbdEX AI Art</b>\n<i>{prompt[:120]}</i>"
     try:
         bot.send_photo(
@@ -3553,7 +3583,18 @@ def vision_photo_handler(m):
     if not _VISION_AVAILABLE:
         return  # módulo indisponível — silencioso
 
-    # Rate limit
+    # Rate limit granular por feature (Story 23.2)
+    if _GRANULAR_RATE_LIMIT_ENABLED:
+        _allowed, _remaining, _reset_in = _ai_check_rate_limit(chat_id, 'vision')
+        if not _allowed:
+            bot.send_message(
+                chat_id,
+                _ai_format_rate_limit_msg('vision', _remaining, _reset_in),
+                parse_mode="HTML",
+            )
+            return
+
+    # Rate limit de cooldown (anti-flood por segundos — mantido)
     now = time.time()
     with _vision_rate_lock:
         last = _vision_rate_cache.get(chat_id, 0.0)
@@ -3617,6 +3658,10 @@ def vision_photo_handler(m):
             reply_markup=main_kb(chat_id),
         )
         return
+
+    # Incrementa rate limit granular após análise bem-sucedida (Story 23.2)
+    if _GRANULAR_RATE_LIMIT_ENABLED:
+        _ai_increment_rate_limit(chat_id, 'vision')
 
     bot.send_message(
         chat_id,

@@ -7,13 +7,26 @@ from __future__ import annotations
 import os
 import time
 import json
+import threading
 from datetime import datetime, timedelta
 from collections import deque
 
-# Rate limit IA: max mensagens por janela de tempo
-_ia_rate_limit: dict = {}
-_IA_RATE_MAX    = 10    # máx msgs por janela
-_IA_RATE_WINDOW = 3600  # janela em segundos (1h)
+# ==============================================================================
+# Story 23.2 — Rate limit granular por feature (substitui rate limit global)
+# ==============================================================================
+
+# Limites por feature (msgs por janela de 1h deslizante)
+_IA_RATE_LIMITS: dict[str, int] = {
+    'chat':       8,
+    'vision':     3,
+    'image_gen':  2,
+    'proactive':  1,
+}
+_IA_RATE_WINDOW = 3600  # janela deslizante em segundos (1h)
+
+# Estado em memória: { chat_id: { feature: {'count': int, 'window_start': float} } }
+_ia_rate_state: dict = {}
+_ia_rate_lock = threading.Lock()
 
 import requests
 
@@ -74,11 +87,169 @@ except ImportError:
     profile_touch = None          # type: ignore[assignment]
     logger.warning("[ai] bdZinho Individual Profile: módulo não encontrado")
 
+# ── Story 23.1 — Vault Embeddings (soft import — graceful degradation) ───────
+try:
+    from webdex_ai_vault_embeddings import (
+        semantic_search as _vault_semantic_search,
+        is_embeddings_available as _vault_embeddings_available,
+    )
+    _VAULT_EMBEDDINGS_ENABLED = True
+    logger.info("[ai] Vault Embeddings (busca semântica): ATIVO")
+except ImportError:
+    _vault_semantic_search = None       # type: ignore[assignment]
+    _vault_embeddings_available = None  # type: ignore[assignment]
+    _VAULT_EMBEDDINGS_ENABLED = False
+    logger.warning("[ai] Vault Embeddings: módulo não encontrado — usando fulltext")
+
 # ==============================================================================
 # ⚙️ CONFIG
 # ==============================================================================
 AI_MODEL      = OPENAI_MODEL  # usa o modelo configurado no .env (OpenRouter ou OpenAI)
 AI_MEMORY_MAX = 12
+
+# ==============================================================================
+# ⏱️ RATE LIMIT GRANULAR — Story 23.2
+# ==============================================================================
+_RL_CONFIG_PREFIX = "rl_"  # prefixo no SQLite config: rl_{chat_id}_{feature}
+
+
+def _load_rate_state_from_db() -> None:
+    """Carrega estado de rate limit do SQLite na inicialização."""
+    try:
+        from webdex_db import conn, DB_LOCK
+        with DB_LOCK:
+            rows = conn.execute(
+                "SELECT chave, valor FROM config WHERE chave LIKE ?",
+                (f"{_RL_CONFIG_PREFIX}%",),
+            ).fetchall()
+        for chave, valor in rows:
+            # chave = rl_{chat_id}_{feature}
+            suffix = chave[len(_RL_CONFIG_PREFIX):]
+            # feature pode conter underscore (image_gen) — split por último '_'
+            # mas chat_id é numérico, então split por primeiro '_' após prefix
+            # formato: rl_<chat_id>_<feature>  → split maxsplit=1 no suffix
+            parts = suffix.split("_", 1)
+            if len(parts) != 2:
+                continue
+            chat_id_str, feature = parts
+            if not chat_id_str.lstrip("-").isdigit():
+                continue
+            chat_id = int(chat_id_str)
+            try:
+                state = json.loads(valor)
+                if "count" in state and "window_start" in state:
+                    with _ia_rate_lock:
+                        _ia_rate_state.setdefault(chat_id, {})[feature] = {
+                            "count":        int(state["count"]),
+                            "window_start": float(state["window_start"]),
+                        }
+            except (json.JSONDecodeError, KeyError, ValueError):
+                pass
+    except Exception as e:
+        logger.warning("[rate_limit] Falha ao carregar estado do DB: %s", e)
+
+
+def _save_rate_state_to_db(chat_id: int, feature: str) -> None:
+    """Persiste estado de rate limit no SQLite (tabela config)."""
+    try:
+        with _ia_rate_lock:
+            state = _ia_rate_state.get(chat_id, {}).get(feature)
+        if state is None:
+            return
+        key = f"{_RL_CONFIG_PREFIX}{chat_id}_{feature}"
+        set_config(key, json.dumps({"count": state["count"], "window_start": state["window_start"]}))
+    except Exception as e:
+        logger.warning("[rate_limit] Falha ao salvar estado no DB (chat_id=%s, feature=%s): %s", chat_id, feature, e)
+
+
+def _check_rate_limit(chat_id: int, feature: str) -> tuple[bool, int, int]:
+    """
+    Verifica se chat_id pode usar a feature.
+
+    Returns:
+        (allowed: bool, remaining: int, reset_in_seconds: int)
+
+    Regras:
+    - Admin bypass: sempre (True, limit, 0)
+    - Janela expirada: reset, retorna (True, limit-1, nova_expiração)
+    - count < limit: (True, limit-count-1, reset_in)
+    - count >= limit: (False, 0, reset_in)
+    """
+    from webdex_config import ADMIN_USER_IDS
+    limit = _IA_RATE_LIMITS.get(feature, 10)
+
+    # Admin bypass
+    if int(chat_id) in ADMIN_USER_IDS:
+        return (True, limit, 0)
+
+    now = time.time()
+    with _ia_rate_lock:
+        user_state = _ia_rate_state.setdefault(int(chat_id), {})
+        feat_state = user_state.get(feature)
+
+        if feat_state is None:
+            # Primeira vez — inicializar
+            user_state[feature] = {"count": 0, "window_start": now}
+            feat_state = user_state[feature]
+
+        window_start = feat_state["window_start"]
+        count = feat_state["count"]
+        elapsed = now - window_start
+
+        if elapsed >= _IA_RATE_WINDOW:
+            # Janela expirada — resetar
+            user_state[feature] = {"count": 0, "window_start": now}
+            feat_state = user_state[feature]
+            count = 0
+            window_start = now
+
+        reset_in = max(0, int(_IA_RATE_WINDOW - (now - window_start)))
+
+        if count >= limit:
+            return (False, 0, reset_in)
+        else:
+            return (True, limit - count - 1, reset_in)
+
+
+def _increment_rate_limit(chat_id: int, feature: str) -> None:
+    """Incrementa contador de uso e persiste no DB."""
+    now = time.time()
+    with _ia_rate_lock:
+        user_state = _ia_rate_state.setdefault(int(chat_id), {})
+        feat_state = user_state.get(feature)
+
+        if feat_state is None:
+            user_state[feature] = {"count": 1, "window_start": now}
+        else:
+            elapsed = now - feat_state["window_start"]
+            if elapsed >= _IA_RATE_WINDOW:
+                # Janela expirada — novo ciclo
+                user_state[feature] = {"count": 1, "window_start": now}
+            else:
+                feat_state["count"] += 1
+
+    _save_rate_state_to_db(int(chat_id), feature)
+
+
+def _format_rate_limit_message(feature: str, remaining: int, reset_in: int) -> str:
+    """Mensagem de bloqueio específica por feature."""
+    feature_names = {
+        'chat':      'conversas com IA',
+        'vision':    'análises de imagem',
+        'image_gen': 'gerações de imagem',
+        'proactive': 'mensagens proativas',
+    }
+    minutes = max(1, reset_in // 60)
+    name = feature_names.get(feature, feature)
+    limit = _IA_RATE_LIMITS.get(feature, 10)
+    return (
+        f"⏱️ Você atingiu o limite de {name} hoje ({limit}/{limit}). "
+        f"Tente novamente em {minutes} min."
+    )
+
+
+# Carrega estado persistido na inicialização do módulo
+_load_rate_state_from_db()
 
 # ==============================================================================
 # 🧠 MEMORY — PostgreSQL (Story 12.1) com fallback para deque (legado)
@@ -1288,6 +1459,96 @@ def _get_knowledge_context() -> str:
 
 
 # ==============================================================================
+# Story 23.1 — VAULT SEARCH (semântica com fallback fulltext)
+# ==============================================================================
+
+def buscar_vault(query: str, top_k: int = 3) -> str:
+    """
+    Busca no vault Obsidian do bdZinho com fallback gracioso.
+
+    Estratégia:
+      1. Se Vault Embeddings disponível → semantic_search (cosine similarity)
+      2. Se indisponível → fulltext grep simples nas notas do vault
+
+    Retorna string formatada para injeção no system prompt, ou string vazia
+    se nenhuma nota relevante encontrada.
+
+    Threshold:
+      Se max_similarity < SIMILARITY_THRESHOLD, a resposta incluirá o disclaimer
+      "não tenho certeza sobre isso" para que o bdZinho transmita incerteza.
+    """
+    from pathlib import Path as _Path
+    import os as _os
+
+    vault_path = _Path(_os.getenv("VAULT_LOCAL_PATH", "/app/vault"))
+
+    # ── Tentativa 1: busca semântica via embeddings ───────────────────────────
+    if _VAULT_EMBEDDINGS_ENABLED and _vault_semantic_search is not None:
+        try:
+            results = _vault_semantic_search(query, top_k=top_k)
+            if results:
+                parts: list[str] = []
+                low_confidence_flag = False
+                for r in results:
+                    if r.get("low_confidence"):
+                        low_confidence_flag = True
+                    # Incluir apenas notas que tenham alguma relevância (score > 0.3)
+                    if r["score"] > 0.30:
+                        note_name = _Path(r["note_path"]).stem
+                        parts.append(
+                            f"[VAULT:{note_name} | score={r['score']:.2f}]\n"
+                            f"{r['content'][:800].strip()}"
+                        )
+                if parts:
+                    prefix = (
+                        "\n\n━━━ VAULT bdZinho (busca semântica) ━━━\n"
+                        + "\n\n".join(parts)
+                        + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    )
+                    if low_confidence_flag:
+                        prefix += "\n⚠️ [baixa confiança — não tenho certeza sobre isso]\n"
+                    return prefix
+        except Exception as e:
+            logger.debug("[ai] buscar_vault semântica falhou: %s — fallback fulltext", e)
+
+    # ── Tentativa 2: fulltext grep simples ───────────────────────────────────
+    if not vault_path.exists():
+        return ""
+
+    keywords = [w.lower() for w in query.split() if len(w) > 3]
+    if not keywords:
+        return ""
+
+    hits: list[str] = []
+    try:
+        for note_path in vault_path.rglob("*.md"):
+            try:
+                text = note_path.read_text(encoding="utf-8")
+                text_lower = text.lower()
+                if any(kw in text_lower for kw in keywords):
+                    note_name = note_path.stem
+                    hits.append(
+                        f"[VAULT:{note_name}]\n{text[:600].strip()}"
+                    )
+                    if len(hits) >= top_k:
+                        break
+            except Exception:
+                continue
+    except Exception as e:
+        logger.debug("[ai] buscar_vault fulltext falhou: %s", e)
+        return ""
+
+    if not hits:
+        return ""
+
+    return (
+        "\n\n━━━ VAULT bdZinho (fulltext) ━━━\n"
+        + "\n\n".join(hits)
+        + "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    )
+
+
+# ==============================================================================
 # 🧠 BRAIN PROMPT BUILDER
 # ==============================================================================
 
@@ -1809,14 +2070,12 @@ def preventive_hint(text: str) -> str:
 # ==============================================================================
 
 def handle_ai_message_extended(chat_id, text: str, extra_raw=None, mode: str = None) -> str:
-    # Rate limit: max _IA_RATE_MAX msgs por _IA_RATE_WINDOW segundos
-    _now = time.time()
+    # Story 23.2 — Rate limit granular por feature
     _cid = int(chat_id)
-    _ts  = [t for t in _ia_rate_limit.get(_cid, []) if _now - t < _IA_RATE_WINDOW]
-    if len(_ts) >= _IA_RATE_MAX:
-        return "⏳ Você atingiu o limite de 10 perguntas por hora. Tente novamente em breve."
-    _ts.append(_now)
-    _ia_rate_limit[_cid] = _ts
+    allowed, remaining, reset_in = _check_rate_limit(_cid, 'chat')
+    if not allowed:
+        return _format_rate_limit_message('chat', remaining, reset_in)
+    _increment_rate_limit(_cid, 'chat')
 
     # Preventive layer
     hint = preventive_hint(text)
