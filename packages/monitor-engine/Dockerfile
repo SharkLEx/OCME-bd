@@ -1,7 +1,6 @@
 # ==============================================================================
 # Dockerfile — OCME bd Monitor Engine (WEbdEX)
 # Multi-stage: build otimizado + runtime Python 3.12 slim
-# Story 7.7 — @devops
 # ==============================================================================
 
 # ── Stage 1: Build ─────────────────────────────────────────────────────────────
@@ -36,71 +35,32 @@ ENV PYTHONUTF8=1
 # Diretório de dados persistentes (DB + logs)
 RUN mkdir -p /app/data /app/logs && chmod 777 /app/data /app/logs
 
-# ── Monolito WEbdEX (produção atual) ────────────────────────────────────────
-COPY monitor-engine/webdex_config.py \
-     monitor-engine/webdex_db.py \
-     monitor-engine/webdex_chain.py \
-     monitor-engine/webdex_monitor.py \
-     monitor-engine/webdex_workers.py \
-     monitor-engine/webdex_bot_core.py \
-     monitor-engine/webdex_main.py \
-     monitor-engine/webdex_ai.py \
-     monitor-engine/webdex_observability.py \
-     monitor-engine/webdex_anomaly.py \
-     monitor-engine/webdex_milestones.py \
-     monitor-engine/webdex_discord_sync.py \
-     monitor-engine/webdex_discord_animate.py \
-     monitor-engine/webdex_onchain_notify.py \
-     monitor-engine/webdex_swapbook_notify.py \
-     monitor-engine/webdex_network_notify.py \
-     monitor-engine/webdex_creatomate.py \
-     monitor-engine/subscription_worker.py \
-     monitor-engine/notification_engine.py \
-     monitor-engine/protocol_context.py \
-     monitor-engine/webdex_tools.py \
-     monitor-engine/creatomate_worker.py \
-     monitor-engine/metrics_worker.py \
-     monitor-engine/webdex_ai_memory.py \
-     monitor-engine/webdex_v4_monitor.py \
-     monitor-engine/webdex_ai_knowledge.py \
-     monitor-engine/webdex_ai_user_profile.py \
-     monitor-engine/webdex_ai_content.py \
-     monitor-engine/webdex_ai_cycle_visual.py \
-     monitor-engine/webdex_ai_digest.py \
-     monitor-engine/webdex_ai_image.py \
-     monitor-engine/webdex_ai_image_gen.py \
-     monitor-engine/webdex_ai_proactive.py \
-     monitor-engine/webdex_ai_vision.py \
-     monitor-engine/webdex_local_animate.py \
-     monitor-engine/webdex_vault_writer.py \
-     monitor-engine/webdex_ai_trainer.py \
-     monitor-engine/webdex_chain_health.py \
-     monitor-engine/webdex_deterministic_trainer.py \
-     ./
+# ── Root Python files (monolito + stubs + novos módulos) ────────────────────────
+COPY monitor-engine/*.py ./
 
-# Handlers do bot
+# ── Domain namespaces — Epic 7 (Stories 7.1-7.5) ──────────────────────────────
+COPY monitor-engine/ai/       ./ai/
+COPY monitor-engine/core/     ./core/
+COPY monitor-engine/monitors/ ./monitors/
+COPY monitor-engine/services/ ./services/
+COPY monitor-engine/workers/  ./workers/
+
+# ── Handlers do bot ────────────────────────────────────────────────────────────
 COPY monitor-engine/webdex_handlers/ ./webdex_handlers/
 
-# Scripts de teste e utilitários manuais (Story 15.3)
-COPY monitor-engine/scripts/ ./scripts/
-
-# ── Pacotes modulares (Epic 7) ──────────────────────────────────────────────
-COPY monitor-cli/   ./monitor_cli/
-COPY monitor-db/    ./monitor_db/
-COPY monitor-core/  ./monitor_core/
-COPY monitor-chain/ ./monitor_chain/
-COPY monitor-ai/    ./monitor_ai/
-COPY monitor-report/ ./monitor_report/
-COPY monitor-bot/   ./monitor_bot/
+# ── Scripts, contratos e migrations ───────────────────────────────────────────
+COPY monitor-engine/scripts/    ./scripts/
+COPY monitor-engine/contracts/  ./contracts/
+COPY monitor-engine/migrations/ ./migrations/
 
 # ── Variáveis de ambiente padrão ──────────────────────────────────────────────
 ENV DATA_DIR=/app/data
 ENV DB_PATH=/app/data/webdex_v5_final.db
 ENV OCME_DB_PATH=/app/data/webdex_v5_final.db
 
-# Health check: verifica DB SQLite
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD python -c "import sqlite3; sqlite3.connect('/app/data/webdex_v5_final.db').execute('SELECT 1'); print('OK')" || exit 1
+# Health check: porta Prometheus /health
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:9090/health')" || exit 1
 
-# Entry point: monolito WEbdEX (bot + vigia)
+# Entry point
 CMD ["python", "webdex_main.py"]
