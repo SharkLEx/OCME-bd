@@ -38,7 +38,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
-          source: "packages/monitor-engine/*.py,packages/monitor-engine/requirements.txt"
+          # Story 7.1-7.5: includes root .py files + all domain subdirs (ai/, core/, monitors/, services/, workers/)
+          source: "packages/monitor-engine/*.py,packages/monitor-engine/requirements.txt,packages/monitor-engine/ai/**,packages/monitor-engine/core/**,packages/monitor-engine/monitors/**,packages/monitor-engine/services/**,packages/monitor-engine/workers/**"
           target: "/opt/ocme-monitor/packages/monitor-engine/"
           strip_components: 2   # removes packages/monitor-engine/ prefix
           overwrite: true
