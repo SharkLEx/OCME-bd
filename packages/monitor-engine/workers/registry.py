@@ -83,6 +83,14 @@ try:
 except ImportError:
     logger.warning("[workers.registry] vault_embeddings_worker: não disponível")
 
+# Story 13.1 — Dashboard API Worker (Epic 13 — Dashboard Externo)
+try:
+    from webdex_dashboard_api import dashboard_api_worker
+    THREAD_REGISTRY["dashboard_api_worker"] = dashboard_api_worker
+    logger.info("[workers.registry] dashboard_api_worker: ATIVO (127.0.0.1:8765)")
+except ImportError:
+    logger.warning("[workers.registry] dashboard_api_worker: fastapi/uvicorn não instalados — API não iniciada")
+
 
 def register_worker(name: str, target: Callable) -> None:
     """Registra um worker adicional no registry (uso pelo Epic 14 e futuros epics)."""
