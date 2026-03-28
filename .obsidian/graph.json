@@ -8,95 +8,156 @@
   "collapse-color-groups": false,
   "colorGroups": [
     {
+      "query": "path:framework/agents/Morpheus",
+      "color": { "a": 1, "rgb": 16097803 }
+    },
+    {
+      "query": "path:framework/agents/Smith",
+      "color": { "a": 1, "rgb": 14427686 }
+    },
+    {
+      "query": "path:framework/agents/Craft",
+      "color": { "a": 1, "rgb": 9741240 }
+    },
+    {
+      "query": "path:framework/agents/Neo",
+      "color": { "a": 1, "rgb": 2450411 }
+    },
+    {
+      "query": "path:framework/agents/Oracle",
+      "color": { "a": 1, "rgb": 561586 }
+    },
+    {
+      "query": "path:framework/agents/Aria",
+      "color": { "a": 1, "rgb": 959977 }
+    },
+    {
+      "query": "path:framework/agents/Operator",
+      "color": { "a": 1, "rgb": 1982639 }
+    },
+    {
+      "query": "path:framework/agents/Morgan",
+      "color": { "a": 1, "rgb": 6514417 }
+    },
+    {
+      "query": "path:framework/agents/Keymaker",
+      "color": { "a": 1, "rgb": 2244595 }
+    },
+    {
+      "query": "path:framework/agents/Niobe",
+      "color": { "a": 1, "rgb": 9684159 }
+    },
+    {
+      "query": "path:framework/agents/Tank",
+      "color": { "a": 1, "rgb": 4017042 }
+    },
+    {
+      "query": "path:framework/agents/Sati",
+      "color": { "a": 1, "rgb": 8141549 }
+    },
+    {
+      "query": "path:framework/agents/Atlas",
+      "color": { "a": 1, "rgb": 165063 }
+    },
+    {
+      "query": "path:framework/agents/Lock",
+      "color": { "a": 1, "rgb": 12458077 }
+    },
+    {
+      "query": "path:framework/agents/Mouse",
+      "color": { "a": 1, "rgb": 15485081 }
+    },
+    {
+      "query": "path:framework/agents/Seraph",
+      "color": { "a": 1, "rgb": 16007006 }
+    },
+    {
+      "query": "path:framework/agents/Persephone",
+      "color": { "a": 1, "rgb": 12592851 }
+    },
+    {
+      "query": "path:framework/agents/Sparks",
+      "color": { "a": 1, "rgb": 16020150 }
+    },
+    {
+      "query": "path:framework/agents/Cypher",
+      "color": { "a": 1, "rgb": 10424889 }
+    },
+    {
+      "query": "path:framework/agents/Ghost",
+      "color": { "a": 1, "rgb": 16478597 }
+    },
+    {
+      "query": "path:framework/agents/Mifune",
+      "color": { "a": 1, "rgb": 1096065 }
+    },
+    {
+      "query": "path:framework/agents/Hamann",
+      "color": { "a": 1, "rgb": 14251782 }
+    },
+    {
+      "query": "path:framework/agents/Merovingian",
+      "color": { "a": 1, "rgb": 15357964 }
+    },
+    {
+      "query": "path:framework/agents/Kamala",
+      "color": { "a": 1, "rgb": 8266446 }
+    },
+    {
+      "query": "path:framework/agents/Bugs",
+      "color": { "a": 1, "rgb": 7153881 }
+    },
+    {
+      "query": "path:framework/workflows",
+      "color": { "a": 1, "rgb": 440020 }
+    },
+    {
+      "query": "path:framework/squads",
+      "color": { "a": 1, "rgb": 5066826 }
+    },
+    {
       "query": "tag:moc",
-      "color": {
-        "a": 1,
-        "rgb": 16096779
-      }
+      "color": { "a": 1, "rgb": 6358374 }
     },
     {
       "query": "path:knowledge/bdzinho",
-      "color": {
-        "a": 1,
-        "rgb": 16450705
-      }
+      "color": { "a": 1, "rgb": 16450705 }
     },
     {
       "query": "path:knowledge/webdex OR path:knowledge/ocme",
-      "color": {
-        "a": 1,
-        "rgb": 8141549
-      }
+      "color": { "a": 1, "rgb": 8141549 }
     },
     {
       "query": "path:knowledge/blockchain",
-      "color": {
-        "a": 1,
-        "rgb": 3900150
-      }
+      "color": { "a": 1, "rgb": 3900150 }
     },
     {
       "query": "path:knowledge/defi",
-      "color": {
-        "a": 1,
-        "rgb": 2278750
-      }
+      "color": { "a": 1, "rgb": 2278750 }
     },
     {
       "query": "path:knowledge/dev OR path:knowledge/tech OR path:knowledge/solidity-dev",
-      "color": {
-        "a": 1,
-        "rgb": 440020
-      }
+      "color": { "a": 1, "rgb": 440020 }
     },
     {
       "query": "path:knowledge/business",
-      "color": {
-        "a": 1,
-        "rgb": 11817737
-      }
+      "color": { "a": 1, "rgb": 11817737 }
     },
     {
       "query": "path:knowledge/market-intelligence",
-      "color": {
-        "a": 1,
-        "rgb": 1357990
-      }
+      "color": { "a": 1, "rgb": 1357990 }
     },
     {
       "query": "path:knowledge/marketing",
-      "color": {
-        "a": 1,
-        "rgb": 15680580
-      }
+      "color": { "a": 1, "rgb": 15680580 }
     },
     {
       "query": "path:knowledge/brand OR path:knowledge/flows",
-      "color": {
-        "a": 1,
-        "rgb": 15485081
-      }
+      "color": { "a": 1, "rgb": 15485081 }
     },
     {
       "query": "path:daily-notes",
-      "color": {
-        "a": 1,
-        "rgb": 7040639
-      }
-    },
-    {
-      "query": "path:agents",
-      "color": {
-        "a": 1,
-        "rgb": 5025872
-      }
-    },
-    {
-      "query": "path:squads",
-      "color": {
-        "a": 1,
-        "rgb": 57062
-      }
+      "color": { "a": 1, "rgb": 7040639 }
     }
   ],
   "collapse-display": false,
@@ -109,6 +170,6 @@
   "repelStrength": 14,
   "linkStrength": 0.8,
   "linkDistance": 180,
-  "scale": 0.021528718442430272,
+  "scale": 0.021528718442430185,
   "close": false
 }

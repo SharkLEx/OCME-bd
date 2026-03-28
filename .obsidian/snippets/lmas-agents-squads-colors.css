@@ -1,0 +1,298 @@
+/* ============================================================
+   LMAS — Agentes & Squads: Cores por Domínio, Conexão e Ação
+   ============================================================
+   Sistema de cores correlacionado às personas por:
+     • Domínio (matiz/hue)
+     • Grau de Conexão (saturação — mais central = mais vivo)
+     • Nível de Ação (espessura da borda — exclusivo = 6px)
+   ============================================================
+   Ativa em: Settings → Appearance → CSS Snippets
+   ============================================================ */
+
+/* ══════════════════════════════════════════════════════════
+   PALETA MESTRE — Variáveis por persona
+   ══════════════════════════════════════════════════════════ */
+:root {
+  /* ── SISTEMA / UNIVERSAL ── alto grau de conexão → cores fortes */
+  --morpheus:        #F59E0B;   /* Gold — Oráculo Universal, conecta TUDO */
+  --morpheus-bg:     rgba(245,158,11,0.10);
+  --smith:           #DC2626;   /* Vermelho Adversarial — verifica TUDO */
+  --smith-bg:        rgba(220,38,38,0.10);
+  --craft:           #94A3B8;   /* Prata — Squad Creator, suporte */
+  --craft-bg:        rgba(148,163,184,0.08);
+
+  /* ── SOFTWARE DEV — espectro azul, graduado por conexão ── */
+  /* Neo: implementa TODAS as stories → azul mais saturado */
+  --neo:             #2563EB;
+  --neo-bg:          rgba(37,99,235,0.10);
+  /* Oracle: gate de TODAS as stories → azul médio-alto */
+  --oracle:          #0891B2;
+  --oracle-bg:       rgba(8,145,178,0.10);
+  /* Aria: todas as decisões arquiteturais → azul aço */
+  --aria:            #0EA5E9;
+  --aria-bg:         rgba(14,165,233,0.09);
+  /* Operator: git push EXCLUSIVO → azul escuro/autoridade */
+  --operator:        #1E40AF;
+  --operator-bg:     rgba(30,64,175,0.10);
+  /* Morgan (Trinity): especificações e épicos → índigo */
+  --morgan:          #4F46E5;
+  --morgan-bg:       rgba(79,70,229,0.09);
+  /* Keymaker: valida TODAS as stories → azul médio */
+  --keymaker:        #3B82F6;
+  --keymaker-bg:     rgba(59,130,246,0.09);
+  /* Niobe: cria stories, scrum master → azul suave */
+  --niobe:           #60A5FA;
+  --niobe-bg:        rgba(96,165,250,0.08);
+  /* Tank: data engineer, DB ops → ciano */
+  --tank:            #0E7490;
+  --tank-bg:         rgba(14,116,144,0.09);
+  /* Sati: design system, UX → violeta-azul */
+  --sati:            #7C3AED;
+  --sati-bg:         rgba(124,58,237,0.09);
+  /* Atlas: pesquisa e análise → azul claro */
+  --atlas:           #0284C7;
+  --atlas-bg:        rgba(2,132,199,0.08);
+
+  /* ── MARKETING — espectro rosa, graduado por autoridade ── */
+  /* Lock: aprova TODO conteúdo → rosa escuro/autoridade */
+  --lock:            #BE185D;
+  --lock-bg:         rgba(190,24,93,0.10);
+  /* Mouse: escreve TODO copy → pink vibrante */
+  --mouse:           #EC4899;
+  --mouse-bg:        rgba(236,72,153,0.10);
+  /* Seraph: gate de qualidade de conteúdo → rosa médio */
+  --seraph:          #F43F5E;
+  --seraph-bg:       rgba(244,63,94,0.09);
+  /* Persephone: estratégia editorial → magenta */
+  --persephone:      #C026D3;
+  --persephone-bg:   rgba(192,38,211,0.09);
+  /* Sparks: publicação EXCLUSIVA → rosa claro */
+  --sparks:          #E879F9;
+  --sparks-bg:       rgba(232,121,249,0.08);
+  /* Cypher: SEO audits → bordô */
+  --cypher:          #9F1239;
+  --cypher-bg:       rgba(159,18,57,0.09);
+  /* Ghost: pesquisa de mercado → rosa pastel */
+  --ghost:           #FB7185;
+  --ghost-bg:        rgba(251,113,133,0.08);
+
+  /* ── BUSINESS — espectro verde/âmbar ── */
+  /* Mifune: estratégia de negócio core → esmeralda */
+  --mifune:          #059669;
+  --mifune-bg:       rgba(5,150,105,0.10);
+  /* Merovingian: tráfego pago EXCLUSIVO → laranja âmbar */
+  --merovingian:     #EA580C;
+  --merovingian-bg:  rgba(234,88,12,0.10);
+  /* Hamann: conselho estratégico → âmbar */
+  --hamann:          #D97706;
+  --hamann-bg:       rgba(217,119,6,0.09);
+
+  /* ── BRAND — espectro violeta ── */
+  /* Kamala: identidade de marca → roxo profundo */
+  --kamala:          #7E22CE;
+  --kamala-bg:       rgba(126,34,206,0.10);
+  /* Bugs: narrativa e storytelling → violeta */
+  --bugs:            #6D28D9;
+  --bugs-bg:         rgba(109,40,217,0.09);
+
+  /* ── SQUADS E WORKFLOWS ── */
+  --squad:           #4F46E5;
+  --squad-bg:        rgba(79,70,229,0.10);
+  --workflow:        #0D9488;
+  --workflow-bg:     rgba(13,148,136,0.09);
+  --moc:             #475569;
+  --moc-bg:          rgba(71,85,105,0.06);
+
+  /* ── KNOWLEDGE BASE ── */
+  --kb-l1:  #0ea5e9;
+  --kb-l1-bg: rgba(14,165,233,0.07);
+  --kb-l2:  #8b5cf6;
+  --kb-l2-bg: rgba(139,92,246,0.07);
+  --kb-l3:  #f59e0b;
+  --kb-l3-bg: rgba(245,158,11,0.07);
+  --kb-l4:  #10b981;
+  --kb-l4-bg: rgba(16,185,129,0.07);
+}
+
+/* ══════════════════════════════════════════════════════════
+   FILE EXPLORER — cores individuais por persona
+   Gradiente de saturação: hub central → mais intenso
+   ══════════════════════════════════════════════════════════ */
+
+/* ── SISTEMA ── */
+.nav-file-title[data-path*="Morpheus"]    { color: var(--morpheus)    !important; font-weight: 700; }
+.nav-file-title[data-path*="Smith"]       { color: var(--smith)       !important; font-weight: 700; }
+.nav-file-title[data-path*="Craft"]       { color: var(--craft)       !important; font-weight: 600; }
+
+/* ── SOFTWARE DEV — azul graduado ── */
+.nav-file-title[data-path*="Neo"]         { color: var(--neo)         !important; font-weight: 700; }
+.nav-file-title[data-path*="Oracle"]      { color: var(--oracle)      !important; font-weight: 700; }
+.nav-file-title[data-path*="Aria"]        { color: var(--aria)        !important; font-weight: 600; }
+.nav-file-title[data-path*="Operator"]    { color: var(--operator)    !important; font-weight: 700; }
+.nav-file-title[data-path*="Morgan"]      { color: var(--morgan)      !important; font-weight: 600; }
+.nav-file-title[data-path*="Keymaker"]    { color: var(--keymaker)    !important; font-weight: 600; }
+.nav-file-title[data-path*="Niobe"]       { color: var(--niobe)       !important; }
+.nav-file-title[data-path*="Tank"]        { color: var(--tank)        !important; }
+.nav-file-title[data-path*="Sati"]        { color: var(--sati)        !important; }
+.nav-file-title[data-path*="Atlas"]       { color: var(--atlas)       !important; }
+
+/* ── MARKETING — rosa graduado ── */
+.nav-file-title[data-path*="Lock"]        { color: var(--lock)        !important; font-weight: 700; }
+.nav-file-title[data-path*="Mouse"]       { color: var(--mouse)       !important; font-weight: 700; }
+.nav-file-title[data-path*="Seraph"]      { color: var(--seraph)      !important; font-weight: 600; }
+.nav-file-title[data-path*="Persephone"]  { color: var(--persephone)  !important; font-weight: 600; }
+.nav-file-title[data-path*="Sparks"]      { color: var(--sparks)      !important; }
+.nav-file-title[data-path*="Cypher"]      { color: var(--cypher)      !important; }
+.nav-file-title[data-path*="Ghost"]       { color: var(--ghost)       !important; }
+
+/* ── BUSINESS — verde/âmbar ── */
+.nav-file-title[data-path*="Mifune"]      { color: var(--mifune)      !important; font-weight: 700; }
+.nav-file-title[data-path*="Merovingian"] { color: var(--merovingian) !important; font-weight: 700; }
+.nav-file-title[data-path*="Hamann"]      { color: var(--hamann)      !important; font-weight: 600; }
+
+/* ── BRAND — violeta ── */
+.nav-file-title[data-path*="Kamala"]      { color: var(--kamala)      !important; font-weight: 700; }
+.nav-file-title[data-path*="Bugs"]        { color: var(--bugs)        !important; font-weight: 600; }
+
+/* ── MOC + Squads + Workflows ── */
+.nav-file-title[data-path*="MOC"]         { color: var(--moc)         !important; font-weight: 700; font-style: italic; }
+.nav-folder-title[data-path*="squads"],
+.nav-file-title[data-path*="Squad"],
+.nav-file-title[data-path*="Claude Code Mastery"] { color: var(--squad) !important; font-weight: 600; }
+.nav-folder-title[data-path*="workflows"],
+.nav-file-title[data-path*="workflows"]   { color: var(--workflow)    !important; font-weight: 600; }
+
+/* Pastas dos agentes por domínio */
+.nav-folder-title[data-path$="agents"],
+.nav-folder-title[data-path*="/agents"]   { color: var(--neo) !important; font-weight: 700; }
+.nav-folder-title[data-path*="framework"] { color: var(--morpheus) !important; font-weight: 700; }
+
+
+/* ══════════════════════════════════════════════════════════
+   NOTE VIEW — cores por domínio (cssclasses no frontmatter)
+   Espessura da borda = grau de ação/autoridade
+   ══════════════════════════════════════════════════════════ */
+
+/* ── FRAMEWORK / SISTEMA — Hub máximo (6px) ── */
+.agent-framework .inline-title,
+.agent-universal .inline-title  { color: var(--morpheus) !important; }
+.agent-framework .markdown-preview-view,
+.agent-universal .markdown-preview-view {
+  border-left: 6px solid var(--morpheus);
+  padding-left: 16px;
+}
+.agent-framework .metadata-container,
+.agent-universal .metadata-container {
+  background: var(--morpheus-bg);
+  border-radius: 6px; padding: 8px;
+}
+.agent-framework table thead tr,
+.agent-universal table thead tr { background: rgba(245,158,11,0.14); }
+
+/* ── SOFTWARE DEV — Hub alto (5px) ── */
+.agent-software-dev .inline-title { color: var(--neo) !important; }
+.agent-software-dev .markdown-preview-view {
+  border-left: 5px solid var(--neo);
+  padding-left: 16px;
+}
+.agent-software-dev .metadata-container {
+  background: var(--neo-bg);
+  border-radius: 6px; padding: 8px;
+}
+.agent-software-dev table thead tr { background: rgba(37,99,235,0.12); }
+
+/* ── MARKETING — Hub médio-alto (5px) ── */
+.agent-marketing .inline-title { color: var(--lock) !important; }
+.agent-marketing .markdown-preview-view {
+  border-left: 5px solid var(--mouse);
+  padding-left: 16px;
+}
+.agent-marketing .metadata-container {
+  background: var(--mouse-bg);
+  border-radius: 6px; padding: 8px;
+}
+.agent-marketing table thead tr { background: rgba(236,72,153,0.12); }
+
+/* ── BUSINESS — Hub médio (4px) ── */
+.agent-business .inline-title { color: var(--mifune) !important; }
+.agent-business .markdown-preview-view {
+  border-left: 4px solid var(--merovingian);
+  padding-left: 15px;
+}
+.agent-business .metadata-container {
+  background: var(--mifune-bg);
+  border-radius: 6px; padding: 8px;
+}
+.agent-business table thead tr { background: rgba(5,150,105,0.12); }
+
+/* ── BRAND — Hub médio (4px) ── */
+.agent-brand .inline-title { color: var(--kamala) !important; }
+.agent-brand .markdown-preview-view {
+  border-left: 4px solid var(--kamala);
+  padding-left: 15px;
+}
+.agent-brand .metadata-container {
+  background: var(--kamala-bg);
+  border-radius: 6px; padding: 8px;
+}
+.agent-brand table thead tr { background: rgba(126,34,206,0.12); }
+
+/* ── SQUAD — (4px índigo) ── */
+.squad-note .inline-title { color: var(--squad) !important; }
+.squad-note .markdown-preview-view {
+  border-left: 4px solid var(--squad);
+  padding-left: 15px;
+}
+.squad-note .metadata-container {
+  background: var(--squad-bg);
+  border-radius: 6px; padding: 8px;
+}
+.squad-note table thead tr { background: rgba(79,70,229,0.12); }
+
+/* ── WORKFLOW — (3px teal) ── */
+.workflow-note .inline-title { color: var(--workflow) !important; }
+.workflow-note .markdown-preview-view {
+  border-left: 3px solid var(--workflow);
+  padding-left: 14px;
+}
+.workflow-note .metadata-container {
+  background: var(--workflow-bg);
+  border-radius: 6px; padding: 8px;
+}
+
+/* ── MOC — (3px slate) ── */
+.moc-note .inline-title { color: var(--moc) !important; }
+.moc-note .markdown-preview-view {
+  border-left: 3px solid var(--moc);
+  padding-left: 14px;
+}
+.moc-note .metadata-container {
+  background: var(--moc-bg);
+  border-radius: 6px; padding: 8px;
+}
+
+
+/* ══════════════════════════════════════════════════════════
+   TAGS — cores por domínio e tipo
+   ══════════════════════════════════════════════════════════ */
+.tag[href="#agent"]            { background: var(--neo-bg)       !important; color: var(--neo)       !important; border: 1px solid var(--neo)       !important; }
+.tag[href="#squad"]            { background: var(--squad-bg)     !important; color: var(--squad)     !important; border: 1px solid var(--squad)     !important; }
+.tag[href="#moc"]              { background: var(--moc-bg)       !important; color: var(--moc)       !important; border: 1px solid var(--moc)       !important; }
+.tag[href="#workflow"]         { background: var(--workflow-bg)  !important; color: var(--workflow)  !important; border: 1px solid var(--workflow)  !important; }
+.tag[href="#lmas"]             { background: var(--morpheus-bg)  !important; color: var(--morpheus)  !important; border: 1px solid var(--morpheus)  !important; }
+.tag[href*="#software-dev"]    { background: var(--neo-bg)       !important; color: var(--neo)       !important; border: 1px solid var(--neo)       !important; }
+.tag[href*="#marketing"]       { background: var(--mouse-bg)     !important; color: var(--mouse)     !important; border: 1px solid var(--mouse)     !important; }
+.tag[href*="#business"]        { background: var(--mifune-bg)    !important; color: var(--mifune)    !important; border: 1px solid var(--mifune)    !important; }
+.tag[href*="#brand"]           { background: var(--kamala-bg)    !important; color: var(--kamala)    !important; border: 1px solid var(--kamala)    !important; }
+.tag[href*="#project/lmas"]    { background: rgba(245,158,11,0.10) !important; color: var(--morpheus) !important; border: 1px solid var(--morpheus) !important; }
+
+
+/* ══════════════════════════════════════════════════════════
+   KNOWLEDGE BASE — Cores por Camada
+   ══════════════════════════════════════════════════════════ */
+.nav-file-title[data-path*="knowledge/blockchain"] { color: var(--kb-l1) !important; border-left: 2px solid var(--kb-l1); padding-left: 6px; }
+.nav-file-title[data-path*="knowledge/defi"]        { color: var(--kb-l2) !important; border-left: 2px solid var(--kb-l2); padding-left: 6px; }
+.nav-file-title[data-path*="knowledge/webdex"]      { color: var(--kb-l3) !important; border-left: 2px solid var(--kb-l3); padding-left: 6px; }
+.nav-file-title[data-path*="knowledge/ocme"]        { color: var(--kb-l4) !important; border-left: 2px solid var(--kb-l4); padding-left: 6px; }
+.nav-file-title[data-path*="MOC-Blockchain"]        { color: var(--kb-l2) !important; font-weight: 700; }
+.nav-folder-title[data-path*="knowledge"]           { color: var(--kb-l3) !important; font-weight: 600; }
