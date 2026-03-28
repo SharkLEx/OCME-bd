@@ -6,6 +6,7 @@ persona: Kamala
 domain: brand
 cssclasses:
   - agent-brand
+  - agent-kamala
 tags:
   - agent
   - brand

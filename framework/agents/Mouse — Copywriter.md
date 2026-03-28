@@ -6,6 +6,7 @@ persona: Mouse
 domain: marketing
 cssclasses:
   - agent-marketing
+  - agent-mouse
 tags:
   - agent
   - marketing

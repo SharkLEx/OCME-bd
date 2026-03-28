@@ -6,6 +6,7 @@ persona: Morpheus
 domain: framework
 cssclasses:
   - agent-framework
+  - agent-morpheus
 tags:
   - agent
   - framework

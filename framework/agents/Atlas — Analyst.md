@@ -6,6 +6,7 @@ persona: Atlas
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-atlas
 tags:
   - agent
   - software-dev

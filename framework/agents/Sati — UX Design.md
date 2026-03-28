@@ -6,6 +6,7 @@ persona: Sati
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-sati
 tags:
   - agent
   - software-dev

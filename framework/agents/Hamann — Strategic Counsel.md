@@ -6,6 +6,7 @@ persona: Hamann
 domain: business
 cssclasses:
   - agent-business
+  - agent-hamann
 tags:
   - agent
   - business

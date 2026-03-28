@@ -6,6 +6,7 @@ persona: Mifune
 domain: business
 cssclasses:
   - agent-business
+  - agent-mifune
 tags:
   - agent
   - business

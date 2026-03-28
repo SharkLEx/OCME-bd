@@ -6,6 +6,7 @@ persona: Smith
 domain: universal
 cssclasses:
   - agent-framework
+  - agent-smith
 tags:
   - agent
   - universal

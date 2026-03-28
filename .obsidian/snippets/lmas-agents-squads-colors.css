@@ -169,6 +169,116 @@
 
 
 /* ══════════════════════════════════════════════════════════
+   NOTE VIEW — cores INDIVIDUAIS por persona
+   Cada agente tem sua cor única no inline-title e borda
+   ══════════════════════════════════════════════════════════ */
+
+/* ── SISTEMA ── */
+.agent-morpheus .inline-title { color: var(--morpheus) !important; text-shadow: 0 0 20px rgba(245,158,11,0.4); }
+.agent-morpheus .markdown-preview-view { border-left: 6px solid var(--morpheus); padding-left: 16px; }
+.agent-morpheus .metadata-container    { background: var(--morpheus-bg); border-radius: 6px; padding: 8px; }
+
+.agent-smith .inline-title { color: var(--smith) !important; text-shadow: 0 0 20px rgba(220,38,38,0.4); }
+.agent-smith .markdown-preview-view { border-left: 6px solid var(--smith); padding-left: 16px; }
+.agent-smith .metadata-container    { background: var(--smith-bg); border-radius: 6px; padding: 8px; }
+
+.agent-craft .inline-title { color: var(--craft) !important; }
+.agent-craft .markdown-preview-view { border-left: 4px solid var(--craft); padding-left: 14px; }
+.agent-craft .metadata-container    { background: var(--craft-bg); border-radius: 6px; padding: 8px; }
+
+/* ── SOFTWARE DEV — azul graduado ── */
+.agent-neo .inline-title { color: var(--neo) !important; font-weight: 700; }
+.agent-neo .markdown-preview-view { border-left: 5px solid var(--neo); padding-left: 16px; }
+.agent-neo .metadata-container    { background: var(--neo-bg); border-radius: 6px; padding: 8px; }
+
+.agent-oracle .inline-title { color: var(--oracle) !important; font-weight: 700; }
+.agent-oracle .markdown-preview-view { border-left: 5px solid var(--oracle); padding-left: 16px; }
+.agent-oracle .metadata-container    { background: var(--oracle-bg); border-radius: 6px; padding: 8px; }
+
+.agent-aria .inline-title { color: var(--aria) !important; }
+.agent-aria .markdown-preview-view { border-left: 4px solid var(--aria); padding-left: 15px; }
+.agent-aria .metadata-container    { background: var(--aria-bg); border-radius: 6px; padding: 8px; }
+
+.agent-operator .inline-title { color: var(--operator) !important; font-weight: 700; }
+.agent-operator .markdown-preview-view { border-left: 5px solid var(--operator); padding-left: 16px; }
+.agent-operator .metadata-container    { background: var(--operator-bg); border-radius: 6px; padding: 8px; }
+
+.agent-morgan .inline-title { color: var(--morgan) !important; }
+.agent-morgan .markdown-preview-view { border-left: 4px solid var(--morgan); padding-left: 15px; }
+.agent-morgan .metadata-container    { background: var(--morgan-bg); border-radius: 6px; padding: 8px; }
+
+.agent-keymaker .inline-title { color: var(--keymaker) !important; }
+.agent-keymaker .markdown-preview-view { border-left: 4px solid var(--keymaker); padding-left: 15px; }
+.agent-keymaker .metadata-container    { background: var(--keymaker-bg); border-radius: 6px; padding: 8px; }
+
+.agent-niobe .inline-title { color: var(--niobe) !important; }
+.agent-niobe .markdown-preview-view { border-left: 3px solid var(--niobe); padding-left: 14px; }
+.agent-niobe .metadata-container    { background: var(--niobe-bg); border-radius: 6px; padding: 8px; }
+
+.agent-tank .inline-title { color: var(--tank) !important; }
+.agent-tank .markdown-preview-view { border-left: 3px solid var(--tank); padding-left: 14px; }
+.agent-tank .metadata-container    { background: var(--tank-bg); border-radius: 6px; padding: 8px; }
+
+.agent-sati .inline-title { color: var(--sati) !important; }
+.agent-sati .markdown-preview-view { border-left: 4px solid var(--sati); padding-left: 15px; }
+.agent-sati .metadata-container    { background: var(--sati-bg); border-radius: 6px; padding: 8px; }
+
+.agent-atlas .inline-title { color: var(--atlas) !important; }
+.agent-atlas .markdown-preview-view { border-left: 3px solid var(--atlas); padding-left: 14px; }
+.agent-atlas .metadata-container    { background: var(--atlas-bg); border-radius: 6px; padding: 8px; }
+
+/* ── MARKETING ── */
+.agent-lock .inline-title { color: var(--lock) !important; font-weight: 700; }
+.agent-lock .markdown-preview-view { border-left: 5px solid var(--lock); padding-left: 16px; }
+.agent-lock .metadata-container    { background: var(--lock-bg); border-radius: 6px; padding: 8px; }
+
+.agent-mouse .inline-title { color: var(--mouse) !important; font-weight: 700; }
+.agent-mouse .markdown-preview-view { border-left: 5px solid var(--mouse); padding-left: 16px; }
+.agent-mouse .metadata-container    { background: var(--mouse-bg); border-radius: 6px; padding: 8px; }
+
+.agent-seraph .inline-title { color: var(--seraph) !important; }
+.agent-seraph .markdown-preview-view { border-left: 4px solid var(--seraph); padding-left: 15px; }
+.agent-seraph .metadata-container    { background: var(--seraph-bg); border-radius: 6px; padding: 8px; }
+
+.agent-persephone .inline-title { color: var(--persephone) !important; }
+.agent-persephone .markdown-preview-view { border-left: 4px solid var(--persephone); padding-left: 15px; }
+.agent-persephone .metadata-container    { background: var(--persephone-bg); border-radius: 6px; padding: 8px; }
+
+.agent-sparks .inline-title { color: var(--sparks) !important; }
+.agent-sparks .markdown-preview-view { border-left: 3px solid var(--sparks); padding-left: 14px; }
+.agent-sparks .metadata-container    { background: var(--sparks-bg); border-radius: 6px; padding: 8px; }
+
+.agent-cypher .inline-title { color: var(--cypher) !important; }
+.agent-cypher .markdown-preview-view { border-left: 3px solid var(--cypher); padding-left: 14px; }
+.agent-cypher .metadata-container    { background: var(--cypher-bg); border-radius: 6px; padding: 8px; }
+
+.agent-ghost .inline-title { color: var(--ghost) !important; }
+.agent-ghost .markdown-preview-view { border-left: 3px solid var(--ghost); padding-left: 14px; }
+.agent-ghost .metadata-container    { background: var(--ghost-bg); border-radius: 6px; padding: 8px; }
+
+/* ── BUSINESS ── */
+.agent-mifune .inline-title { color: var(--mifune) !important; font-weight: 700; }
+.agent-mifune .markdown-preview-view { border-left: 5px solid var(--mifune); padding-left: 16px; }
+.agent-mifune .metadata-container    { background: var(--mifune-bg); border-radius: 6px; padding: 8px; }
+
+.agent-merovingian .inline-title { color: var(--merovingian) !important; font-weight: 700; }
+.agent-merovingian .markdown-preview-view { border-left: 5px solid var(--merovingian); padding-left: 16px; }
+.agent-merovingian .metadata-container    { background: var(--merovingian-bg); border-radius: 6px; padding: 8px; }
+
+.agent-hamann .inline-title { color: var(--hamann) !important; }
+.agent-hamann .markdown-preview-view { border-left: 4px solid var(--hamann); padding-left: 15px; }
+.agent-hamann .metadata-container    { background: var(--hamann-bg); border-radius: 6px; padding: 8px; }
+
+/* ── BRAND ── */
+.agent-kamala .inline-title { color: var(--kamala) !important; font-weight: 700; }
+.agent-kamala .markdown-preview-view { border-left: 5px solid var(--kamala); padding-left: 16px; }
+.agent-kamala .metadata-container    { background: var(--kamala-bg); border-radius: 6px; padding: 8px; }
+
+.agent-bugs .inline-title { color: var(--bugs) !important; }
+.agent-bugs .markdown-preview-view { border-left: 4px solid var(--bugs); padding-left: 15px; }
+.agent-bugs .metadata-container    { background: var(--bugs-bg); border-radius: 6px; padding: 8px; }
+
+/* ══════════════════════════════════════════════════════════
    NOTE VIEW — cores por domínio (cssclasses no frontmatter)
    Espessura da borda = grau de ação/autoridade
    ══════════════════════════════════════════════════════════ */

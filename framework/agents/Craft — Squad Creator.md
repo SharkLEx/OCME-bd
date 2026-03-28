@@ -6,6 +6,7 @@ persona: Craft
 domain: framework
 cssclasses:
   - agent-framework
+  - agent-craft
 tags:
   - agent
   - framework

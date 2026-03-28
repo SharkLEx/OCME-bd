@@ -49,7 +49,7 @@
     },
     {
       "query": "path:framework/agents/Tank",
-      "color": { "a": 1, "rgb": 4017042 }
+      "color": { "a": 1, "rgb": 947344 }
     },
     {
       "query": "path:framework/agents/Sati",
@@ -109,7 +109,7 @@
     },
     {
       "query": "path:framework/workflows",
-      "color": { "a": 1, "rgb": 440020 }
+      "color": { "a": 1, "rgb": 898952 }
     },
     {
       "query": "path:framework/squads",

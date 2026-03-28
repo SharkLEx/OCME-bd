@@ -6,6 +6,7 @@ persona: Keymaker
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-keymaker
 tags:
   - agent
   - software-dev

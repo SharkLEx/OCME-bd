@@ -6,6 +6,7 @@ persona: Trinity
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-morgan
 tags:
   - agent
   - software-dev

@@ -6,6 +6,7 @@ persona: Neo
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-neo
 tags:
   - agent
   - software-dev

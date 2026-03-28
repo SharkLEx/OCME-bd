@@ -6,6 +6,7 @@ persona: Operator
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-operator
 tags:
   - agent
   - software-dev

@@ -6,6 +6,7 @@ persona: Bugs
 domain: brand
 cssclasses:
   - agent-brand
+  - agent-bugs
 tags:
   - agent
   - brand

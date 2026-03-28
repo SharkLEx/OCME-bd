@@ -6,6 +6,7 @@ persona: Sparks
 domain: marketing
 cssclasses:
   - agent-marketing
+  - agent-sparks
 tags:
   - agent
   - marketing

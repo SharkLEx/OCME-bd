@@ -6,6 +6,7 @@ persona: Aria
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-aria
 tags:
   - agent
   - software-dev

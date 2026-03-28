@@ -6,6 +6,7 @@ persona: Ghost
 domain: marketing
 cssclasses:
   - agent-marketing
+  - agent-ghost
 tags:
   - agent
   - marketing

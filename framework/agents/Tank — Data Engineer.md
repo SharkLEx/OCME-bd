@@ -6,6 +6,7 @@ persona: Tank
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-tank
 tags:
   - agent
   - software-dev

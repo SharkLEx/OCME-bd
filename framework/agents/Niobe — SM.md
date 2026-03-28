@@ -6,6 +6,7 @@ persona: River
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-niobe
 tags:
   - agent
   - software-dev

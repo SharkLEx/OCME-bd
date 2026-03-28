@@ -6,6 +6,7 @@ persona: Merovingian
 domain: business
 cssclasses:
   - agent-business
+  - agent-merovingian
 tags:
   - agent
   - business

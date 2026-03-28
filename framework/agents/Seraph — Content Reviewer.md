@@ -6,6 +6,7 @@ persona: Seraph
 domain: marketing
 cssclasses:
   - agent-marketing
+  - agent-seraph
 tags:
   - agent
   - marketing

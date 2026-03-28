@@ -6,6 +6,7 @@ persona: Cypher
 domain: marketing
 cssclasses:
   - agent-marketing
+  - agent-cypher
 tags:
   - agent
   - marketing

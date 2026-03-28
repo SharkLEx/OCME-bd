@@ -6,6 +6,7 @@ persona: Oracle
 domain: software-dev
 cssclasses:
   - agent-software-dev
+  - agent-oracle
 tags:
   - agent
   - software-dev

@@ -6,6 +6,7 @@ persona: Lock
 domain: marketing
 cssclasses:
   - agent-marketing
+  - agent-lock
 tags:
   - agent
   - marketing

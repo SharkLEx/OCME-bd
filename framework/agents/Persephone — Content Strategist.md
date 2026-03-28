@@ -6,6 +6,7 @@ persona: Persephone
 domain: marketing
 cssclasses:
   - agent-marketing
+  - agent-persephone
 tags:
   - agent
   - marketing
