@@ -1,389 +1,288 @@
 /* ============================================================
    LMAS — Agentes & Squads: Cores por Domínio, Conexão e Ação
+   v2.0 — seletores corrigidos para Obsidian v1.x
    ============================================================
    Sistema de cores correlacionado às personas por:
      • Domínio (matiz/hue)
      • Grau de Conexão (saturação — mais central = mais vivo)
      • Nível de Ação (espessura da borda — exclusivo = 6px)
-   ============================================================
-   Ativa em: Settings → Appearance → CSS Snippets
    ============================================================ */
 
 /* ══════════════════════════════════════════════════════════
    PALETA MESTRE — Variáveis por persona
    ══════════════════════════════════════════════════════════ */
 :root {
-  /* ── SISTEMA / UNIVERSAL ── alto grau de conexão → cores fortes */
-  --morpheus:        #F59E0B;   /* Gold — Oráculo Universal, conecta TUDO */
+  /* ── SISTEMA / UNIVERSAL ── */
+  --morpheus:        #F59E0B;
   --morpheus-bg:     rgba(245,158,11,0.10);
-  --smith:           #DC2626;   /* Vermelho Adversarial — verifica TUDO */
+  --smith:           #DC2626;
   --smith-bg:        rgba(220,38,38,0.10);
-  --craft:           #94A3B8;   /* Prata — Squad Creator, suporte */
+  --craft:           #94A3B8;
   --craft-bg:        rgba(148,163,184,0.08);
 
-  /* ── SOFTWARE DEV — espectro azul, graduado por conexão ── */
-  /* Neo: implementa TODAS as stories → azul mais saturado */
-  --neo:             #2563EB;
+  /* ── SOFTWARE DEV — azul graduado por conexão ── */
+  --neo:             #2563EB;   /* mais central → azul forte */
   --neo-bg:          rgba(37,99,235,0.10);
-  /* Oracle: gate de TODAS as stories → azul médio-alto */
   --oracle:          #0891B2;
   --oracle-bg:       rgba(8,145,178,0.10);
-  /* Aria: todas as decisões arquiteturais → azul aço */
   --aria:            #0EA5E9;
   --aria-bg:         rgba(14,165,233,0.09);
-  /* Operator: git push EXCLUSIVO → azul escuro/autoridade */
   --operator:        #1E40AF;
   --operator-bg:     rgba(30,64,175,0.10);
-  /* Morgan (Trinity): especificações e épicos → índigo */
   --morgan:          #4F46E5;
   --morgan-bg:       rgba(79,70,229,0.09);
-  /* Keymaker: valida TODAS as stories → azul médio */
   --keymaker:        #3B82F6;
   --keymaker-bg:     rgba(59,130,246,0.09);
-  /* Niobe: cria stories, scrum master → azul suave */
   --niobe:           #60A5FA;
   --niobe-bg:        rgba(96,165,250,0.08);
-  /* Tank: data engineer, DB ops → ciano */
   --tank:            #0E7490;
   --tank-bg:         rgba(14,116,144,0.09);
-  /* Sati: design system, UX → violeta-azul */
   --sati:            #7C3AED;
   --sati-bg:         rgba(124,58,237,0.09);
-  /* Atlas: pesquisa e análise → azul claro */
   --atlas:           #0284C7;
   --atlas-bg:        rgba(2,132,199,0.08);
 
-  /* ── MARKETING — espectro rosa, graduado por autoridade ── */
-  /* Lock: aprova TODO conteúdo → rosa escuro/autoridade */
+  /* ── MARKETING — rosa graduado por autoridade ── */
   --lock:            #BE185D;
   --lock-bg:         rgba(190,24,93,0.10);
-  /* Mouse: escreve TODO copy → pink vibrante */
   --mouse:           #EC4899;
   --mouse-bg:        rgba(236,72,153,0.10);
-  /* Seraph: gate de qualidade de conteúdo → rosa médio */
   --seraph:          #F43F5E;
   --seraph-bg:       rgba(244,63,94,0.09);
-  /* Persephone: estratégia editorial → magenta */
   --persephone:      #C026D3;
   --persephone-bg:   rgba(192,38,211,0.09);
-  /* Sparks: publicação EXCLUSIVA → rosa claro */
   --sparks:          #E879F9;
   --sparks-bg:       rgba(232,121,249,0.08);
-  /* Cypher: SEO audits → bordô */
   --cypher:          #9F1239;
   --cypher-bg:       rgba(159,18,57,0.09);
-  /* Ghost: pesquisa de mercado → rosa pastel */
   --ghost:           #FB7185;
   --ghost-bg:        rgba(251,113,133,0.08);
 
-  /* ── BUSINESS — espectro verde/âmbar ── */
-  /* Mifune: estratégia de negócio core → esmeralda */
+  /* ── BUSINESS ── */
   --mifune:          #059669;
   --mifune-bg:       rgba(5,150,105,0.10);
-  /* Merovingian: tráfego pago EXCLUSIVO → laranja âmbar */
   --merovingian:     #EA580C;
   --merovingian-bg:  rgba(234,88,12,0.10);
-  /* Hamann: conselho estratégico → âmbar */
   --hamann:          #D97706;
   --hamann-bg:       rgba(217,119,6,0.09);
 
-  /* ── BRAND — espectro violeta ── */
-  /* Kamala: identidade de marca → roxo profundo */
+  /* ── BRAND ── */
   --kamala:          #7E22CE;
   --kamala-bg:       rgba(126,34,206,0.10);
-  /* Bugs: narrativa e storytelling → violeta */
   --bugs:            #6D28D9;
   --bugs-bg:         rgba(109,40,217,0.09);
 
-  /* ── SQUADS E WORKFLOWS ── */
+  /* ── SQUADS / WORKFLOWS / MOC ── */
   --squad:           #4F46E5;
   --squad-bg:        rgba(79,70,229,0.10);
   --workflow:        #0D9488;
   --workflow-bg:     rgba(13,148,136,0.09);
   --moc:             #475569;
   --moc-bg:          rgba(71,85,105,0.06);
-
-  /* ── KNOWLEDGE BASE ── */
-  --kb-l1:  #0ea5e9;
-  --kb-l1-bg: rgba(14,165,233,0.07);
-  --kb-l2:  #8b5cf6;
-  --kb-l2-bg: rgba(139,92,246,0.07);
-  --kb-l3:  #f59e0b;
-  --kb-l3-bg: rgba(245,158,11,0.07);
-  --kb-l4:  #10b981;
-  --kb-l4-bg: rgba(16,185,129,0.07);
 }
 
 /* ══════════════════════════════════════════════════════════
-   FILE EXPLORER — cores individuais por persona
-   Gradiente de saturação: hub central → mais intenso
+   FILE EXPLORER — cores individuais (selector correto Obsidian v1)
+   Target: .nav-file-title-content (o span interno com o texto)
    ══════════════════════════════════════════════════════════ */
 
 /* ── SISTEMA ── */
-.nav-file-title[data-path*="Morpheus"]    { color: var(--morpheus)    !important; font-weight: 700; }
-.nav-file-title[data-path*="Smith"]       { color: var(--smith)       !important; font-weight: 700; }
-.nav-file-title[data-path*="Craft"]       { color: var(--craft)       !important; font-weight: 600; }
+.nav-file-title[data-path*="Morpheus"] .nav-file-title-content    { color: var(--morpheus) !important; font-weight: 700; }
+.nav-file-title[data-path*="Smith"] .nav-file-title-content       { color: var(--smith) !important; font-weight: 700; }
+.nav-file-title[data-path*="Craft"] .nav-file-title-content       { color: var(--craft) !important; font-weight: 600; }
 
 /* ── SOFTWARE DEV — azul graduado ── */
-.nav-file-title[data-path*="Neo"]         { color: var(--neo)         !important; font-weight: 700; }
-.nav-file-title[data-path*="Oracle"]      { color: var(--oracle)      !important; font-weight: 700; }
-.nav-file-title[data-path*="Aria"]        { color: var(--aria)        !important; font-weight: 600; }
-.nav-file-title[data-path*="Operator"]    { color: var(--operator)    !important; font-weight: 700; }
-.nav-file-title[data-path*="Morgan"]      { color: var(--morgan)      !important; font-weight: 600; }
-.nav-file-title[data-path*="Keymaker"]    { color: var(--keymaker)    !important; font-weight: 600; }
-.nav-file-title[data-path*="Niobe"]       { color: var(--niobe)       !important; }
-.nav-file-title[data-path*="Tank"]        { color: var(--tank)        !important; }
-.nav-file-title[data-path*="Sati"]        { color: var(--sati)        !important; }
-.nav-file-title[data-path*="Atlas"]       { color: var(--atlas)       !important; }
+.nav-file-title[data-path*="Neo"] .nav-file-title-content         { color: var(--neo) !important; font-weight: 700; }
+.nav-file-title[data-path*="Oracle"] .nav-file-title-content      { color: var(--oracle) !important; font-weight: 700; }
+.nav-file-title[data-path*="Aria"] .nav-file-title-content        { color: var(--aria) !important; }
+.nav-file-title[data-path*="Operator"] .nav-file-title-content    { color: var(--operator) !important; font-weight: 700; }
+.nav-file-title[data-path*="Morgan"] .nav-file-title-content      { color: var(--morgan) !important; }
+.nav-file-title[data-path*="Keymaker"] .nav-file-title-content    { color: var(--keymaker) !important; }
+.nav-file-title[data-path*="Niobe"] .nav-file-title-content       { color: var(--niobe) !important; }
+.nav-file-title[data-path*="Tank"] .nav-file-title-content        { color: var(--tank) !important; }
+.nav-file-title[data-path*="Sati"] .nav-file-title-content        { color: var(--sati) !important; }
+.nav-file-title[data-path*="Atlas"] .nav-file-title-content       { color: var(--atlas) !important; }
 
 /* ── MARKETING — rosa graduado ── */
-.nav-file-title[data-path*="Lock"]        { color: var(--lock)        !important; font-weight: 700; }
-.nav-file-title[data-path*="Mouse"]       { color: var(--mouse)       !important; font-weight: 700; }
-.nav-file-title[data-path*="Seraph"]      { color: var(--seraph)      !important; font-weight: 600; }
-.nav-file-title[data-path*="Persephone"]  { color: var(--persephone)  !important; font-weight: 600; }
-.nav-file-title[data-path*="Sparks"]      { color: var(--sparks)      !important; }
-.nav-file-title[data-path*="Cypher"]      { color: var(--cypher)      !important; }
-.nav-file-title[data-path*="Ghost"]       { color: var(--ghost)       !important; }
+.nav-file-title[data-path*="Lock"] .nav-file-title-content        { color: var(--lock) !important; font-weight: 700; }
+.nav-file-title[data-path*="Mouse"] .nav-file-title-content       { color: var(--mouse) !important; font-weight: 700; }
+.nav-file-title[data-path*="Seraph"] .nav-file-title-content      { color: var(--seraph) !important; }
+.nav-file-title[data-path*="Persephone"] .nav-file-title-content  { color: var(--persephone) !important; }
+.nav-file-title[data-path*="Sparks"] .nav-file-title-content      { color: var(--sparks) !important; }
+.nav-file-title[data-path*="Cypher"] .nav-file-title-content      { color: var(--cypher) !important; }
+.nav-file-title[data-path*="Ghost"] .nav-file-title-content       { color: var(--ghost) !important; }
 
-/* ── BUSINESS — verde/âmbar ── */
-.nav-file-title[data-path*="Mifune"]      { color: var(--mifune)      !important; font-weight: 700; }
-.nav-file-title[data-path*="Merovingian"] { color: var(--merovingian) !important; font-weight: 700; }
-.nav-file-title[data-path*="Hamann"]      { color: var(--hamann)      !important; font-weight: 600; }
+/* ── BUSINESS ── */
+.nav-file-title[data-path*="Mifune"] .nav-file-title-content      { color: var(--mifune) !important; font-weight: 700; }
+.nav-file-title[data-path*="Merovingian"] .nav-file-title-content { color: var(--merovingian) !important; font-weight: 700; }
+.nav-file-title[data-path*="Hamann"] .nav-file-title-content      { color: var(--hamann) !important; }
 
-/* ── BRAND — violeta ── */
-.nav-file-title[data-path*="Kamala"]      { color: var(--kamala)      !important; font-weight: 700; }
-.nav-file-title[data-path*="Bugs"]        { color: var(--bugs)        !important; font-weight: 600; }
+/* ── BRAND ── */
+.nav-file-title[data-path*="Kamala"] .nav-file-title-content      { color: var(--kamala) !important; font-weight: 700; }
+.nav-file-title[data-path*="Bugs"] .nav-file-title-content        { color: var(--bugs) !important; }
 
-/* ── MOC + Squads + Workflows ── */
-.nav-file-title[data-path*="MOC"]         { color: var(--moc)         !important; font-weight: 700; font-style: italic; }
-.nav-folder-title[data-path*="squads"],
-.nav-file-title[data-path*="Squad"],
-.nav-file-title[data-path*="Claude Code Mastery"] { color: var(--squad) !important; font-weight: 600; }
-.nav-folder-title[data-path*="workflows"],
-.nav-file-title[data-path*="workflows"]   { color: var(--workflow)    !important; font-weight: 600; }
+/* ── PASTAS ── */
+.nav-folder-title[data-path*="framework/agents"] .nav-folder-title-content { color: var(--neo) !important; font-weight: 700; }
+.nav-folder-title[data-path*="framework/squads"] .nav-folder-title-content { color: var(--squad) !important; font-weight: 700; }
+.nav-folder-title[data-path*="framework/workflows"] .nav-folder-title-content { color: var(--workflow) !important; font-weight: 700; }
+.nav-folder-title[data-path*="framework"] .nav-folder-title-content { color: var(--morpheus) !important; font-weight: 700; }
 
-/* Pastas dos agentes por domínio */
-.nav-folder-title[data-path$="agents"],
-.nav-folder-title[data-path*="/agents"]   { color: var(--neo) !important; font-weight: 700; }
-.nav-folder-title[data-path*="framework"] { color: var(--morpheus) !important; font-weight: 700; }
+/* ── MOC + Squad files ── */
+.nav-file-title[data-path*="MOC"] .nav-file-title-content         { color: var(--moc) !important; font-weight: 700; font-style: italic; }
+.nav-file-title[data-path*="Squad"] .nav-file-title-content,
+.nav-file-title[data-path*="Claude Code Mastery"] .nav-file-title-content { color: var(--squad) !important; font-weight: 600; }
 
 
 /* ══════════════════════════════════════════════════════════
-   NOTE VIEW — cores INDIVIDUAIS por persona
-   Cada agente tem sua cor única no inline-title e borda
+   NOTE VIEW — cores individuais via cssclasses
+   Obsidian aplica cssclasses ao .workspace-leaf-content
    ══════════════════════════════════════════════════════════ */
 
-/* ── SISTEMA ── */
-.agent-morpheus .inline-title { color: var(--morpheus) !important; text-shadow: 0 0 20px rgba(245,158,11,0.4); }
-.agent-morpheus .markdown-preview-view { border-left: 6px solid var(--morpheus); padding-left: 16px; }
-.agent-morpheus .metadata-container    { background: var(--morpheus-bg); border-radius: 6px; padding: 8px; }
+/* ── SISTEMA ── borda 6px + glow no título ── */
+.agent-morpheus .inline-title { color: var(--morpheus) !important; text-shadow: 0 0 24px rgba(245,158,11,0.5); }
+.agent-morpheus .markdown-preview-view,
+.agent-morpheus .cm-editor     { border-left: 6px solid var(--morpheus) !important; padding-left: 16px; }
+.agent-morpheus .metadata-properties { background: var(--morpheus-bg); border-radius: 6px; }
 
-.agent-smith .inline-title { color: var(--smith) !important; text-shadow: 0 0 20px rgba(220,38,38,0.4); }
-.agent-smith .markdown-preview-view { border-left: 6px solid var(--smith); padding-left: 16px; }
-.agent-smith .metadata-container    { background: var(--smith-bg); border-radius: 6px; padding: 8px; }
+.agent-smith .inline-title { color: var(--smith) !important; text-shadow: 0 0 24px rgba(220,38,38,0.5); }
+.agent-smith .markdown-preview-view,
+.agent-smith .cm-editor     { border-left: 6px solid var(--smith) !important; padding-left: 16px; }
+.agent-smith .metadata-properties { background: var(--smith-bg); border-radius: 6px; }
 
 .agent-craft .inline-title { color: var(--craft) !important; }
-.agent-craft .markdown-preview-view { border-left: 4px solid var(--craft); padding-left: 14px; }
-.agent-craft .metadata-container    { background: var(--craft-bg); border-radius: 6px; padding: 8px; }
+.agent-craft .markdown-preview-view,
+.agent-craft .cm-editor     { border-left: 4px solid var(--craft) !important; padding-left: 14px; }
 
-/* ── SOFTWARE DEV — azul graduado ── */
+/* ── SOFTWARE DEV ── */
 .agent-neo .inline-title { color: var(--neo) !important; font-weight: 700; }
-.agent-neo .markdown-preview-view { border-left: 5px solid var(--neo); padding-left: 16px; }
-.agent-neo .metadata-container    { background: var(--neo-bg); border-radius: 6px; padding: 8px; }
+.agent-neo .markdown-preview-view,
+.agent-neo .cm-editor     { border-left: 5px solid var(--neo) !important; padding-left: 16px; }
+.agent-neo .metadata-properties { background: var(--neo-bg); border-radius: 6px; }
 
 .agent-oracle .inline-title { color: var(--oracle) !important; font-weight: 700; }
-.agent-oracle .markdown-preview-view { border-left: 5px solid var(--oracle); padding-left: 16px; }
-.agent-oracle .metadata-container    { background: var(--oracle-bg); border-radius: 6px; padding: 8px; }
+.agent-oracle .markdown-preview-view,
+.agent-oracle .cm-editor     { border-left: 5px solid var(--oracle) !important; padding-left: 16px; }
+.agent-oracle .metadata-properties { background: var(--oracle-bg); border-radius: 6px; }
 
 .agent-aria .inline-title { color: var(--aria) !important; }
-.agent-aria .markdown-preview-view { border-left: 4px solid var(--aria); padding-left: 15px; }
-.agent-aria .metadata-container    { background: var(--aria-bg); border-radius: 6px; padding: 8px; }
+.agent-aria .markdown-preview-view,
+.agent-aria .cm-editor     { border-left: 4px solid var(--aria) !important; padding-left: 15px; }
+.agent-aria .metadata-properties { background: var(--aria-bg); border-radius: 6px; }
 
 .agent-operator .inline-title { color: var(--operator) !important; font-weight: 700; }
-.agent-operator .markdown-preview-view { border-left: 5px solid var(--operator); padding-left: 16px; }
-.agent-operator .metadata-container    { background: var(--operator-bg); border-radius: 6px; padding: 8px; }
+.agent-operator .markdown-preview-view,
+.agent-operator .cm-editor     { border-left: 5px solid var(--operator) !important; padding-left: 16px; }
+.agent-operator .metadata-properties { background: var(--operator-bg); border-radius: 6px; }
 
 .agent-morgan .inline-title { color: var(--morgan) !important; }
-.agent-morgan .markdown-preview-view { border-left: 4px solid var(--morgan); padding-left: 15px; }
-.agent-morgan .metadata-container    { background: var(--morgan-bg); border-radius: 6px; padding: 8px; }
+.agent-morgan .markdown-preview-view,
+.agent-morgan .cm-editor     { border-left: 4px solid var(--morgan) !important; padding-left: 15px; }
+.agent-morgan .metadata-properties { background: var(--morgan-bg); border-radius: 6px; }
 
 .agent-keymaker .inline-title { color: var(--keymaker) !important; }
-.agent-keymaker .markdown-preview-view { border-left: 4px solid var(--keymaker); padding-left: 15px; }
-.agent-keymaker .metadata-container    { background: var(--keymaker-bg); border-radius: 6px; padding: 8px; }
+.agent-keymaker .markdown-preview-view,
+.agent-keymaker .cm-editor     { border-left: 4px solid var(--keymaker) !important; padding-left: 15px; }
+.agent-keymaker .metadata-properties { background: var(--keymaker-bg); border-radius: 6px; }
 
 .agent-niobe .inline-title { color: var(--niobe) !important; }
-.agent-niobe .markdown-preview-view { border-left: 3px solid var(--niobe); padding-left: 14px; }
-.agent-niobe .metadata-container    { background: var(--niobe-bg); border-radius: 6px; padding: 8px; }
+.agent-niobe .markdown-preview-view,
+.agent-niobe .cm-editor     { border-left: 3px solid var(--niobe) !important; padding-left: 14px; }
+.agent-niobe .metadata-properties { background: var(--niobe-bg); border-radius: 6px; }
 
 .agent-tank .inline-title { color: var(--tank) !important; }
-.agent-tank .markdown-preview-view { border-left: 3px solid var(--tank); padding-left: 14px; }
-.agent-tank .metadata-container    { background: var(--tank-bg); border-radius: 6px; padding: 8px; }
+.agent-tank .markdown-preview-view,
+.agent-tank .cm-editor     { border-left: 3px solid var(--tank) !important; padding-left: 14px; }
+.agent-tank .metadata-properties { background: var(--tank-bg); border-radius: 6px; }
 
 .agent-sati .inline-title { color: var(--sati) !important; }
-.agent-sati .markdown-preview-view { border-left: 4px solid var(--sati); padding-left: 15px; }
-.agent-sati .metadata-container    { background: var(--sati-bg); border-radius: 6px; padding: 8px; }
+.agent-sati .markdown-preview-view,
+.agent-sati .cm-editor     { border-left: 4px solid var(--sati) !important; padding-left: 15px; }
+.agent-sati .metadata-properties { background: var(--sati-bg); border-radius: 6px; }
 
 .agent-atlas .inline-title { color: var(--atlas) !important; }
-.agent-atlas .markdown-preview-view { border-left: 3px solid var(--atlas); padding-left: 14px; }
-.agent-atlas .metadata-container    { background: var(--atlas-bg); border-radius: 6px; padding: 8px; }
+.agent-atlas .markdown-preview-view,
+.agent-atlas .cm-editor     { border-left: 3px solid var(--atlas) !important; padding-left: 14px; }
+.agent-atlas .metadata-properties { background: var(--atlas-bg); border-radius: 6px; }
 
 /* ── MARKETING ── */
 .agent-lock .inline-title { color: var(--lock) !important; font-weight: 700; }
-.agent-lock .markdown-preview-view { border-left: 5px solid var(--lock); padding-left: 16px; }
-.agent-lock .metadata-container    { background: var(--lock-bg); border-radius: 6px; padding: 8px; }
+.agent-lock .markdown-preview-view,
+.agent-lock .cm-editor     { border-left: 5px solid var(--lock) !important; padding-left: 16px; }
+.agent-lock .metadata-properties { background: var(--lock-bg); border-radius: 6px; }
 
 .agent-mouse .inline-title { color: var(--mouse) !important; font-weight: 700; }
-.agent-mouse .markdown-preview-view { border-left: 5px solid var(--mouse); padding-left: 16px; }
-.agent-mouse .metadata-container    { background: var(--mouse-bg); border-radius: 6px; padding: 8px; }
+.agent-mouse .markdown-preview-view,
+.agent-mouse .cm-editor     { border-left: 5px solid var(--mouse) !important; padding-left: 16px; }
+.agent-mouse .metadata-properties { background: var(--mouse-bg); border-radius: 6px; }
 
 .agent-seraph .inline-title { color: var(--seraph) !important; }
-.agent-seraph .markdown-preview-view { border-left: 4px solid var(--seraph); padding-left: 15px; }
-.agent-seraph .metadata-container    { background: var(--seraph-bg); border-radius: 6px; padding: 8px; }
+.agent-seraph .markdown-preview-view,
+.agent-seraph .cm-editor     { border-left: 4px solid var(--seraph) !important; padding-left: 15px; }
+.agent-seraph .metadata-properties { background: var(--seraph-bg); border-radius: 6px; }
 
 .agent-persephone .inline-title { color: var(--persephone) !important; }
-.agent-persephone .markdown-preview-view { border-left: 4px solid var(--persephone); padding-left: 15px; }
-.agent-persephone .metadata-container    { background: var(--persephone-bg); border-radius: 6px; padding: 8px; }
+.agent-persephone .markdown-preview-view,
+.agent-persephone .cm-editor     { border-left: 4px solid var(--persephone) !important; padding-left: 15px; }
+.agent-persephone .metadata-properties { background: var(--persephone-bg); border-radius: 6px; }
 
 .agent-sparks .inline-title { color: var(--sparks) !important; }
-.agent-sparks .markdown-preview-view { border-left: 3px solid var(--sparks); padding-left: 14px; }
-.agent-sparks .metadata-container    { background: var(--sparks-bg); border-radius: 6px; padding: 8px; }
+.agent-sparks .markdown-preview-view,
+.agent-sparks .cm-editor     { border-left: 3px solid var(--sparks) !important; padding-left: 14px; }
+.agent-sparks .metadata-properties { background: var(--sparks-bg); border-radius: 6px; }
 
 .agent-cypher .inline-title { color: var(--cypher) !important; }
-.agent-cypher .markdown-preview-view { border-left: 3px solid var(--cypher); padding-left: 14px; }
-.agent-cypher .metadata-container    { background: var(--cypher-bg); border-radius: 6px; padding: 8px; }
+.agent-cypher .markdown-preview-view,
+.agent-cypher .cm-editor     { border-left: 3px solid var(--cypher) !important; padding-left: 14px; }
+.agent-cypher .metadata-properties { background: var(--cypher-bg); border-radius: 6px; }
 
 .agent-ghost .inline-title { color: var(--ghost) !important; }
-.agent-ghost .markdown-preview-view { border-left: 3px solid var(--ghost); padding-left: 14px; }
-.agent-ghost .metadata-container    { background: var(--ghost-bg); border-radius: 6px; padding: 8px; }
+.agent-ghost .markdown-preview-view,
+.agent-ghost .cm-editor     { border-left: 3px solid var(--ghost) !important; padding-left: 14px; }
+.agent-ghost .metadata-properties { background: var(--ghost-bg); border-radius: 6px; }
 
 /* ── BUSINESS ── */
 .agent-mifune .inline-title { color: var(--mifune) !important; font-weight: 700; }
-.agent-mifune .markdown-preview-view { border-left: 5px solid var(--mifune); padding-left: 16px; }
-.agent-mifune .metadata-container    { background: var(--mifune-bg); border-radius: 6px; padding: 8px; }
+.agent-mifune .markdown-preview-view,
+.agent-mifune .cm-editor     { border-left: 5px solid var(--mifune) !important; padding-left: 16px; }
+.agent-mifune .metadata-properties { background: var(--mifune-bg); border-radius: 6px; }
 
 .agent-merovingian .inline-title { color: var(--merovingian) !important; font-weight: 700; }
-.agent-merovingian .markdown-preview-view { border-left: 5px solid var(--merovingian); padding-left: 16px; }
-.agent-merovingian .metadata-container    { background: var(--merovingian-bg); border-radius: 6px; padding: 8px; }
+.agent-merovingian .markdown-preview-view,
+.agent-merovingian .cm-editor     { border-left: 5px solid var(--merovingian) !important; padding-left: 16px; }
+.agent-merovingian .metadata-properties { background: var(--merovingian-bg); border-radius: 6px; }
 
 .agent-hamann .inline-title { color: var(--hamann) !important; }
-.agent-hamann .markdown-preview-view { border-left: 4px solid var(--hamann); padding-left: 15px; }
-.agent-hamann .metadata-container    { background: var(--hamann-bg); border-radius: 6px; padding: 8px; }
+.agent-hamann .markdown-preview-view,
+.agent-hamann .cm-editor     { border-left: 4px solid var(--hamann) !important; padding-left: 15px; }
+.agent-hamann .metadata-properties { background: var(--hamann-bg); border-radius: 6px; }
 
 /* ── BRAND ── */
 .agent-kamala .inline-title { color: var(--kamala) !important; font-weight: 700; }
-.agent-kamala .markdown-preview-view { border-left: 5px solid var(--kamala); padding-left: 16px; }
-.agent-kamala .metadata-container    { background: var(--kamala-bg); border-radius: 6px; padding: 8px; }
+.agent-kamala .markdown-preview-view,
+.agent-kamala .cm-editor     { border-left: 5px solid var(--kamala) !important; padding-left: 16px; }
+.agent-kamala .metadata-properties { background: var(--kamala-bg); border-radius: 6px; }
 
 .agent-bugs .inline-title { color: var(--bugs) !important; }
-.agent-bugs .markdown-preview-view { border-left: 4px solid var(--bugs); padding-left: 15px; }
-.agent-bugs .metadata-container    { background: var(--bugs-bg); border-radius: 6px; padding: 8px; }
+.agent-bugs .markdown-preview-view,
+.agent-bugs .cm-editor     { border-left: 4px solid var(--bugs) !important; padding-left: 15px; }
+.agent-bugs .metadata-properties { background: var(--bugs-bg); border-radius: 6px; }
 
-/* ══════════════════════════════════════════════════════════
-   NOTE VIEW — cores por domínio (cssclasses no frontmatter)
-   Espessura da borda = grau de ação/autoridade
-   ══════════════════════════════════════════════════════════ */
-
-/* ── FRAMEWORK / SISTEMA — Hub máximo (6px) ── */
-.agent-framework .inline-title,
-.agent-universal .inline-title  { color: var(--morpheus) !important; }
-.agent-framework .markdown-preview-view,
-.agent-universal .markdown-preview-view {
-  border-left: 6px solid var(--morpheus);
-  padding-left: 16px;
-}
-.agent-framework .metadata-container,
-.agent-universal .metadata-container {
-  background: var(--morpheus-bg);
-  border-radius: 6px; padding: 8px;
-}
-.agent-framework table thead tr,
-.agent-universal table thead tr { background: rgba(245,158,11,0.14); }
-
-/* ── SOFTWARE DEV — Hub alto (5px) ── */
-.agent-software-dev .inline-title { color: var(--neo) !important; }
-.agent-software-dev .markdown-preview-view {
-  border-left: 5px solid var(--neo);
-  padding-left: 16px;
-}
-.agent-software-dev .metadata-container {
-  background: var(--neo-bg);
-  border-radius: 6px; padding: 8px;
-}
-.agent-software-dev table thead tr { background: rgba(37,99,235,0.12); }
-
-/* ── MARKETING — Hub médio-alto (5px) ── */
-.agent-marketing .inline-title { color: var(--lock) !important; }
-.agent-marketing .markdown-preview-view {
-  border-left: 5px solid var(--mouse);
-  padding-left: 16px;
-}
-.agent-marketing .metadata-container {
-  background: var(--mouse-bg);
-  border-radius: 6px; padding: 8px;
-}
-.agent-marketing table thead tr { background: rgba(236,72,153,0.12); }
-
-/* ── BUSINESS — Hub médio (4px) ── */
-.agent-business .inline-title { color: var(--mifune) !important; }
-.agent-business .markdown-preview-view {
-  border-left: 4px solid var(--merovingian);
-  padding-left: 15px;
-}
-.agent-business .metadata-container {
-  background: var(--mifune-bg);
-  border-radius: 6px; padding: 8px;
-}
-.agent-business table thead tr { background: rgba(5,150,105,0.12); }
-
-/* ── BRAND — Hub médio (4px) ── */
-.agent-brand .inline-title { color: var(--kamala) !important; }
-.agent-brand .markdown-preview-view {
-  border-left: 4px solid var(--kamala);
-  padding-left: 15px;
-}
-.agent-brand .metadata-container {
-  background: var(--kamala-bg);
-  border-radius: 6px; padding: 8px;
-}
-.agent-brand table thead tr { background: rgba(126,34,206,0.12); }
-
-/* ── SQUAD — (4px índigo) ── */
+/* ── SQUAD / WORKFLOW / MOC ── */
 .squad-note .inline-title { color: var(--squad) !important; }
-.squad-note .markdown-preview-view {
-  border-left: 4px solid var(--squad);
-  padding-left: 15px;
-}
-.squad-note .metadata-container {
-  background: var(--squad-bg);
-  border-radius: 6px; padding: 8px;
-}
-.squad-note table thead tr { background: rgba(79,70,229,0.12); }
+.squad-note .markdown-preview-view,
+.squad-note .cm-editor     { border-left: 4px solid var(--squad) !important; padding-left: 15px; }
 
-/* ── WORKFLOW — (3px teal) ── */
 .workflow-note .inline-title { color: var(--workflow) !important; }
-.workflow-note .markdown-preview-view {
-  border-left: 3px solid var(--workflow);
-  padding-left: 14px;
-}
-.workflow-note .metadata-container {
-  background: var(--workflow-bg);
-  border-radius: 6px; padding: 8px;
-}
+.workflow-note .markdown-preview-view,
+.workflow-note .cm-editor     { border-left: 3px solid var(--workflow) !important; padding-left: 14px; }
 
-/* ── MOC — (3px slate) ── */
 .moc-note .inline-title { color: var(--moc) !important; }
-.moc-note .markdown-preview-view {
-  border-left: 3px solid var(--moc);
-  padding-left: 14px;
-}
-.moc-note .metadata-container {
-  background: var(--moc-bg);
-  border-radius: 6px; padding: 8px;
-}
+.moc-note .markdown-preview-view,
+.moc-note .cm-editor     { border-left: 3px solid var(--moc) !important; padding-left: 14px; }
 
 
 /* ══════════════════════════════════════════════════════════
-   TAGS — cores por domínio e tipo
+   TAGS coloridas por domínio
    ══════════════════════════════════════════════════════════ */
 .tag[href="#agent"]            { background: var(--neo-bg)       !important; color: var(--neo)       !important; border: 1px solid var(--neo)       !important; }
 .tag[href="#squad"]            { background: var(--squad-bg)     !important; color: var(--squad)     !important; border: 1px solid var(--squad)     !important; }
@@ -395,14 +294,3 @@
 .tag[href*="#business"]        { background: var(--mifune-bg)    !important; color: var(--mifune)    !important; border: 1px solid var(--mifune)    !important; }
 .tag[href*="#brand"]           { background: var(--kamala-bg)    !important; color: var(--kamala)    !important; border: 1px solid var(--kamala)    !important; }
 .tag[href*="#project/lmas"]    { background: rgba(245,158,11,0.10) !important; color: var(--morpheus) !important; border: 1px solid var(--morpheus) !important; }
-
-
-/* ══════════════════════════════════════════════════════════
-   KNOWLEDGE BASE — Cores por Camada
-   ══════════════════════════════════════════════════════════ */
-.nav-file-title[data-path*="knowledge/blockchain"] { color: var(--kb-l1) !important; border-left: 2px solid var(--kb-l1); padding-left: 6px; }
-.nav-file-title[data-path*="knowledge/defi"]        { color: var(--kb-l2) !important; border-left: 2px solid var(--kb-l2); padding-left: 6px; }
-.nav-file-title[data-path*="knowledge/webdex"]      { color: var(--kb-l3) !important; border-left: 2px solid var(--kb-l3); padding-left: 6px; }
-.nav-file-title[data-path*="knowledge/ocme"]        { color: var(--kb-l4) !important; border-left: 2px solid var(--kb-l4); padding-left: 6px; }
-.nav-file-title[data-path*="MOC-Blockchain"]        { color: var(--kb-l2) !important; font-weight: 700; }
-.nav-folder-title[data-path*="knowledge"]           { color: var(--kb-l3) !important; font-weight: 600; }
