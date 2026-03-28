@@ -1,253 +1,80 @@
 from __future__ import annotations
-# ==============================================================================
-# webdex_main.py — WEbdEX Monitor Engine — Entry Point
-# Linhas fonte: ~8904-8915 (if __name__ == "__main__"), ~7381-7460 (_start_threads)
-# ==============================================================================
+# webdex_main.py — Entry Point (Story 7.5 — workers movidos para workers/)
 
-import time
-import threading
+import os, signal, sys, time, threading
 
 from webdex_config import logger
-from webdex_db import conn
-from webdex_bot_core import bot, _notif_worker
-from webdex_monitor import vigia
-from webdex_chain import _chain_cache_worker
-from webdex_workers import (
-    sentinela,
-    agendador_21h,
-    agendador_horario,
-    _capital_snapshot_worker,
-    _user_capital_refresh_worker,
-    _funnel_worker,
-    _inactivity_auto_loop,
-    _fl_snapshot_worker,
-    _protocol_ops_sync_worker,
-)
-from webdex_anomaly import anomaly_worker
-from subscription_worker import subscription_worker
-from webdex_milestones import milestone_worker
-from webdex_swapbook_notify import swapbook_notify_worker
-from webdex_onchain_notify import onchain_notify_worker
-from webdex_network_notify import network_notify_worker
-from notification_engine import notification_engine_worker
-from webdex_v4_monitor import v4_subaccount_worker
-from webdex_socios_monitor import socios_monitor_worker
-from webdex_network_dash import network_fees_dash_worker
+from workers.registry import THREAD_REGISTRY
 
-# Story 18.x — Nightly Trainers
-try:
-    from webdex_deterministic_trainer import deterministic_trainer_worker
-    _DETERM_TRAINER_AVAILABLE = True
-except ImportError:
-    deterministic_trainer_worker = None  # type: ignore[assignment]
-    _DETERM_TRAINER_AVAILABLE = False
-
-# Story 23.1 — Vault Embeddings Worker (opcional — graceful degradation)
-try:
-    from webdex_ai_vault_embeddings import vault_embeddings_worker
-    _VAULT_EMB_WORKER_AVAILABLE = True
-except ImportError:
-    vault_embeddings_worker = None  # type: ignore[assignment]
-    _VAULT_EMB_WORKER_AVAILABLE = False
-
-# Importar handlers — registra os @bot.message_handler
-import webdex_handlers.admin   # noqa: F401
-import webdex_handlers.user    # noqa: F401
-import webdex_handlers.reports # noqa: F401
-
-# Mapa name → factory para o watchdog poder reiniciar threads mortas
-_THREAD_REGISTRY: dict[str, callable] = {
-    "notif_worker":            _notif_worker,
-    "chain_cache_worker":      _chain_cache_worker,
-    "vigia":                   vigia,
-    "sentinela":               sentinela,
-    "agendador_21h":           agendador_21h,
-    "agendador_horario":       agendador_horario,
-    "capital_snapshot_worker": _capital_snapshot_worker,
-    "user_capital_refresh":    _user_capital_refresh_worker,
-    "funnel_worker":           _funnel_worker,
-    "inactivity_auto_loop":    _inactivity_auto_loop,
-    "fl_snapshot_worker":      _fl_snapshot_worker,
-    "protocol_ops_sync":       _protocol_ops_sync_worker,
-    "anomaly_worker":            anomaly_worker,
-    "milestone_worker":          milestone_worker,
-    "swapbook_notify_worker":    swapbook_notify_worker,
-    "onchain_notify_worker":     onchain_notify_worker,
-    "network_notify_worker":     network_notify_worker,
-    "notification_engine_worker": notification_engine_worker,
-    "subscription_worker":        subscription_worker,
-    # Epic 19 — Monitor v4 Subaccount + Canal Discord
-    "v4_subaccount_worker":       v4_subaccount_worker,
-    # Epic 21 — Monitor de Comissões dos Sócios (Telegram privado)
-    "socios_monitor_worker":      socios_monitor_worker,
-    # Epic 22 — Network Fees Dashboard (HTTP porta 7070)
-    "network_fees_dash_worker":   network_fees_dash_worker,
-}
-
-# Story 18.x — Nightly trainers (opcionais — falha silenciosa no startup)
-if _DETERM_TRAINER_AVAILABLE and deterministic_trainer_worker:
-    _THREAD_REGISTRY["deterministic_trainer_worker"] = deterministic_trainer_worker
-
-# Story 23.1 — Vault Embeddings worker (opcional — graceful degradation)
-if _VAULT_EMB_WORKER_AVAILABLE and vault_embeddings_worker:
-    _THREAD_REGISTRY["vault_embeddings_worker"] = vault_embeddings_worker
+# Registra handlers Telegram (side-effect: @bot.message_handler)
+import webdex_handlers.admin    # noqa: F401
+import webdex_handlers.user     # noqa: F401
+import webdex_handlers.reports  # noqa: F401
+from webdex_bot_core import bot
 
 
 def _start_threads():
-    """Inicia todos os workers em background como threads daemon."""
-    for name, target in _THREAD_REGISTRY.items():
-        t = threading.Thread(target=target, name=name, daemon=True)
-        t.start()
-        logger.info(f"[main] Thread iniciada: {name}")
+    for name, target in THREAD_REGISTRY.items():
+        threading.Thread(target=target, name=name, daemon=True).start()
+        logger.info("[main] Thread iniciada: %s", name)
 
 
 def _watchdog():
-    """
-    Monitora threads críticas a cada 30s e reinicia automaticamente as que morreram.
-    Garante que o vigia e os workers nunca fiquem parados silenciosamente.
-    """
-    logger.info("[watchdog] Iniciado — monitorando %d threads.", len(_THREAD_REGISTRY))
+    logger.info("[watchdog] Monitorando %d threads.", len(THREAD_REGISTRY))
     while True:
         time.sleep(30)
         try:
-            alive_names = {t.name for t in threading.enumerate()}
-            for name, target in _THREAD_REGISTRY.items():
-                if name not in alive_names:
-                    logger.warning("[watchdog] Thread '%s' morreu! Reiniciando...", name)
+            alive = {t.name for t in threading.enumerate()}
+            for name, target in THREAD_REGISTRY.items():
+                if name not in alive:
+                    logger.warning("[watchdog] Thread '%s' morreu — reiniciando.", name)
                     try:
-                        t = threading.Thread(target=target, name=name, daemon=True)
-                        t.start()
-                        logger.info("[watchdog] Thread '%s' reiniciada com sucesso.", name)
+                        threading.Thread(target=target, name=name, daemon=True).start()
                     except Exception as e:
                         logger.error("[watchdog] Falha ao reiniciar '%s': %s", name, e)
         except Exception as e:
-            logger.error("[watchdog] Erro interno: %s", e)
+            logger.error("[watchdog] Erro: %s", e)
 
 
 def _polling_forever():
-    """Inicia o polling do Telegram em loop com reconexão automática."""
-    logger.info("[main] Bot iniciando polling...")
+    logger.info("[main] Bot polling iniciado.")
     while True:
         try:
-            bot.infinity_polling(
-                timeout=30,
-                long_polling_timeout=20,
-                allowed_updates=["message", "callback_query"],
-                skip_pending=True,
-            )
+            bot.infinity_polling(timeout=30, long_polling_timeout=20,
+                                 allowed_updates=["message", "callback_query"],
+                                 skip_pending=True)
         except Exception as e:
-            logger.warning(f"[main] Polling error — reconectando em 5s: {e}")
+            logger.warning("[main] Polling error — reconectando em 5s: %s", e)
             time.sleep(5)
 
 
 def sanity_check():
-    """Verifica variáveis críticas antes de iniciar."""
     from webdex_config import TELEGRAM_TOKEN, RPC_URL
-    issues = []
-    if not TELEGRAM_TOKEN or ":" not in TELEGRAM_TOKEN:
-        issues.append("TELEGRAM_TOKEN inválido ou não definido no .env")
-    if not RPC_URL:
-        issues.append("RPC_URL não definido no .env")
+    issues = ([f"TELEGRAM_TOKEN inválido"] if not TELEGRAM_TOKEN or ":" not in TELEGRAM_TOKEN else []) + \
+             ([f"RPC_URL não definido"] if not RPC_URL else [])
     if issues:
-        for iss in issues:
-            logger.error(f"[sanity] {iss}")
-        raise SystemExit(f"[sanity] {len(issues)} problema(s) crítico(s). Verifique o .env.")
-    logger.info("[sanity] OK — configuração válida.")
-
-
-def auto_resume_notify():
-    """Notifica TODOS os usuários (ativos e inativos) sobre reinício do bot.
-
-    - Com wallet: confirmação de monitoramento ativo
-    - Sem wallet: prompt para conectar a carteira e receber contexto personalizado
-    """
-    _MSG_COM_WALLET = (
-        "🔄 <b>WEbdEX Monitor reiniciado.</b>\n"
-        "Monitoramento ativo — carteira <code>{w}</code> conectada.\n"
-        "Use /start para abrir o menu."
-    )
-    _MSG_SEM_WALLET = (
-        "🔄 <b>WEbdEX Monitor reiniciado.</b>\n\n"
-        "⚠️ Sua carteira ainda não está conectada.\n"
-        "Para receber análises personalizadas da IA com seus dados reais, "
-        "use /start → <b>Conectar Wallet</b>."
-    )
-    # Throttle: max 1 notificação de restart por hora
-    _resume_key = "auto_resume_last"
-    try:
-        from webdex_db import DB_LOCK, cursor, get_config, set_config
-    except Exception:
-        from webdex_db import DB_LOCK, cursor
-        get_config = set_config = None
-    if get_config and set_config:
-        _last = float(get_config(_resume_key, "0") or "0")
-        if (time.time() - _last) < 3600:
-            logger.info("[main] auto_resume_notify throttled — last sent %.0f min ago", (time.time() - _last) / 60)
-            return
-        set_config(_resume_key, str(int(time.time())))
-    try:
-        from webdex_bot_core import send_html
-        with DB_LOCK:
-            rows = cursor.execute(
-                "SELECT chat_id, wallet FROM users WHERE chat_id IS NOT NULL AND active=1"
-            ).fetchall()
-        logger.info("[main] Notificando %d usuários sobre reinício...", len(rows))
-        for (cid, wallet) in rows:
-            try:
-                has_wallet = bool(wallet and str(wallet).startswith("0x"))
-                if has_wallet:
-                    w_short = wallet[:6] + "..." + wallet[-4:]
-                    msg = _MSG_COM_WALLET.format(w=w_short)
-                else:
-                    msg = _MSG_SEM_WALLET
-                send_html(int(cid), msg)
-                time.sleep(0.05)  # 20 msg/s — dentro do rate limit do Telegram
-            except Exception:
-                pass
-    except Exception as e:
-        logger.warning("[main] auto_resume_notify falhou: %s", e)
+        [logger.error("[sanity] %s", i) for i in issues]
+        raise SystemExit(f"[sanity] {len(issues)} problema(s). Verifique o .env.")
+    logger.info("[sanity] OK — %d workers registrados.", len(THREAD_REGISTRY))
 
 
 if __name__ == "__main__":
     logger.info("✅ WEbdEX Monitor Engine iniciando...")
     sanity_check()
-
-    # Epic 7: pre-aquece singletons modulares (DashboardCache + ContextBuilder)
     try:
         from ocme_integration import get_dashboard_cache, get_context_builder
-        get_dashboard_cache()   # inicializa lazy — logs indicam sucesso/falha
-        get_context_builder()   # inicializa lazy
+        get_dashboard_cache(); get_context_builder()
     except Exception:
-        pass  # monolito continua normalmente se módulos não estiverem disponíveis
-
+        pass
     _start_threads()
-
-    # Story 7.7: Observability server (/metrics + /health)
     try:
-        import os
         from webdex_observability import ObservabilityServer
         from webdex_monitor import HEALTH as _HEALTH
-        _obs = ObservabilityServer(
-            port=int(os.environ.get("METRICS_PORT", 9090)),
-            db_path=os.environ.get("DB_PATH", "webdex_v5_final.db"),
-            health_ref=_HEALTH,
-        )
-        _obs.start(daemon=True)
-    except Exception as _obs_err:
-        logger.warning("[main] Observability server não iniciado: %s", _obs_err)
-
-    # Graceful shutdown — permite que threads finalizem antes do kill
-    import signal
-    def _graceful_shutdown(sig, frame):
-        logger.info("[main] Sinal %s recebido — encerrando graciosamente...", sig)
-        # Dá 3s para threads terminarem transações pendentes
-        time.sleep(3)
-        import sys; sys.exit(0)
-    signal.signal(signal.SIGTERM, _graceful_shutdown)
-
-    # Watchdog em thread separada (monitora e reinicia as demais)
+        ObservabilityServer(port=int(os.environ.get("METRICS_PORT", 9090)),
+                            db_path=os.environ.get("DB_PATH", "webdex_v5_final.db"),
+                            health_ref=_HEALTH).start(daemon=True)
+    except Exception as e:
+        logger.warning("[main] Observability server não iniciado: %s", e)
     threading.Thread(target=_watchdog, name="watchdog", daemon=True).start()
-    logger.info("[main] Watchdog iniciado.")
-
-    auto_resume_notify()
+    signal.signal(signal.SIGTERM, lambda s, f: (time.sleep(3), sys.exit(0)))
     _polling_forever()
