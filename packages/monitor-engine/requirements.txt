@@ -1,5 +1,6 @@
 # WEbdEX Monitor Engine — Dependências Python
 # Instale com: pip install -r requirements.txt
+# Epic 13 (Story 13.1): fastapi + uvicorn para Dashboard API (opcional — graceful degradation sem eles)
 
 # Blockchain
 web3>=6.0.0,<7.0.0
