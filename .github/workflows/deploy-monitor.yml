@@ -1,0 +1,159 @@
+name: Deploy Monitor Engine to VPS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/monitor-engine/**'
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even without code changes'
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    name: Deploy ocme-monitor
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ------------------------------------------------------------------ #
+      # 1. Checkout                                                          #
+      # ------------------------------------------------------------------ #
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # need previous SHA for rollback tag
+
+      # ------------------------------------------------------------------ #
+      # 2. SCP — copy Python files to VPS                                   #
+      # ------------------------------------------------------------------ #
+      - name: Copy Python files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          source: "packages/monitor-engine/*.py,packages/monitor-engine/requirements.txt"
+          target: "/opt/ocme-monitor/packages/monitor-engine/"
+          strip_components: 2   # removes packages/monitor-engine/ prefix
+          overwrite: true
+
+      # ------------------------------------------------------------------ #
+      # 3. SSH — tag current image (rollback anchor) then rebuild           #
+      # ------------------------------------------------------------------ #
+      - name: Build and restart container
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            cd /opt/ocme-monitor/packages/monitor-engine
+
+            # Tag the currently running image for rollback
+            CURRENT_IMAGE=$(docker inspect --format='{{.Image}}' ocme-monitor 2>/dev/null || echo "")
+            if [ -n "$CURRENT_IMAGE" ]; then
+              docker tag "$CURRENT_IMAGE" ocme-monitor:rollback || true
+              echo "Rollback anchor set: $CURRENT_IMAGE → ocme-monitor:rollback"
+            fi
+
+            # Build new image (no cache)
+            docker compose build --no-cache monitor
+
+            # Recreate container from new image
+            docker compose up -d --force-recreate monitor
+
+            echo "Container restarted."
+
+      # ------------------------------------------------------------------ #
+      # 4. Smoke test — wait up to 60 s for healthy status                  #
+      # ------------------------------------------------------------------ #
+      - name: Smoke test — wait for healthy
+        id: smoke_test
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            echo "Waiting for ocme-monitor to become healthy (max 60s)..."
+            for i in $(seq 1 12); do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' ocme-monitor 2>/dev/null || echo "missing")
+              echo "  attempt $i/12 — status: $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Container is healthy."
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "Smoke test FAILED — container did not become healthy in 60s."
+            exit 1
+
+      # ------------------------------------------------------------------ #
+      # 5. Rollback — only runs if smoke test failed                        #
+      # ------------------------------------------------------------------ #
+      - name: Rollback to previous image
+        if: failure() && steps.smoke_test.conclusion == 'failure'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+            cd /opt/ocme-monitor/packages/monitor-engine
+
+            echo "Rolling back to ocme-monitor:rollback ..."
+            ROLLBACK_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep 'ocme-monitor:rollback' | head -1)
+            if [ -z "$ROLLBACK_IMAGE" ]; then
+              echo "No rollback anchor found — cannot roll back automatically."
+              exit 1
+            fi
+
+            # Update the image reference and recreate
+            docker tag ocme-monitor:rollback ocme-monitor:latest-rollback
+            docker compose up -d --force-recreate monitor
+
+            echo "Rollback complete."
+
+      # ------------------------------------------------------------------ #
+      # 6. Telegram notification — always runs                              #
+      # ------------------------------------------------------------------ #
+      - name: Notify Telegram — success
+        if: success()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          MSG="✅ *Deploy ocme-monitor concluído*%0A%0ACommit: \`${COMMIT_SHA:0:7}\`%0ARepo: ${{ github.repository }}%0A[Ver log]($RUN_URL)"
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="${MSG}" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview="true"
+
+      - name: Notify Telegram — failure
+        if: failure()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          MSG="❌ *Deploy ocme-monitor FALHOU — rollback ativado*%0A%0ACommit: \`${COMMIT_SHA:0:7}\`%0ARepo: ${{ github.repository }}%0A[Ver logs]($RUN_URL)"
+          curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="${MSG}" \
+            -d parse_mode="Markdown" \
+            -d disable_web_page_preview="true"
