@@ -1,0 +1,67 @@
+# vault-backup.yml — Backup do vault Obsidian via GitHub Actions
+#
+# Alternativa ao cron VPS. Roda diariamente às 03:00 UTC via SSH no VPS.
+# Requer secrets configurados no repo:
+#   - VPS_SSH_KEY: chave privada SSH para acesso ao VPS (ocme_vps_key)
+#   - VPS_HOST: IP do VPS (76.13.100.67)
+#   - VPS_USER: usuário SSH (root)
+#
+# NOTA: Esta action executa o vault-backup.sh que já está no VPS.
+# O script deve estar deployado em /opt/scripts/vault-backup.sh antes de ativar.
+
+name: Vault Backup
+
+on:
+  schedule:
+    # Diariamente às 03:00 UTC (00:00 horário de Brasília)
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    # Permite rodar manualmente via GitHub Actions UI
+    inputs:
+      reason:
+        description: 'Motivo do backup manual'
+        required: false
+        default: 'manual trigger'
+
+jobs:
+  backup:
+    name: Backup Vault Obsidian
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run vault-backup.sh on VPS
+        run: |
+          ssh -i ~/.ssh/vps_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "/opt/scripts/vault-backup.sh"
+
+      - name: Check backup log
+        if: always()
+        run: |
+          ssh -i ~/.ssh/vps_key \
+            -o StrictHostKeyChecking=no \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "tail -20 /var/log/vault-backup.log" || echo "Log nao disponivel"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "ATENCAO: Vault backup falhou em $(date '+%Y-%m-%d %H:%M UTC')"
+          echo "Verificar: /var/log/vault-backup.log no VPS ${{ secrets.VPS_HOST }}"
+          # Adicionar notificacao Telegram se necessario:
+          # curl -s "https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage" \
+          #   -d "chat_id=OWNER_CHAT_ID" \
+          #   -d "text=Vault backup FALHOU — verificar VPS"
