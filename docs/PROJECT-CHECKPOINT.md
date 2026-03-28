@@ -1,28 +1,43 @@
 # Project Checkpoint
 
-> Ultima atualizacao: 2026-03-27 (auto-refresh)
+> Ultima atualizacao: 2026-03-28 (auto-refresh)
 
 ## Contexto Ativo
 
-**Sessão 2026-03-27 — Sprint 1+2 Intelligence Layer DEPLOYADO ✅**
+**Sessão 2026-03-28 — Story 20.1 COMPLETO — bdZinho Image Engine v1.0 ✅**
 
-### Status VPS (2026-03-27 ~02:50 UTC)
-- `ocme-monitor`: healthy, **21 threads** (novo: `deterministic_trainer_worker`)
-- `orchestrator-discord`: healthy, `vision_discord.py` carregado ✅
-- Vault `/opt/vault/learned/`: 3 notas auto-geradas às 02:43 UTC ✅
-
-### PENDENTE CRÍTICO
-```bash
-# Adicionar ANTHROPIC_API_KEY no VPS (sem isso, LLM trainer usa OpenRouter — créditos baixos)
-echo 'ANTHROPIC_API_KEY=sk-ant-api03-SUA_CHAVE' >> /opt/ocme-monitor/packages/monitor-engine/.env
-docker restart ocme-monitor
-```
+### Entregues esta sessão
+- `packages/monitor-engine/webdex_image_engine.py` — motor unificado FLUX+PIL+GLM-OCR
+- `packages/monitor-engine/tests/test_webdex_image_engine.py` — 17 testes (5 classes)
+- `packages/monitor-engine/webdex_handlers/user.py` — handlers `/melhorar` e `/extrair`
+- `.env.example` — HF_TOKEN + IMAGE_GEN_MODEL documentados
+- `docs/stories/active/20.1.story.md` — story criada (Epic 20 Image Intelligence)
 
 ### Próximos passos
-- [ ] Adicionar `ANTHROPIC_API_KEY` no `.env` do VPS
-- [ ] Testar vision Discord: enviar imagem mencionando @bdZinho
-- [ ] Testar áudio Telegram: enviar voice message
-- [ ] (Opcional) `docker exec ocme-monitor pip install openai-whisper` para áudio v1
+- [ ] Adicionar `HF_TOKEN` no VPS (`.env` do container ocme-monitor)
+- [ ] Testar `/melhorar` e `/extrair` no Telegram (reply em foto)
+- [ ] (Opcional) Adicionar `ANTHROPIC_API_KEY` no VPS para LLM primário Claude
+- [ ] Epic 13: Dashboard Externo Next.js+SIWE
+
+---
+
+**Sessão 2026-03-27 — Sprint 3 COMPLETO + Discord Áudio CORRIGIDO ✅**
+
+### Status VPS (2026-03-27 ~04:00 UTC)
+- `ocme-monitor`: healthy, **21 threads** (Deterministic Trainer + Conversation Learner ativos)
+- `orchestrator-discord`: healthy, **bot.py Sprint 3** carregado ✅ (audio handler + OPENAI_API_KEY injetado)
+- Vault `/opt/vault/learned/`: 3 notas + conversation-learner auto-gerando
+- GitHub: tudo commitado e pushado ✅ (OCME-bd + webdex-orchestrator)
+
+### Correção aplicada esta sessão
+- `OPENAI_API_KEY` não estava injetada no container `orchestrator-discord`
+- Fix: adicionado `OPENAI_API_KEY: ${OPENAI_API_KEY}` no docker-compose + `docker cp bot.py` + restart
+- Container agora responde áudio: envia voice message → Whisper transcreve → bdZinho responde
+
+### Próximos passos
+- [ ] **TESTAR**: enviar voice message no Discord mencionando @bdZinho
+- [ ] (Opcional) Adicionar `ANTHROPIC_API_KEY` no VPS para usar Claude Haiku como LLM primário
+- [ ] Epic 13: Dashboard Externo Next.js+SIWE (quando pronto)
 
 ---
 
@@ -295,6 +310,7 @@ Entregas desta sessão (commits pushados + deployados VPS):
 | 19.1.story | Unknown |
 | 19.2.story | Unknown |
 | 19.3.story | Unknown |
+| 20.1.story | InReview |
 | 8.8.story | Unknown |
 | 8.9.story | InProgress |
 | epic-10 | Unknown |

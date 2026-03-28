@@ -73,6 +73,24 @@ except ImportError:
     _profile_ctx = None  # type: ignore[assignment]
     _VISION_PROFILE_ENABLED = False
 
+# Image Engine (FLUX + PIL + GLM-OCR) — soft import
+try:
+    from webdex_image_engine import (
+        melhorar_imagem  as _eng_melhorar,
+        analisar_imagem_ocr as _eng_ocr,
+        check_cooldown   as _eng_cooldown,
+        ENGINE_MELHORAR_COOLDOWN_S,
+        ENGINE_ANALISAR_COOLDOWN_S,
+    )
+    _IMG_ENGINE_AVAILABLE = True
+except ImportError:
+    _eng_melhorar = None  # type: ignore[assignment]
+    _eng_ocr      = None  # type: ignore[assignment]
+    _eng_cooldown = None  # type: ignore[assignment]
+    ENGINE_MELHORAR_COOLDOWN_S = 5
+    ENGINE_ANALISAR_COOLDOWN_S = 10
+    _IMG_ENGINE_AVAILABLE = False
+
 # Rate limit dedicado para image gen (separado do _rate_cache geral)
 _img_rate_cache: dict[int, float] = {}
 _img_rate_lock  = threading.Lock()
@@ -3757,3 +3775,184 @@ def audio_voice_handler(m):
 
     send_html(chat_id, f"🤖 {answer}", reply_markup=main_kb(chat_id))
     logger.info("[audio] Áudio transcrito e respondido para chat_id=%s", chat_id)
+
+
+# ==============================================================================
+# 🖼️ /melhorar — Upscale 2x + unsharp mask via PIL (zero custo, zero API)
+# ==============================================================================
+
+@bot.message_handler(commands=["melhorar"])
+def melhorar_handler(m):
+    """
+    /melhorar — usuário faz reply numa foto → bdZinho melhora (unsharp + upscale 2x).
+    Sem API externa, processamento local via PIL.
+    """
+    import io as _io3
+
+    chat_id = m.chat.id
+
+    if not _IMG_ENGINE_AVAILABLE:
+        bot.send_message(
+            chat_id,
+            "⚠️ <b>/melhorar</b> indisponível no momento.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    # Precisa ser reply numa foto
+    reply = m.reply_to_message
+    if not reply or not reply.photo:
+        bot.send_message(
+            chat_id,
+            "🖼️ <b>Como usar:</b> responda uma foto com <code>/melhorar</code>.\n\n"
+            "O bdZinho aplica unsharp mask + upscale 2x e devolve a versão melhorada.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    # Rate limit via engine (user_id único por usuário)
+    remaining = _eng_cooldown(chat_id, 'melhorar') if _eng_cooldown else 0.0
+    if remaining > 0:
+        bot.send_message(
+            chat_id,
+            f"⏳ Aguarde <b>{int(remaining)}s</b> antes de melhorar outra imagem.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    wait_msg = bot.send_message(
+        chat_id,
+        "🖼️ <b>Melhorando imagem...</b> ⏳\n<i>Aplicando unsharp mask + upscale 2x.</i>",
+        parse_mode="HTML",
+    )
+
+    enhanced = None
+    try:
+        file_id    = reply.photo[-1].file_id
+        file_info  = bot.get_file(file_id)
+        img_bytes  = bot.download_file(file_info.file_path)
+        enhanced   = _eng_melhorar(img_bytes)  # type: ignore[misc]
+    except Exception as e:
+        logger.warning("[melhorar] Erro chat_id=%s: %s", chat_id, e)
+
+    try:
+        bot.delete_message(chat_id, wait_msg.message_id)
+    except Exception:
+        pass
+
+    if not enhanced:
+        bot.send_message(
+            chat_id,
+            "❌ <b>Não consegui melhorar a imagem.</b>\n"
+            "Verifique se é uma imagem válida (PNG/JPEG, máx 4 MB).",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    try:
+        bot.send_photo(
+            chat_id,
+            _io3.BytesIO(enhanced),
+            caption="✨ <b>Imagem melhorada</b> — unsharp mask + upscale 2×",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        logger.info("[melhorar] Enviado para chat_id=%s | %d bytes", chat_id, len(enhanced))
+    except Exception as e:
+        logger.warning("[melhorar] Falha ao enviar chat_id=%s: %s", chat_id, e)
+        bot.send_message(
+            chat_id,
+            "⚠️ Imagem melhorada mas falhou ao enviar. Tente novamente.",
+            reply_markup=main_kb(chat_id),
+        )
+
+
+# ==============================================================================
+# 🔍 /extrair — OCR de imagem via GLM-OCR (HuggingFace, MIT, 3.75M downloads)
+# ==============================================================================
+
+@bot.message_handler(commands=["extrair"])
+def extrair_handler(m):
+    """
+    /extrair — usuário faz reply numa foto → bdZinho extrai texto via GLM-OCR.
+    Suporta: texto impresso, manuscrito, tabelas, fórmulas, diagramas.
+    """
+    chat_id = m.chat.id
+
+    if not _IMG_ENGINE_AVAILABLE:
+        bot.send_message(
+            chat_id,
+            "⚠️ <b>/extrair</b> indisponível no momento.\n"
+            "Verifique se <code>HF_TOKEN</code> está configurada.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    # Precisa ser reply numa foto
+    reply = m.reply_to_message
+    if not reply or not reply.photo:
+        bot.send_message(
+            chat_id,
+            "🔍 <b>Como usar:</b> responda uma foto com <code>/extrair</code>.\n\n"
+            "O bdZinho extrai qualquer texto visível na imagem (OCR, tabelas, fórmulas).",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    # Rate limit
+    remaining = _eng_cooldown(chat_id, 'analisar') if _eng_cooldown else 0.0
+    if remaining > 0:
+        bot.send_message(
+            chat_id,
+            f"⏳ Aguarde <b>{int(remaining)}s</b> antes de extrair outra imagem.",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    wait_msg = bot.send_message(
+        chat_id,
+        "🔍 <b>Extraindo texto da imagem...</b> ⏳\n<i>Pode levar até 30 segundos.</i>",
+        parse_mode="HTML",
+    )
+
+    text_result = None
+    try:
+        file_id   = reply.photo[-1].file_id
+        file_info = bot.get_file(file_id)
+        img_bytes = bot.download_file(file_info.file_path)
+        text_result = _eng_ocr(img_bytes)  # type: ignore[misc]
+    except Exception as e:
+        logger.warning("[extrair] Erro chat_id=%s: %s", chat_id, e)
+
+    try:
+        bot.delete_message(chat_id, wait_msg.message_id)
+    except Exception:
+        pass
+
+    if not text_result:
+        bot.send_message(
+            chat_id,
+            "❌ <b>Não encontrei texto na imagem.</b>\n"
+            "Verifique se a imagem tem texto legível e está nítida (máx 4 MB).",
+            parse_mode="HTML",
+            reply_markup=main_kb(chat_id),
+        )
+        return
+
+    # Trunca para evitar mensagens gigantescas (Telegram limite: 4096 chars)
+    preview = text_result[:3800]
+    suffix  = "\n\n<i>…texto truncado (muito longo)</i>" if len(text_result) > 3800 else ""
+    bot.send_message(
+        chat_id,
+        f"🔍 <b>Texto extraído:</b>\n\n<code>{esc(preview)}</code>{suffix}",
+        parse_mode="HTML",
+        reply_markup=main_kb(chat_id),
+    )
+    logger.info("[extrair] OCR enviado para chat_id=%s | %d chars", chat_id, len(text_result))
