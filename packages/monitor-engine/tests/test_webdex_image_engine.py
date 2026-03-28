@@ -168,15 +168,11 @@ class TestMelhorarImagem:
         result = eng.melhorar_imagem(b'')
         assert result is None
 
-    def test_melhorar_sem_pil_retorna_none(self):
-        """Se PIL não estiver instalado, retorna None graciosamente."""
-        orig = _make_png_bytes(50)
-        with patch.dict('sys.modules', {'PIL': None, 'PIL.Image': None}):
-            # Recarrega a função interna para pegar o import error
-            result = eng._melhorar_via_pil(orig)
-        # Nota: em ambiente com PIL instalado, o patch pode não funcionar
-        # O teste verifica que a função não levanta exceção
-        assert result is not None or result is None  # não levanta exceção
+    def test_melhorar_imagem_corrompida_retorna_none(self):
+        """Bytes corrompidos (não são imagem válida) → retorna None sem crash."""
+        corrupted = b'\x00\x01\x02NOTANIMAGE\xff\xfe'
+        result = eng.melhorar_imagem(corrupted)
+        assert result is None
 
 
 # ══════════════════════════════════════════════════════════════════════════════

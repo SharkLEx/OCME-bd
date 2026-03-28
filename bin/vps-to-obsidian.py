@@ -11,7 +11,6 @@ Pode ser agendado via Task Scheduler do Windows:
   pythonw bin\vps-to-obsidian.py          # Sem janela, silencioso
 """
 import json
-import os
 import pathlib
 import sys
 import urllib.request
@@ -60,7 +59,9 @@ def _fetch_metrics() -> dict[str, float]:
         parts = line.rsplit(" ", 1)
         if len(parts) == 2:
             try:
-                result[parts[0]] = float(parts[1])
+                # Strip Prometheus labels: metric_name{label="val"} → metric_name
+                key = parts[0].split("{")[0].strip()
+                result[key] = float(parts[1])
             except ValueError:
                 pass
     return result
@@ -71,6 +72,7 @@ def _write_to_daily(markdown: str) -> bool:
     today = datetime.now().strftime("%Y-%m-%d")
     path = VAULT_DIR / f"{today}.md"
     try:
+        VAULT_DIR.mkdir(parents=True, exist_ok=True)
         with open(path, "a", encoding="utf-8") as f:
             f.write(markdown)
         return True
@@ -80,7 +82,6 @@ def _write_to_daily(markdown: str) -> bool:
 
 
 def build_note(health: dict, metrics: dict[str, float]) -> str:
-    now_brt = datetime.utcnow()  # aproximação — VPS já em BRT nos logs
     ts = datetime.now().strftime("%H:%M")
 
     status_icon = "✅" if health.get("status") == "ok" else "⚠️"
