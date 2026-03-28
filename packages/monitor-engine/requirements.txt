@@ -28,3 +28,9 @@ anthropic>=0.40.0
 # Whisper — transcrição de áudio local (Story 18.x audio stub)
 # Instale manualmente se necessário: pip install openai-whisper
 # openai-whisper  # comentado: instala ffmpeg extra, ative se áudio em uso
+
+# Semantic Search — Vault Embeddings (Story 23.1)
+# Modelo primário: nomic-ai/nomic-embed-text-v1.5 (melhor PT sem GPU)
+# Modelo fallback: all-MiniLM-L6-v2 (menor, mais rápido)
+# OPCIONAL: bot funciona sem isso (fulltext fallback automático)
+sentence-transformers>=2.2.0

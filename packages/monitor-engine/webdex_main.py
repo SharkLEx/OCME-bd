@@ -31,6 +31,8 @@ from webdex_onchain_notify import onchain_notify_worker
 from webdex_network_notify import network_notify_worker
 from notification_engine import notification_engine_worker
 from webdex_v4_monitor import v4_subaccount_worker
+from webdex_socios_monitor import socios_monitor_worker
+from webdex_network_dash import network_fees_dash_worker
 
 # Story 18.x — Nightly Trainers
 try:
@@ -39,6 +41,14 @@ try:
 except ImportError:
     deterministic_trainer_worker = None  # type: ignore[assignment]
     _DETERM_TRAINER_AVAILABLE = False
+
+# Story 23.1 — Vault Embeddings Worker (opcional — graceful degradation)
+try:
+    from webdex_ai_vault_embeddings import vault_embeddings_worker
+    _VAULT_EMB_WORKER_AVAILABLE = True
+except ImportError:
+    vault_embeddings_worker = None  # type: ignore[assignment]
+    _VAULT_EMB_WORKER_AVAILABLE = False
 
 # Importar handlers — registra os @bot.message_handler
 import webdex_handlers.admin   # noqa: F401
@@ -68,11 +78,19 @@ _THREAD_REGISTRY: dict[str, callable] = {
     "subscription_worker":        subscription_worker,
     # Epic 19 — Monitor v4 Subaccount + Canal Discord
     "v4_subaccount_worker":       v4_subaccount_worker,
+    # Epic 21 — Monitor de Comissões dos Sócios (Telegram privado)
+    "socios_monitor_worker":      socios_monitor_worker,
+    # Epic 22 — Network Fees Dashboard (HTTP porta 7070)
+    "network_fees_dash_worker":   network_fees_dash_worker,
 }
 
 # Story 18.x — Nightly trainers (opcionais — falha silenciosa no startup)
 if _DETERM_TRAINER_AVAILABLE and deterministic_trainer_worker:
     _THREAD_REGISTRY["deterministic_trainer_worker"] = deterministic_trainer_worker
+
+# Story 23.1 — Vault Embeddings worker (opcional — graceful degradation)
+if _VAULT_EMB_WORKER_AVAILABLE and vault_embeddings_worker:
+    _THREAD_REGISTRY["vault_embeddings_worker"] = vault_embeddings_worker
 
 
 def _start_threads():
