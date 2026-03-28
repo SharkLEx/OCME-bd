@@ -11,11 +11,12 @@ Módulos:
     digest      — Digest diário/semanal do protocolo
     cycle_visual — Visualizações do ciclo 21h
 
-Adicionados na Story 7.2:
-    chat        — Conversação + rate limiting IA
+Story 7.2 — módulos principais:
+    chat        — Conversação + rate limiting IA (de webdex_ai.py)
     trainer     — Treinamento nightly + determinístico
     embeddings  — Busca semântica vault (nomic-embed-text-v1.5)
-    image       — Geração de imagens (Image Engine + image_gen)
+    image       — Geração de imagens (PIL cards branded)
+    image_gen   — Geração de imagens IA (Gemini via OpenRouter)
 """
 # Story 7.1 — módulos simples (sem dependências de handlers)
 from ai.vision import *       # noqa: F401, F403
@@ -26,3 +27,10 @@ from ai.content import *      # noqa: F401, F403
 from ai.user_profile import * # noqa: F401, F403
 from ai.digest import *       # noqa: F401, F403
 from ai.cycle_visual import * # noqa: F401, F403
+
+# Story 7.2 — módulos principais
+from ai.chat import *         # noqa: F401, F403
+from ai.trainer import *      # noqa: F401, F403
+from ai.embeddings import *   # noqa: F401, F403
+from ai.image import *        # noqa: F401, F403
+from ai.image_gen import *    # noqa: F401, F403
