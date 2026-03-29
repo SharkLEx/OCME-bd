@@ -214,7 +214,9 @@ def dashboard_api_worker() -> None:
     if not _DASHBOARD_SECRET:
         logger.warning("[dashboard_api] DASHBOARD_SECRET não configurado — API não iniciada.")
         logger.warning("[dashboard_api] Configure DASHBOARD_SECRET no .env para ativar o dashboard.")
-        return
+        # Sleep forever so watchdog doesn't restart this thread in a tight loop
+        while True:
+            _time.sleep(3600)
 
     logger.info("[dashboard_api] Iniciando servidor em %s:%d...", _DASHBOARD_HOST, _DASHBOARD_PORT)
 
@@ -234,6 +236,9 @@ def dashboard_api_worker() -> None:
     except ImportError:
         logger.warning("[dashboard_api] uvicorn/fastapi não instalados — API não iniciada.")
         logger.warning("[dashboard_api] Instalar: pip install fastapi uvicorn[standard]")
+        # Sleep forever so watchdog doesn't restart this thread in a tight loop
+        while True:
+            _time.sleep(3600)
     except Exception as e:
         logger.error("[dashboard_api] Erro ao iniciar servidor: %s", e)
         # Não lança exceção — o worker morre silenciosamente (watchdog pode reiniciar)
