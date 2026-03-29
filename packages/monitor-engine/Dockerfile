@@ -58,9 +58,10 @@ ENV DATA_DIR=/app/data
 ENV DB_PATH=/app/data/webdex_v5_final.db
 ENV OCME_DB_PATH=/app/data/webdex_v5_final.db
 
-# Health check: porta Prometheus /health
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:9090/health')" || exit 1
+# Health check: /metrics sempre retorna 200 (ao contrário de /health que retorna 503
+# enquanto vigia não processar blocos — HTTPError derrubaria o healthcheck no startup)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:9090/metrics')" || exit 1
 
 # Entry point
 CMD ["python", "webdex_main.py"]

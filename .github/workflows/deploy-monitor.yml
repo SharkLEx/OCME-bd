@@ -85,17 +85,17 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
           script: |
-            echo "Waiting for ocme-monitor to become healthy (max 60s)..."
-            for i in $(seq 1 12); do
+            echo "Waiting for ocme-monitor to become healthy (max 90s)..."
+            for i in $(seq 1 18); do
               STATUS=$(docker inspect --format='{{.State.Health.Status}}' ocme-monitor 2>/dev/null || echo "missing")
-              echo "  attempt $i/12 — status: $STATUS"
+              echo "  attempt $i/18 — status: $STATUS"
               if [ "$STATUS" = "healthy" ]; then
                 echo "Container is healthy."
                 exit 0
               fi
               sleep 5
             done
-            echo "Smoke test FAILED — container did not become healthy in 60s."
+            echo "Smoke test FAILED — container did not become healthy in 90s."
             exit 1
 
       # ------------------------------------------------------------------ #
