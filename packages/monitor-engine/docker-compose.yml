@@ -17,6 +17,7 @@ services:
       - .env
     ports:
       - "${METRICS_PORT:-9090}:9090"
+      - "${FEES_DASH_PORT:-7070}:7070"
     volumes:
       - monitor_data:/app/data
       - monitor_logs:/app/logs
@@ -26,12 +27,14 @@ services:
       - DATA_DIR=/app/data
       - METRICS_PORT=9090
       - VAULT_LOCAL_PATH=/app/vault
+      # Epic 19 — Monitor v4 Discord webhook (obrigatório — sem isso relatórios param silenciosamente)
+      - DISCORD_WEBHOOK_V4_SUB=${DISCORD_WEBHOOK_V4_SUB}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9090/metrics')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
     networks:
       - default
       - orchestrator_net
