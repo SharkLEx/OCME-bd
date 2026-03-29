@@ -7,14 +7,14 @@ from __future__ import annotations
 import os, time, json, threading
 from typing import Any, Dict, List
 
-from webdex_config import (
+from core.config import (
     logger, Web3, _POA_MW, RPC_URL, RPC_CAPITAL, RPC_FALLBACK,
     CONTRACTS, ABI_PAYMENTS, ABI_SUBACCOUNTS, ABI_MANAGER,
     ABI_TOKENPASS, ABI_ERC20_TRANSFER, ABI_ERC20_META,
     TOKEN_CONFIG, TOKENS_TO_WATCH, TOKENS_MAP,
     ADMIN_USER_IDS,
 )
-from webdex_db import DB_LOCK, cursor
+from core.db import DB_LOCK, cursor
 
 import requests
 import threading as _threading

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple, Optional
 
 # Imports da config
-from webdex_config import (
+from core.config import (
     logger, log_error, infer_env_by_address, Web3, TZ_BR,
     ADMIN_USER_IDS, OPENAI_DEFAULT_ON,
 )

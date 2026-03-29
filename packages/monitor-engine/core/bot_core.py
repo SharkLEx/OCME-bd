@@ -11,15 +11,14 @@ import telebot
 from telebot import types
 from decimal import Decimal
 
-from webdex_config import (
+from core.config import (
     logger, log_error, TELEGRAM_TOKEN, ADMIN_USER_IDS, Web3,
     ABI_ERC20_META, TOKEN_CONFIG, TOKENS_TO_WATCH,
 )
-from webdex_db import (
+from core.db import (
     DB_LOCK, cursor, conn, set_user_active, now_br, get_config, set_config,
     normalize_txhash,
 )
-from webdex_chain import obter_preco_pol, invalidate_wallet_map_cache
 
 import matplotlib
 matplotlib.use("Agg")
@@ -125,7 +124,11 @@ def _tg_send_with_retry(fn, *args, **kwargs):
                 try:
                     if chat_id is not None:
                         set_user_active(int(chat_id), 0)
-                        invalidate_wallet_map_cache()
+                        try:
+                            from monitors.chain import invalidate_wallet_map_cache as _iwmc
+                            _iwmc()
+                        except Exception:
+                            pass
                         # Alerta admins — dedup 6h por chat_id para evitar flood
                         try:
                             from webdex_config import ADMIN_USER_IDS as _AIDS

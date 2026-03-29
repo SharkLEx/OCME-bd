@@ -39,7 +39,8 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
           # Cobre todos os subdiretórios do monitor-engine (Story 7.1-7.5 + handlers + contracts + migrations)
-          source: "packages/monitor-engine/*.py,packages/monitor-engine/requirements.txt,packages/monitor-engine/ai/**,packages/monitor-engine/core/**,packages/monitor-engine/monitors/**,packages/monitor-engine/services/**,packages/monitor-engine/workers/**,packages/monitor-engine/webdex_handlers/**,packages/monitor-engine/contracts/**,packages/monitor-engine/migrations/**"
+          # Inclui Dockerfile e docker-compose.yml para manter VPS em sync com git
+          source: "packages/monitor-engine/*.py,packages/monitor-engine/requirements.txt,packages/monitor-engine/Dockerfile,packages/monitor-engine/docker-compose.yml,packages/monitor-engine/ai/**,packages/monitor-engine/core/**,packages/monitor-engine/monitors/**,packages/monitor-engine/services/**,packages/monitor-engine/workers/**,packages/monitor-engine/webdex_handlers/**,packages/monitor-engine/contracts/**,packages/monitor-engine/migrations/**"
           target: "/opt/ocme-monitor/packages/monitor-engine/"
           strip_components: 2   # removes packages/monitor-engine/ prefix
           overwrite: true

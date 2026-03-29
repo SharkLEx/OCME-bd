@@ -15,12 +15,7 @@ Módulos:
     anomaly      — Detecção de anomalias de preço
 
 Story 7.3 — Epic 7: modularização do monolito Python
+
+NOTA: Wildcard imports removidos — causavam circular import via stubs.
+Importe módulos individualmente: from monitors.vigia import X
 """
-from monitors.chain import *        # noqa: F401, F403
-from monitors.chain_health import * # noqa: F401, F403
-from monitors.vigia import *        # noqa: F401, F403
-from monitors.v4 import *           # noqa: F401, F403
-from monitors.socios import *       # noqa: F401, F403
-from monitors.network_dash import * # noqa: F401, F403
-from monitors.network_notify import * # noqa: F401, F403
-from monitors.anomaly import *      # noqa: F401, F403

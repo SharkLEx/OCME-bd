@@ -12,9 +12,7 @@ Módulos:
     bot_core    — Core do bot Telegram (is_admin, etc.)
 
 Story 7.3 — Epic 7: modularização do monolito Python
+
+NOTA: Wildcard imports removidos — causavam circular import via stubs.
+Importe módulos individualmente: from core.config import X
 """
-from core.config import *       # noqa: F401, F403
-from core.db import *           # noqa: F401, F403
-from core.tools import *        # noqa: F401, F403
-from core.observability import * # noqa: F401, F403
-from core.bot_core import *     # noqa: F401, F403
